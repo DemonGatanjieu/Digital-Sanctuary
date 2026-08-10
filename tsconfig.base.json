@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "paths": {
+      "@sanctuary/domain": ["./packages/domain/dist/index.d.ts"],
+      "@sanctuary/protocol": ["./packages/protocol/dist/index.d.ts"],
+      "@sanctuary/database": ["./packages/database/dist/index.d.ts"]
+    },
+    "lib": ["ES2023", "DOM"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "digital-sanctuary",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "apps/desktop/out/main/index.js",
+  "packageManager": "npm@11.13.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build:core": "tsc -p packages/domain/tsconfig.json && tsc -p packages/protocol/tsconfig.json && tsc -p packages/database/tsconfig.json && tsc -p services/vision/tsconfig.json",
+    "postinstall": "node node_modules/electron/install.js",
+    "vision:install": ".venv\\Scripts\\python.exe -m pip install -r services\\vision\\python\\requirements.lock.txt",
+    "test:python": ".venv\\Scripts\\python.exe -m unittest discover -s services\\vision\\python -p \"test_*.py\"",
+    "dev": "npm run build:core && electron-vite dev --config apps/desktop/electron.vite.config.ts",
+    "build": "npm run build:core && electron-vite build --config apps/desktop/electron.vite.config.ts",
+    "typecheck": "npm run build:core && tsc -p apps/desktop/tsconfig.json --noEmit",
+    "test": "npm run build:core && vitest run && npm run test:python"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "43.3.0",
+    "electron-vite": "5.0.0",
+    "typescript": "7.0.2",
+    "vite": "7.3.6",
+    "vitest": "4.1.10"
+  }
+}

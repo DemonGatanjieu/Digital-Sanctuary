@@ -1,0 +1,143 @@
+# 纯净领域架构与演进计划
+
+- 文档状态：当前架构基线 + 后续演进计划
+- 基线日期：2026-08-11
+- 面向读者：接手实现的开发者或代码模型
+
+## 1. 产品边界
+
+纯净领域是本地优先的 Pixiv 安全浏览与二次元图片管理桌面应用。它过滤的是用户明确不欢迎的**画面元素**，不是年龄分级。
+
+必须保持的产品语义：
+
+- 正常 R18、裸体、色情或擦边内容不是默认拦截目标。
+- 猎奇、血腥、断肢和当前模型可覆盖的排泄相关元素才进入黑名单规则。
+- 未知、下载失败、模型失败或超时必须失败闭合，不能先显示原图。
+- 广告过滤与内容过滤是两条独立管线：广告看页面/网络语义，内容过滤看图片本身。
+- 不在 Electron 内嵌页运行第三方 OAuth，不伪装浏览器指纹，不读取账号凭据或复制系统浏览器 Cookie。
+
+## 2. 当前运行架构
+
+```mermaid
+flowchart LR
+  UI["本地 React UI"] -->|"窄 IPC"| MAIN["Electron 主进程"]
+  MAIN --> DB["SQLite 本地图库与规则"]
+  MAIN --> VIEW["沙箱化 Pixiv WebContentsView"]
+  VIEW -->|"作品图片请求"| REVIEW["远程图片审查协调器（当前位于 main/index.ts）"]
+  REVIEW -->|"带 Pixiv Referer 获取临时副本"| CDN["i.pximg.net"]
+  REVIEW -->|"临时文件路径 / JSON Lines"| VISION["Python WD Tagger 子进程"]
+  VISION --> REVIEW
+  DB -->|"元素阈值"| REVIEW
+  REVIEW -->|"allow / cancel"| VIEW
+  VIEW -->|"广告与站外 iframe 请求"| ADBLOCK["网络级广告策略"]
+```
+
+### 2.1 本地 UI
+
+- `apps/desktop/src/renderer/src/App.tsx`：画廊、规则和探索三种视图。
+- `apps/desktop/src/renderer/src/styles.css`：默认浅色设计，白色导航、浅灰内容区、Pixiv 蓝交互色。
+- 探索模式隐藏应用侧栏，让远程 Pixiv 页面占满主内容区。
+
+### 2.2 Electron 主进程
+
+- `apps/desktop/src/main/index.ts`：当前仍是组合根，负责窗口、IPC、Pixiv 视图、网络拦截、远程图片审查和视觉进程生命周期。
+- `apps/desktop/src/main/explore-policy.ts`：可单元测试的 URL、权限、广告和资源策略。
+- `apps/desktop/src/main/vision-client.ts`：版本化 JSON Lines 客户端、超时和子进程错误处理。
+- Pixiv 使用 `persist:pixiv` 独立 session；本地 React 渲染器不能访问其 DOM 或 Cookie。
+
+### 2.3 视觉与领域层
+
+- `services/vision/python/`：WD SwinV2 Tagger v3 推理实现。
+- `packages/domain/`：元素组、阈值、标签映射和 `allow / blur / hide` 决策。
+- `packages/protocol/`：桌面端与视觉子进程之间的协议。
+- `packages/database/`：本地图库、分类和元素规则设置。
+
+## 3. 当前探索请求流
+
+1. Pixiv 请求普通界面图片、头像或登录素材：直接放行。
+2. 请求命中广告/追踪域名：网络层取消，并增加“广告拦截”计数。
+3. 请求是非 Pixiv 第三方 iframe：默认取消；`accounts.pixiv.net` 登录页所需的 reCAPTCHA 是窄例外。
+4. 请求是视频：当前失败闭合并取消。
+5. 请求是 `i.pximg.net` 的 `img-master`、`img-original` 或 `custom-thumb` 作品图：
+   - 相同 URL 在进程内去重；
+   - 带 Pixiv `Referer` 下载不超过 12 MiB 的临时副本；
+   - 串行交给 WD Tagger，避免并发请求的超时从排队阶段开始累计；
+   - 使用数据库中的当前元素规则判定；
+   - `allow` 后恢复原始网络请求；其他结果取消原始请求；
+   - 推理后删除临时文件。
+
+当前实现会为审查下载一次图片、放行后由页面再下载一次。它是安全的最小闭环，但不是最终的网络效率形态。
+
+## 4. 安全不变量
+
+- `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`、`webSecurity: true`。
+- 顶层导航只允许 HTTPS `pixiv.net` 及子域。
+- 弹窗、下载和权限默认拒绝；例外必须是可测试的窄规则。
+- 远程 Pixiv 页面不获得本地文件、数据库、视觉进程或通用 IPC 权限。
+- 系统浏览器入口只能打开代码中固定的 Pixiv 官方密码设置 URL。
+- 过滤规则变化后必须使旧的远程审查缓存失效。
+- 任何缓存键必须包含模型/引擎版本和规则指纹，不能把旧模型的 `allow` 永久复用。
+
+## 5. 广告过滤分层
+
+广告过滤不能与元素黑名单混为一谈：
+
+1. **网络级过滤（已实现）**：拦截广告/追踪域名和站外 iframe，降低请求数与渲染进程数。
+2. **Pixiv 第一方美容过滤（待实现）**：隐藏由 `pixiv.net` 自己返回、页面上标有“PR”或“推广”的卡片。
+
+截图中的漫画“PR”属于第二类。不能封禁 `pixiv.net`，也不能把该图片交给 WD Tagger后当作不受欢迎元素；需要 Pixiv DOM 适配器识别整张推广卡片并隐藏。
+
+## 6. 目标模块拆分
+
+在继续扩大功能前，将 `apps/desktop/src/main/index.ts` 中的探索逻辑逐步迁移为：
+
+```text
+apps/desktop/src/main/explore/
+  controller.ts              # WebContentsView 生命周期与状态汇总
+  navigation-policy.ts       # 顶层导航、弹窗、权限和下载
+  adblock-policy.ts          # 广告域名和站外 iframe 策略
+  pixiv-url-adapter.ts       # 作品 CDN URL 识别与规范化
+  pixiv-dom-adapter.ts       # 第一方 PR 卡片、占位层和页面结构探针
+  review-coordinator.ts      # 去重、排队、下载、判定和统计
+  review-cache.ts            # SQLite 持久化审查缓存
+  types.ts                   # ExploreState 等共享主进程类型
+```
+
+迁移必须小步进行：先复制测试覆盖，再移动代码，不要一次性重写 `index.ts`。
+
+## 7. 持久化审查缓存计划
+
+建议在 SQLite 增加 `remote_image_reviews`：
+
+```sql
+CREATE TABLE remote_image_reviews (
+  normalized_url TEXT NOT NULL,
+  content_hash TEXT,
+  engine TEXT NOT NULL,
+  engine_version TEXT NOT NULL,
+  rules_fingerprint TEXT NOT NULL,
+  assessment_json TEXT NOT NULL,
+  decision_json TEXT NOT NULL,
+  byte_length INTEGER NOT NULL,
+  reviewed_at TEXT NOT NULL,
+  PRIMARY KEY (normalized_url, engine, engine_version, rules_fingerprint)
+);
+```
+
+实施要求：
+
+- 只缓存完整、可解析的审查结果；网络错误和模型错误不应成为永久记录。
+- 规则指纹由启用状态、标签、阈值和动作的稳定序列计算。
+- 模型或标签表版本变化时不能复用旧结果。
+- 设定容量/时间清理策略；不要永久保存远程图片文件。
+- 若未来用内容哈希跨 URL 复用，仍要验证响应内容，不能只相信 URL 参数。
+
+## 8. 近期架构里程碑
+
+1. Pixiv 第一方 PR 卡片美容过滤。
+2. 持久化审查缓存和视觉引擎 ready 握手。
+3. 被拦截作品的本地占位层、命中原因和一次性“强行查看”。
+4. 消除审查副本与页面原图的双重下载，评估自定义协议代理或受控本地响应。
+5. 从 `main/index.ts` 拆出探索子模块。
+
+详细任务、止损条件和验收步骤见 `docs/handoff/`。

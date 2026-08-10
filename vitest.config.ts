@@ -1,0 +1,25 @@
+import { defineConfig } from "vitest/config";
+import { fileURLToPath } from "node:url";
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      "@sanctuary/domain": fileURLToPath(
+        new URL("./packages/domain/src/index.ts", import.meta.url)
+      ),
+      "@sanctuary/protocol": fileURLToPath(
+        new URL("./packages/protocol/src/index.ts", import.meta.url)
+      ),
+      "@sanctuary/database": fileURLToPath(
+        new URL("./packages/database/src/index.ts", import.meta.url)
+      )
+    }
+  },
+  test: {
+    include: [
+      "packages/**/src/**/*.test.ts",
+      "services/**/src/**/*.test.ts",
+      "apps/**/src/**/*.test.ts"
+    ]
+  }
+});
