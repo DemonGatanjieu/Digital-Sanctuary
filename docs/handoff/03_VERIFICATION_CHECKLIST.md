@@ -45,6 +45,8 @@ Python 虚拟环境启动器会调用用户目录中的 Python 3.14；在受限�
 
 ## 安全回归
 
+- 重复启动应用不会创建第二个窗口或第二个 Pixiv session。
+- 关闭并重新启动应用后，`persist:pixiv` 会话仍然存在，不要求重复登录。
 - 不出现内嵌 Google OAuth。
 - 不增加 `nodeIntegration`，不关闭 sandbox、context isolation 或 web security。
 - 远程页面不能访问本地文件或数据库。

@@ -18,6 +18,8 @@ describe("Pixiv DOM adapter", () => {
     expect(script).toContain(PIXIV_DOM_ADAPTER_PLACEHOLDER_CLASS);
     expect(script).toContain("仅本次查看");
     expect(script).toContain("sanctuary-reveal:");
+    expect(script).toContain("data-advertisement");
+    expect(script).toContain("[alt]");
     expect(script).not.toContain("ipcRenderer");
     expect(script).not.toContain("querySelectorAll(\"*\")");
   });

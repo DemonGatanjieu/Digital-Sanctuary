@@ -43,10 +43,11 @@ flowchart LR
 ### 2.2 Electron 主进程
 
 - `apps/desktop/src/main/index.ts`：当前仍是组合根，负责窗口、IPC、Pixiv 视图、网络拦截、远程图片审查和视觉进程生命周期。
+- 主进程启动时申请 Electron 单实例锁；重复启动只唤醒现有窗口，不创建第二个 Pixiv session/view。
 - `apps/desktop/src/main/explore-policy.ts`：可单元测试的 URL、权限、广告和资源策略。
 - `apps/desktop/src/main/pixiv-dom-adapter.ts`：注入 Pixiv 页面，幂等安装 `MutationObserver`，隐藏明确标记的第一方 PR/推广卡片。
 - `apps/desktop/src/main/vision-client.ts`：版本化 JSON Lines 客户端、超时和子进程错误处理。
-- Pixiv 使用 `persist:pixiv` 独立 session；本地 React 渲染器不能访问其 DOM 或 Cookie。
+- Pixiv 使用 `persist:pixiv` 独立持久化 session；本地 React 渲染器不能访问其 DOM 或 Cookie。单实例锁避免多个进程造成“登录一次却看似丢失会话”的错觉。
 
 ### 2.3 视觉与领域层
 

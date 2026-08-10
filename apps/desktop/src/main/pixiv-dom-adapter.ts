@@ -12,8 +12,11 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
     const hiddenClass = ${JSON.stringify(HIDDEN_CLASS)};
     const placeholderClass = ${JSON.stringify(PLACEHOLDER_CLASS)};
     const revealToken = ${JSON.stringify(revealToken)};
-    const markerWords = new Set(["pr", "推广", "promoted", "sponsored"]);
-    const markerAttributes = ["aria-label", "title", "data-label", "data-ad-label"];
+    const markerWords = new Set(["pr", "推广", "promoted", "sponsored", "promotion", "advertisement", "广告"]);
+    const markerAttributes = [
+      "aria-label", "title", "alt", "data-label", "data-ad-label", "data-ad",
+      "data-ad-type", "data-advertisement", "data-promotion", "data-testid", "data-test-id"
+    ];
 
     if (window[stateKey]?.installed) return window[stateKey].hiddenCount ?? 0;
 
@@ -59,12 +62,13 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
     const isMarker = (element) => {
       if (!(element instanceof Element)) return false;
       for (const attribute of markerAttributes) {
-        if (markerWords.has(normalized(element.getAttribute(attribute)))) return true;
+        const value = normalized(element.getAttribute(attribute));
+        if (!value) continue;
+        if (markerWords.has(value)) return true;
+        if (attribute.startsWith("data-") && value.split(/[^a-z0-9\u4e00-\u9fff]+/).some((token) => markerWords.has(token))) return true;
       }
-      const testId = normalized(element.getAttribute("data-testid"));
-      if (["pr", "promoted", "sponsored"].includes(testId)) return true;
       if (element.childElementCount === 0 && markerWords.has(normalized(element.textContent))) {
-        return ["SPAN", "SMALL", "LABEL", "P", "DIV"].includes(element.tagName);
+        return ["SPAN", "SMALL", "LABEL", "P", "DIV", "A", "BUTTON", "STRONG", "EM", "SVG", "TEXT"].includes(element.tagName);
       }
       return false;
     };
@@ -75,7 +79,7 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
         const tag = current.tagName;
         if (tag !== "MAIN" && tag !== "NAV" && tag !== "HEADER" && tag !== "ASIDE" && tag !== "A") {
           const imageCount = current.querySelectorAll("img, picture").length;
-          const linkCount = current.querySelectorAll("a[href]").length;
+          const linkCount = current.querySelectorAll("a[href], [role=\"link\"], [data-gtm-id], [data-gtm-label]").length;
           if (imageCount >= 1 && linkCount >= 1 && imageCount <= 8 && linkCount <= 12) return current;
         }
         current = current.parentElement;
@@ -85,7 +89,7 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
 
     const inspect = (root) => {
       if (!(root instanceof Element)) return;
-      const candidates = [root, ...root.querySelectorAll("[aria-label], [title], [data-label], [data-testid], span, small, label, p, div")];
+      const candidates = [root, ...root.querySelectorAll("[aria-label], [title], [alt], [data-label], [data-testid], img, svg, text, span, small, label, p, div, a, button, strong, em")];
       for (const candidate of candidates) {
         if (!isMarker(candidate)) continue;
         const card = findCard(candidate);

@@ -26,6 +26,7 @@
 - 本地图库索引、SQLite、分类与元素规则页面。
 - WD Tagger Python 子进程、版本化协议、失败闭合。
 - 沙箱化 Pixiv `WebContentsView`、持久化独立 session、沉浸式内容区。
+- Electron 单实例锁已启用；重复启动只唤醒已有窗口，避免多进程造成 Pixiv 会话和拦截状态分裂。
 - Pixiv 邮箱登录与“系统浏览器设置密码”入口；内嵌 Google OAuth 已撤销。
 - Pixiv 作品图片在显示前进行本地元素审查。
 - 进程内 URL 去重、串行模型队列、临时文件清理和实时统计。

@@ -79,6 +79,7 @@ const remoteOneShotAllows = new Set<string>();
 let remoteVisionQueue: Promise<void> = Promise.resolve();
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const MAX_REMOTE_IMAGE_BYTES = 12 * 1024 * 1024;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 interface ExploreState {
   url: string;
@@ -97,15 +98,26 @@ interface ExploreState {
   maximized: boolean;
 }
 
-app.whenReady().then(() => {
-  database = new LibraryDatabase(join(app.getPath("userData"), "library.db"));
-  vision = new VisionClient(resolveVisionProcess());
-  database.invalidateAssessmentsExcept(vision.engine);
-  database.pruneRemoteImageReviews();
-  registerImageProtocol();
-  registerIpc();
-  createWindow();
-});
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+  });
+
+  app.whenReady().then(() => {
+    database = new LibraryDatabase(join(app.getPath("userData"), "library.db"));
+    vision = new VisionClient(resolveVisionProcess());
+    database.invalidateAssessmentsExcept(vision.engine);
+    database.pruneRemoteImageReviews();
+    registerImageProtocol();
+    registerIpc();
+    createWindow();
+  });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
