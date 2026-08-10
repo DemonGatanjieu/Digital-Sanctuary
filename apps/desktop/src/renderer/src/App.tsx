@@ -198,8 +198,11 @@ const initialExploreState: ExploreState = {
   canGoForward: false,
   blockedResources: 0,
   blockedAds: 0,
+  blockedFirstPartyPromotions: 0,
   approvedResources: 0,
   pendingResources: 0,
+  remoteReviewCacheHits: 0,
+  remoteReviewCacheMisses: 0,
   error: "",
   maximized: false
 };
@@ -317,7 +320,7 @@ function ExploreView({
         </button>
         <div className="shield-status" title="作品图先由本地 WD Tagger 审查，未命中黑名单才显示">
           <span className="status-dot online" />
-          审查中 {state.pendingResources} · 放行 {state.approvedResources} · 内容拦截 {state.blockedResources} · 广告拦截 {state.blockedAds}
+          审查中 {state.pendingResources} · 放行 {state.approvedResources} · 内容拦截 {state.blockedResources} · 网络广告 {state.blockedAds} · 第一方推广 {state.blockedFirstPartyPromotions} · 缓存命中 {state.remoteReviewCacheHits}
         </div>
         <button
           className="maximize-button"

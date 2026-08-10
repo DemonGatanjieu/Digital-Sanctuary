@@ -36,6 +36,33 @@ interface ElementFilterSettingRow {
   minimum_confidence: number;
 }
 
+export interface RemoteImageReviewKey {
+  normalizedUrl: string;
+  engine: string;
+  engineVersion: string;
+  rulesFingerprint: string;
+}
+
+export interface RemoteImageReviewRecord extends RemoteImageReviewKey {
+  contentHash: string | null;
+  assessment: VisionAssessment;
+  decision: FilterDecision;
+  byteLength: number;
+  reviewedAt: string;
+}
+
+interface RemoteImageReviewRow {
+  normalized_url: string;
+  content_hash: string | null;
+  engine: string;
+  engine_version: string;
+  rules_fingerprint: string;
+  assessment_json: string;
+  decision_json: string;
+  byte_length: number;
+  reviewed_at: string;
+}
+
 export class LibraryDatabase {
   readonly #database: DatabaseSync;
 
@@ -206,6 +233,96 @@ export class LibraryDatabase {
       );
   }
 
+  getRemoteImageReview(key: RemoteImageReviewKey): RemoteImageReviewRecord | null {
+    const row = this.#database
+      .prepare(
+        `SELECT normalized_url, content_hash, engine, engine_version,
+                rules_fingerprint, assessment_json, decision_json,
+                byte_length, reviewed_at
+           FROM remote_image_reviews
+          WHERE normalized_url = ?
+            AND engine = ?
+            AND engine_version = ?
+            AND rules_fingerprint = ?`
+      )
+      .get(
+        key.normalizedUrl,
+        key.engine,
+        key.engineVersion,
+        key.rulesFingerprint
+      ) as RemoteImageReviewRow | undefined;
+    if (!row) return null;
+
+    const assessment = parseJson<VisionAssessment>(row.assessment_json);
+    const decision = parseJson<FilterDecision>(row.decision_json);
+    if (!assessment || assessment.status !== "complete" || !decision) return null;
+    return {
+      normalizedUrl: row.normalized_url,
+      contentHash: row.content_hash,
+      engine: row.engine,
+      engineVersion: row.engine_version,
+      rulesFingerprint: row.rules_fingerprint,
+      assessment,
+      decision,
+      byteLength: row.byte_length,
+      reviewedAt: row.reviewed_at
+    };
+  }
+
+  saveRemoteImageReview(review: RemoteImageReviewRecord): void {
+    if (review.assessment.status !== "complete") return;
+    this.#database
+      .prepare(
+        `INSERT INTO remote_image_reviews
+           (normalized_url, content_hash, engine, engine_version,
+            rules_fingerprint, assessment_json, decision_json, byte_length, reviewed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(normalized_url, engine, engine_version, rules_fingerprint)
+         DO UPDATE SET
+           content_hash = excluded.content_hash,
+           assessment_json = excluded.assessment_json,
+           decision_json = excluded.decision_json,
+           byte_length = excluded.byte_length,
+           reviewed_at = excluded.reviewed_at`
+      )
+      .run(
+        review.normalizedUrl,
+        review.contentHash,
+        review.engine,
+        review.engineVersion,
+        review.rulesFingerprint,
+        JSON.stringify(review.assessment),
+        JSON.stringify(review.decision),
+        review.byteLength,
+        review.reviewedAt
+      );
+  }
+
+  pruneRemoteImageReviews(maxEntries = 2_000, maxAgeDays = 30): number {
+    const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1_000).toISOString();
+    const expired = this.#database
+      .prepare("DELETE FROM remote_image_reviews WHERE reviewed_at < ?")
+      .run(cutoff);
+    const overflow = this.#database
+      .prepare(
+        `DELETE FROM remote_image_reviews
+          WHERE rowid IN (
+            SELECT rowid FROM remote_image_reviews
+             ORDER BY reviewed_at DESC
+             LIMIT -1 OFFSET ?
+          )`
+      )
+      .run(Math.max(0, maxEntries));
+    return Number(expired.changes) + Number(overflow.changes);
+  }
+
+  countRemoteImageReviews(): number {
+    const row = this.#database
+      .prepare("SELECT COUNT(*) AS count FROM remote_image_reviews")
+      .get() as { count: number };
+    return Number(row.count);
+  }
+
   #migrate(): void {
     this.#database.exec(`
       CREATE TABLE IF NOT EXISTS artworks (
@@ -237,8 +354,23 @@ export class LibraryDatabase {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS remote_image_reviews (
+        normalized_url TEXT NOT NULL,
+        content_hash TEXT,
+        engine TEXT NOT NULL,
+        engine_version TEXT NOT NULL,
+        rules_fingerprint TEXT NOT NULL,
+        assessment_json TEXT NOT NULL,
+        decision_json TEXT NOT NULL,
+        byte_length INTEGER NOT NULL,
+        reviewed_at TEXT NOT NULL,
+        PRIMARY KEY (normalized_url, engine, engine_version, rules_fingerprint)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_artworks_imported_at ON artworks(imported_at DESC);
       CREATE INDEX IF NOT EXISTS idx_collection_artworks_artwork ON collection_artworks(artwork_id);
+      CREATE INDEX IF NOT EXISTS idx_remote_image_reviews_reviewed_at
+        ON remote_image_reviews(reviewed_at DESC);
     `);
   }
 }

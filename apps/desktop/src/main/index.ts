@@ -14,11 +14,12 @@ import {
   type Session,
   WebContentsView
 } from "electron";
-import { LibraryDatabase } from "@sanctuary/database";
+import { LibraryDatabase, type RemoteImageReviewRecord } from "@sanctuary/database";
 import {
   buildElementFilterRules,
   decideFilter,
   isElementFilterSetting,
+  rulesFingerprint,
   type VisionAssessment
 } from "@sanctuary/domain";
 import { VisionClient } from "./vision-client.js";
@@ -30,12 +31,14 @@ import {
   PIXIV_SESSION_PARTITION,
   isAllowedPixivNavigation,
   isPixivArtworkImageUrl,
+  normalizePixivArtworkImageUrl,
   parseExploreBounds,
   shouldAllowPixivLoginPermission,
   shouldBlockExploreAdRequest,
   shouldBlockExploreResource,
   type ExploreBounds
 } from "./explore-policy.js";
+import { buildPixivDomAdapterScript } from "./pixiv-dom-adapter.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -54,8 +57,12 @@ let exploreBlockedResources = 0;
 let exploreBlockedAds = 0;
 let exploreApprovedResources = 0;
 let explorePendingResources = 0;
+let exploreBlockedFirstPartyPromotions = 0;
+let exploreRemoteReviewCacheHits = 0;
+let exploreRemoteReviewCacheMisses = 0;
 let exploreError = "";
 let exploreStateTimer: ReturnType<typeof setTimeout> | undefined;
+let explorePromotionStatsTimer: ReturnType<typeof setInterval> | undefined;
 const remoteReviewCache = new Map<string, boolean>();
 const remoteReviewPending = new Map<string, Promise<boolean>>();
 let remoteVisionQueue: Promise<void> = Promise.resolve();
@@ -70,8 +77,11 @@ interface ExploreState {
   canGoForward: boolean;
   blockedResources: number;
   blockedAds: number;
+  blockedFirstPartyPromotions: number;
   approvedResources: number;
   pendingResources: number;
+  remoteReviewCacheHits: number;
+  remoteReviewCacheMisses: number;
   error: string;
   maximized: boolean;
 }
@@ -80,6 +90,7 @@ app.whenReady().then(() => {
   database = new LibraryDatabase(join(app.getPath("userData"), "library.db"));
   vision = new VisionClient(resolveVisionProcess());
   database.invalidateAssessmentsExcept(vision.engine);
+  database.pruneRemoteImageReviews();
   registerImageProtocol();
   registerIpc();
   createWindow();
@@ -91,6 +102,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   if (exploreStateTimer) clearTimeout(exploreStateTimer);
+  if (explorePromotionStatsTimer) clearInterval(explorePromotionStatsTimer);
   vision?.close();
   database?.close();
 });
@@ -266,6 +278,9 @@ function ensureExploreView(): WebContentsView {
   if (exploreBounds) view.setBounds(exploreBounds);
 
   const contents = view.webContents;
+  explorePromotionStatsTimer = setInterval(() => {
+    void installPixivDomAdapter(contents);
+  }, 1_000);
   const exploreSession = contents.session;
   exploreSession.setPermissionCheckHandler(
     (_contents, permission, requestingOrigin, details) =>
@@ -348,9 +363,18 @@ function ensureExploreView(): WebContentsView {
     exploreError = "";
     scheduleExploreState();
   });
-  contents.on("did-stop-loading", scheduleExploreState);
-  contents.on("did-navigate", scheduleExploreState);
-  contents.on("did-navigate-in-page", scheduleExploreState);
+  contents.on("did-stop-loading", () => {
+    void installPixivDomAdapter(contents);
+    scheduleExploreState();
+  });
+  contents.on("did-navigate", () => {
+    void installPixivDomAdapter(contents);
+    scheduleExploreState();
+  });
+  contents.on("did-navigate-in-page", () => {
+    void installPixivDomAdapter(contents);
+    scheduleExploreState();
+  });
   contents.on("page-title-updated", scheduleExploreState);
   contents.on(
     "did-fail-load",
@@ -375,8 +399,11 @@ function currentExploreState(): ExploreState {
       canGoForward: false,
       blockedResources: exploreBlockedResources,
       blockedAds: exploreBlockedAds,
+      blockedFirstPartyPromotions: exploreBlockedFirstPartyPromotions,
       approvedResources: exploreApprovedResources,
       pendingResources: explorePendingResources,
+      remoteReviewCacheHits: exploreRemoteReviewCacheHits,
+      remoteReviewCacheMisses: exploreRemoteReviewCacheMisses,
       error: exploreError,
       maximized: mainWindow?.isMaximized() ?? false
     };
@@ -389,11 +416,30 @@ function currentExploreState(): ExploreState {
     canGoForward: contents.navigationHistory.canGoForward(),
     blockedResources: exploreBlockedResources,
     blockedAds: exploreBlockedAds,
+    blockedFirstPartyPromotions: exploreBlockedFirstPartyPromotions,
     approvedResources: exploreApprovedResources,
     pendingResources: explorePendingResources,
+    remoteReviewCacheHits: exploreRemoteReviewCacheHits,
+    remoteReviewCacheMisses: exploreRemoteReviewCacheMisses,
     error: exploreError,
     maximized: mainWindow?.isMaximized() ?? false
   };
+}
+
+async function installPixivDomAdapter(contents: Electron.WebContents): Promise<void> {
+  if (contents.isDestroyed()) return;
+  try {
+    const hiddenCount = await contents.executeJavaScript(buildPixivDomAdapterScript(), true);
+    if (typeof hiddenCount === "number" && hiddenCount > 0) {
+      exploreBlockedFirstPartyPromotions = Math.max(
+        exploreBlockedFirstPartyPromotions,
+        hiddenCount
+      );
+      scheduleExploreState();
+    }
+  } catch (error) {
+    console.error("[pixiv-dom-adapter] failed to install", error);
+  }
 }
 
 function scheduleExploreState(): void {
@@ -410,45 +456,84 @@ function reviewRemoteArtwork(
   referrer: string,
   exploreSession: Session
 ): Promise<boolean> {
-  const cached = remoteReviewCache.get(imageUrl);
-  if (cached !== undefined) return Promise.resolve(cached);
+  if (!vision || !database) return Promise.resolve(false);
+  const settings = database.listElementFilterSettings();
+  const normalizedUrl = normalizePixivArtworkImageUrl(imageUrl);
+  if (!normalizedUrl) return Promise.resolve(false);
+  const cacheKey = {
+    normalizedUrl,
+    engine: vision.engine,
+    engineVersion: vision.engineVersion,
+    rulesFingerprint: rulesFingerprint(settings)
+  };
+  const memoryKey = JSON.stringify(cacheKey);
+  const cached = remoteReviewCache.get(memoryKey);
+  if (cached !== undefined) {
+    exploreRemoteReviewCacheHits += 1;
+    return Promise.resolve(cached);
+  }
 
-  const activeReview = remoteReviewPending.get(imageUrl);
+  const persisted = database.getRemoteImageReview(cacheKey);
+  if (persisted) {
+    remoteReviewCache.set(memoryKey, persisted.decision.action === "allow");
+    exploreRemoteReviewCacheHits += 1;
+    return Promise.resolve(persisted.decision.action === "allow");
+  }
+  const activeReview = remoteReviewPending.get(memoryKey);
   if (activeReview) return activeReview;
+
+  exploreRemoteReviewCacheMisses += 1;
+  scheduleExploreState();
 
   explorePendingResources += 1;
   scheduleExploreState();
 
-  const review = performRemoteArtworkReview(imageUrl, referrer, exploreSession)
+  const review = performRemoteArtworkReview(
+    imageUrl,
+    referrer,
+    exploreSession,
+    cacheKey,
+    settings
+  )
     .catch((error: unknown) => {
       console.error(`[explore-review] ${imageUrl}`, error);
       exploreError = `图片审查失败，已保持遮挡：${
         error instanceof Error ? error.message : "未知错误"
       }`;
-      return false;
+      return null;
     })
-    .then((allowed) => {
-      remoteReviewCache.set(imageUrl, allowed);
+    .then((reviewResult) => {
+      if (!reviewResult) return false;
+      const allowed = reviewResult.decision.action === "allow";
+      remoteReviewCache.set(memoryKey, allowed);
+      database?.saveRemoteImageReview(reviewResult);
       if (allowed) exploreApprovedResources += 1;
       else exploreBlockedResources += 1;
       return allowed;
     })
     .finally(() => {
-      remoteReviewPending.delete(imageUrl);
+      remoteReviewPending.delete(memoryKey);
       explorePendingResources = Math.max(0, explorePendingResources - 1);
       scheduleExploreState();
     });
 
-  remoteReviewPending.set(imageUrl, review);
+  remoteReviewPending.set(memoryKey, review);
   return review;
 }
 
 async function performRemoteArtworkReview(
   imageUrl: string,
   referrer: string,
-  exploreSession: Session
-): Promise<boolean> {
-  if (!vision?.available || !database) return false;
+  exploreSession: Session,
+  cacheKey: {
+    normalizedUrl: string;
+    engine: string;
+    engineVersion: string;
+    rulesFingerprint: string;
+  },
+  settings: ReturnType<LibraryDatabase["listElementFilterSettings"]>
+): Promise<RemoteImageReviewRecord> {
+  if (!vision?.available || !database) throw new Error("Vision engine is unavailable");
 
   const safeReferrer = isAllowedPixivNavigation(referrer) ? referrer : PIXIV_HOME_URL;
   const response = await exploreSession.fetch(imageUrl, {
@@ -488,7 +573,13 @@ async function performRemoteArtworkReview(
       if (assessment.status === "error") {
         throw new Error(assessment.error ?? "Vision engine failed");
       }
-      const rules = buildElementFilterRules(database!.listElementFilterSettings());
+      if (
+        assessment.engine !== cacheKey.engine ||
+        assessment.engineVersion !== cacheKey.engineVersion
+      ) {
+        throw new Error("Vision engine version changed during review");
+      }
+      const rules = buildElementFilterRules(settings);
       const decision = decideFilter(assessment, rules);
       if (decision.action !== "allow") {
         console.warn(
@@ -497,7 +588,14 @@ async function performRemoteArtworkReview(
             .join(", ")}`
         );
       }
-      return decision.action === "allow";
+      return {
+        ...cacheKey,
+        contentHash: createHash("sha256").update(imageBytes).digest("hex"),
+        assessment,
+        decision,
+        byteLength: imageBytes.length,
+        reviewedAt: new Date().toISOString()
+      };
     });
   } finally {
     await unlink(imagePath).catch(() => undefined);
@@ -558,6 +656,7 @@ function resolveVisionProcess(): VisionProcessOptions {
       executable: process.execPath,
       args: [join(process.resourcesPath, "vision", "index.js")],
       engine: "filename-probe",
+      engineVersion: "0.1.0",
       env: { ELECTRON_RUN_AS_NODE: "1" }
     };
   }
@@ -578,7 +677,8 @@ function resolveVisionProcess(): VisionProcessOptions {
     return {
       executable: python,
       args: [pythonServer],
-      engine: "wd-swinv2-tagger-v3"
+      engine: "wd-swinv2-tagger-v3",
+      engineVersion: "v3/e6774bff34d4/ort-1.28.0"
     };
   }
 
@@ -586,6 +686,7 @@ function resolveVisionProcess(): VisionProcessOptions {
     executable: process.execPath,
     args: [join(projectRoot, "services", "vision", "dist", "index.js")],
     engine: "filename-probe",
+    engineVersion: "0.1.0",
     env: { ELECTRON_RUN_AS_NODE: "1" }
   };
 }

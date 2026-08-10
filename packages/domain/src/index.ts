@@ -141,6 +141,32 @@ export function buildElementFilterRules(
   });
 }
 
+/**
+ * Returns a deterministic fingerprint for the active element rules.
+ * This is a cache namespace, not an integrity token.
+ */
+export function rulesFingerprint(
+  settings: readonly ElementFilterSetting[] = DEFAULT_ELEMENT_FILTER_SETTINGS
+): string {
+  const canonical = buildElementFilterRules(settings)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((rule) => [
+      rule.id,
+      rule.enabled ? 1 : 0,
+      rule.label,
+      rule.minimumConfidence,
+      rule.action,
+      rule.priority
+    ] as const);
+  const input = JSON.stringify(canonical);
+  let hash = 0xcbf29ce484222325n;
+  for (const character of input) {
+    hash ^= BigInt(character.codePointAt(0) ?? 0);
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return `fnv1a64-${hash.toString(16).padStart(16, "0")}`;
+}
+
 export const DEFAULT_FILTER_RULES: FilterRule[] = buildElementFilterRules();
 
 export function isElementFilterSetting(value: unknown): value is ElementFilterSetting {

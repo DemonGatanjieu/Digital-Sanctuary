@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isAllowedPixivNavigation,
   isPixivArtworkImageUrl,
+  normalizePixivArtworkImageUrl,
   parseExploreBounds,
   PIXIV_LOGIN_URL,
   PIXIV_PASSWORD_SETUP_URL,
@@ -31,6 +32,13 @@ describe("Pixiv exploration policy", () => {
     expect(isPixivArtworkImageUrl("https://i.pximg.net/user-profile/img/1.jpg")).toBe(false);
     expect(isPixivArtworkImageUrl("https://s.pximg.net/common/images/logo.svg")).toBe(false);
     expect(isPixivArtworkImageUrl("https://i.pximg.net.evil.test/img-master/1.jpg")).toBe(false);
+  });
+
+  it("normalizes artwork URLs without mixing tracking query strings into cache keys", () => {
+    expect(normalizePixivArtworkImageUrl(
+      "https://i.pximg.net/img-original/1.png?format=webp#preview"
+    )).toBe("https://i.pximg.net/img-original/1.png");
+    expect(normalizePixivArtworkImageUrl("https://www.pixiv.net/artworks/1")).toBeNull();
   });
 
   it("allows UI images but keeps media fail-closed", () => {

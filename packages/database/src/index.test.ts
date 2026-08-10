@@ -42,4 +42,57 @@ describe("LibraryDatabase", () => {
       .toEqual({ groupId: "blood", enabled: false, minimumConfidence: 0.6 });
     database.close();
   });
+
+  it("persists complete remote reviews and rejects stale cache keys", () => {
+    const database = new LibraryDatabase(":memory:");
+    const assessment: VisionAssessment = {
+      status: "complete",
+      engine: "wd-swinv2-tagger-v3",
+      engineVersion: "v3/test",
+      labels: { safe: 0.99 },
+      elapsedMs: 2
+    };
+    const review = {
+      normalizedUrl: "https://i.pximg.net/img-original/1.png",
+      contentHash: "abc",
+      engine: assessment.engine,
+      engineVersion: assessment.engineVersion,
+      rulesFingerprint: "rules-a",
+      assessment,
+      decision: decideFilter(assessment, DEFAULT_FILTER_RULES),
+      byteLength: 123,
+      reviewedAt: "2026-08-11T00:00:00.000Z"
+    };
+
+    database.saveRemoteImageReview(review);
+    expect(database.getRemoteImageReview(review)).toEqual(review);
+    expect(database.getRemoteImageReview({ ...review, rulesFingerprint: "rules-b" })).toBeNull();
+    expect(database.countRemoteImageReviews()).toBe(1);
+    database.close();
+  });
+
+  it("does not persist failed remote reviews", () => {
+    const database = new LibraryDatabase(":memory:");
+    const assessment: VisionAssessment = {
+      status: "error",
+      engine: "test",
+      engineVersion: "1",
+      labels: {},
+      elapsedMs: 1,
+      error: "offline"
+    };
+    database.saveRemoteImageReview({
+      normalizedUrl: "https://i.pximg.net/img-original/2.png",
+      contentHash: null,
+      engine: assessment.engine,
+      engineVersion: assessment.engineVersion,
+      rulesFingerprint: "rules-a",
+      assessment,
+      decision: decideFilter(assessment, DEFAULT_FILTER_RULES),
+      byteLength: 0,
+      reviewedAt: new Date().toISOString()
+    });
+    expect(database.countRemoteImageReviews()).toBe(0);
+    database.close();
+  });
 });

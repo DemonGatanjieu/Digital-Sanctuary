@@ -15,7 +15,13 @@
 - 探索模式使用沉浸式全内容区布局，提供 Pixiv 邮箱登录、默认浏览器中的官方密码设置入口和窗口最大化控制；第三方 OAuth 不在 Electron 内嵌页面中运行。
 - 探索页会识别 Pixiv 作品 CDN 图片，在原始请求发出前下载临时副本交给本地 WD Tagger；未命中元素黑名单才放行，命中、超时或下载失败都保持遮挡。站点图标、头像和登录素材不进入作品审查队列，视频仍默认拦截。
 - 探索 session 自带网络级广告拦截，不依赖 Chrome/Edge 扩展：常见广告与追踪域名直接取消，非 Pixiv 第三方 iframe 默认拒绝，Pixiv 登录所需的 reCAPTCHA 保留。
+- 探索页已加入 Pixiv 第一方 PR/推广卡片美容过滤：使用页面级 DOM 适配器和幂等 `MutationObserver` 隐藏整张推广卡片，并与网络广告统计分开。
+- 远程图片审查结果已持久化到 SQLite；缓存键包含规范化 URL、引擎、引擎版本和稳定规则指纹。只有完整结果会缓存，规则变化、模型变化或缓存过期会自动失效。
 - 桌面外壳默认使用接近 Pixiv 阅读体验的浅色设计：白色导航、浅灰内容区和低饱和蓝色交互。
+
+## 下一步
+
+下一阶段是为被拦截作品提供统一浅色占位卡片、命中原因和受限的“仅本次查看”。实现前需要在真实 Pixiv 虚拟列表上验证卡片复用、图片取消请求和软导航行为，确保不会出现原图闪现或破坏页面列表。
 
 ## 本地运行
 
@@ -41,6 +47,12 @@ node .\node_modules\electron\install.js
 npm.cmd run typecheck
 npm.cmd test
 npm.cmd run build
+```
+
+Python 视觉单测也可以单独运行：
+
+```powershell
+& 'E:\PIxiv\.venv\Scripts\python.exe' -m unittest discover -s 'E:\PIxiv\services\vision\python' -p 'test_*.py'
 ```
 
 构建输出位于 `apps\desktop\out`，它是可重新生成的开发产物，不进入版本控制。

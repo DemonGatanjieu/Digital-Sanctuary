@@ -2,6 +2,7 @@
 
 - 文档状态：当前架构基线 + 后续演进计划
 - 基线日期：2026-08-11
+- 最近同步：P0 第一方推广过滤、P1 远程审查持久化缓存已实现
 - 面向读者：接手实现的开发者或代码模型
 
 ## 1. 产品边界
@@ -24,6 +25,7 @@ flowchart LR
   MAIN --> DB["SQLite 本地图库与规则"]
   MAIN --> VIEW["沙箱化 Pixiv WebContentsView"]
   VIEW -->|"作品图片请求"| REVIEW["远程图片审查协调器（当前位于 main/index.ts）"]
+  VIEW -->|"页面 DOM"| DOM["Pixiv DOM 适配器（PR/推广美容过滤）"]
   REVIEW -->|"带 Pixiv Referer 获取临时副本"| CDN["i.pximg.net"]
   REVIEW -->|"临时文件路径 / JSON Lines"| VISION["Python WD Tagger 子进程"]
   VISION --> REVIEW
@@ -42,6 +44,7 @@ flowchart LR
 
 - `apps/desktop/src/main/index.ts`：当前仍是组合根，负责窗口、IPC、Pixiv 视图、网络拦截、远程图片审查和视觉进程生命周期。
 - `apps/desktop/src/main/explore-policy.ts`：可单元测试的 URL、权限、广告和资源策略。
+- `apps/desktop/src/main/pixiv-dom-adapter.ts`：注入 Pixiv 页面，幂等安装 `MutationObserver`，隐藏明确标记的第一方 PR/推广卡片。
 - `apps/desktop/src/main/vision-client.ts`：版本化 JSON Lines 客户端、超时和子进程错误处理。
 - Pixiv 使用 `persist:pixiv` 独立 session；本地 React 渲染器不能访问其 DOM 或 Cookie。
 
@@ -50,7 +53,7 @@ flowchart LR
 - `services/vision/python/`：WD SwinV2 Tagger v3 推理实现。
 - `packages/domain/`：元素组、阈值、标签映射和 `allow / blur / hide` 决策。
 - `packages/protocol/`：桌面端与视觉子进程之间的协议。
-- `packages/database/`：本地图库、分类和元素规则设置。
+- `packages/database/`：本地图库、分类、元素规则设置和远程审查缓存。
 
 ## 3. 当前探索请求流
 
@@ -60,13 +63,15 @@ flowchart LR
 4. 请求是视频：当前失败闭合并取消。
 5. 请求是 `i.pximg.net` 的 `img-master`、`img-original` 或 `custom-thumb` 作品图：
    - 相同 URL 在进程内去重；
+   - 先按规范化 URL、引擎、引擎版本和规则指纹查询持久化缓存；
+   - 缓存命中完整结果时直接决定 allow/block，不下载或重复推理；
    - 带 Pixiv `Referer` 下载不超过 12 MiB 的临时副本；
    - 串行交给 WD Tagger，避免并发请求的超时从排队阶段开始累计；
    - 使用数据库中的当前元素规则判定；
    - `allow` 后恢复原始网络请求；其他结果取消原始请求；
    - 推理后删除临时文件。
 
-当前实现会为审查下载一次图片、放行后由页面再下载一次。它是安全的最小闭环，但不是最终的网络效率形态。
+当前未命中缓存时仍会为审查下载一次图片、放行后由页面再下载一次。它是安全的最小闭环，但不是最终的网络效率形态。
 
 ## 4. 安全不变量
 
@@ -83,7 +88,7 @@ flowchart LR
 广告过滤不能与元素黑名单混为一谈：
 
 1. **网络级过滤（已实现）**：拦截广告/追踪域名和站外 iframe，降低请求数与渲染进程数。
-2. **Pixiv 第一方美容过滤（待实现）**：隐藏由 `pixiv.net` 自己返回、页面上标有“PR”或“推广”的卡片。
+2. **Pixiv 第一方美容过滤（已实现）**：页面适配器只匹配独立的 PR/推广标记，并隐藏其最小公共卡片容器；普通标题包含 `PR` 的作品不会因子串匹配被隐藏。适配器只观察新增节点及其附近容器，重复注入不会创建多个 observer。
 
 截图中的漫画“PR”属于第二类。不能封禁 `pixiv.net`，也不能把该图片交给 WD Tagger后当作不受欢迎元素；需要 Pixiv DOM 适配器识别整张推广卡片并隐藏。
 
@@ -107,7 +112,7 @@ apps/desktop/src/main/explore/
 
 ## 7. 持久化审查缓存计划
 
-建议在 SQLite 增加 `remote_image_reviews`：
+SQLite 已增加并使用 `remote_image_reviews`：
 
 ```sql
 CREATE TABLE remote_image_reviews (
@@ -131,12 +136,13 @@ CREATE TABLE remote_image_reviews (
 - 模型或标签表版本变化时不能复用旧结果。
 - 设定容量/时间清理策略；不要永久保存远程图片文件。
 - 若未来用内容哈希跨 URL 复用，仍要验证响应内容，不能只相信 URL 参数。
+- 当前默认在应用启动时清理超过 30 天或超出 2,000 条的记录；只保存 `status=complete` 结果。
 
 ## 8. 近期架构里程碑
 
-1. Pixiv 第一方 PR 卡片美容过滤。
-2. 持久化审查缓存和视觉引擎 ready 握手。
-3. 被拦截作品的本地占位层、命中原因和一次性“强行查看”。
+1. **已完成**：Pixiv 第一方 PR 卡片美容过滤。
+2. **部分完成**：持久化审查缓存；视觉引擎 `ready/health` 握手仍属于 P3。
+3. **下一步**：被拦截作品的本地占位层、命中原因和一次性“仅本次查看”。
 4. 消除审查副本与页面原图的双重下载，评估自定义协议代理或受控本地响应。
 5. 从 `main/index.ts` 拆出探索子模块。
 

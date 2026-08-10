@@ -20,8 +20,11 @@ export interface ExploreState {
   canGoForward: boolean;
   blockedResources: number;
   blockedAds: number;
+  blockedFirstPartyPromotions: number;
   approvedResources: number;
   pendingResources: number;
+  remoteReviewCacheHits: number;
+  remoteReviewCacheMisses: number;
   error: string;
   maximized: boolean;
 }

@@ -18,6 +18,7 @@ export interface VisionProcessOptions {
   executable: string;
   args: string[];
   engine: string;
+  engineVersion: string;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -25,10 +26,12 @@ export class VisionClient {
   readonly #child: ChildProcessWithoutNullStreams;
   readonly #pending = new Map<string, PendingRequest>();
   readonly engine: string;
+  readonly engineVersion: string;
   #available = true;
 
   constructor(options: VisionProcessOptions) {
     this.engine = options.engine;
+    this.engineVersion = options.engineVersion;
     this.#child = spawn(options.executable, options.args, {
       env: { ...process.env, ...options.env },
       stdio: ["pipe", "pipe", "pipe"],

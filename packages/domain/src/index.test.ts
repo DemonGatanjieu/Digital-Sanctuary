@@ -4,6 +4,7 @@ import {
   DEFAULT_FILTER_RULES,
   buildElementFilterRules,
   decideFilter,
+  rulesFingerprint,
   type VisionAssessment
 } from "./index.js";
 
@@ -66,5 +67,13 @@ describe("decideFilter", () => {
 
     expect(decideFilter(assessment({ blood: 0.7 }), rules).action).toBe("allow");
     expect(decideFilter(assessment({ blood: 0.9 }), rules).action).toBe("hide");
+  });
+
+  it("builds a stable fingerprint independent of setting order", () => {
+    const reversed = [...DEFAULT_ELEMENT_FILTER_SETTINGS].reverse();
+    expect(rulesFingerprint()).toBe(rulesFingerprint(reversed));
+    expect(rulesFingerprint(reversed.map((setting) =>
+      setting.groupId === "blood" ? { ...setting, minimumConfidence: 0.8 } : setting
+    ))).not.toBe(rulesFingerprint());
   });
 });

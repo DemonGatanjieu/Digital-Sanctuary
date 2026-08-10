@@ -63,6 +63,20 @@ export function isPixivArtworkImageUrl(rawUrl: string): boolean {
   }
 }
 
+export function normalizePixivArtworkImageUrl(rawUrl: string): string | null {
+  try {
+    const url = new URL(rawUrl);
+    if (!isPixivArtworkImageUrl(rawUrl)) {
+      return null;
+    }
+    url.hash = "";
+    url.search = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function shouldBlockExploreAdRequest(
   resourceType: string,
   requestUrl: string,
