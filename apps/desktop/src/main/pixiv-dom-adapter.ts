@@ -20,7 +20,11 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       "data-ad-type", "data-advertisement", "data-promotion", "data-testid", "data-test-id"
     ];
 
-    if (window[stateKey]?.installed) return window[stateKey].hiddenCount ?? 0;
+    const snapshot = (adapterState) => ({
+      hiddenCount: adapterState.hiddenCount ?? 0,
+      promotionImages: [...(adapterState.promotionImages || [])]
+    });
+    if (window[stateKey]?.installed) return snapshot(window[stateKey]);
 
     const state = {
       installed: true,
@@ -29,7 +33,8 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       scheduled: false,
       pendingNodes: [],
       blockedReviews: new Map(),
-      revealedUrls: new Set()
+      revealedUrls: new Set(),
+      promotionImages: new Set()
     };
     window[stateKey] = state;
 
@@ -120,6 +125,10 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
         const card = findCard(candidate);
         if (!card || card.classList.contains(hiddenClass)) continue;
         card.classList.add(hiddenClass);
+        for (const image of card.querySelectorAll("img")) {
+          const imageUrl = normalizeArtworkUrl(image.getAttribute("src") || image.currentSrc || image.src);
+          if (imageUrl) state.promotionImages.add(imageUrl);
+        }
         state.hiddenCount += 1;
       }
     };
@@ -176,6 +185,11 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       const safeReasons = Array.isArray(reasons) ? reasons.map((reason) => String(reason)).slice(0, 8) : [];
       state.blockedReviews.set(normalizedUrl, safeReasons);
       decorateAll(normalizedUrl, safeReasons);
+    };
+
+    state.isPromotionImage = (url) => {
+      const normalizedUrl = normalizeArtworkUrl(url);
+      return Boolean(normalizedUrl && state.promotionImages.has(normalizedUrl));
     };
 
     state.releaseOneShot = (url) => {
@@ -236,7 +250,7 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
     });
     state.observer.observe(document.documentElement, { childList: true, subtree: true });
     inspect(document.body || document.documentElement);
-    return state.hiddenCount;
+    return snapshot(state);
   })()`;
 }
 
@@ -250,6 +264,13 @@ export function buildPixivBlockedReviewScript(url: string, reasons: readonly str
       pending.push(review);
       window["__sanctuaryPixivPendingReviews"] = pending;
     }
+  })()`;
+}
+
+export function buildPixivPromotionImageCheckScript(url: string): string {
+  return `(() => {
+    const state = window[${JSON.stringify(ADAPTER_STATE_KEY)}];
+    return state?.isPromotionImage?.(${JSON.stringify(url)}) === true;
   })()`;
 }
 

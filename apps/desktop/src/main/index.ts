@@ -41,6 +41,7 @@ import {
 import {
   buildPixivBlockedReviewScript,
   buildPixivDomAdapterScript,
+  buildPixivPromotionImageCheckScript,
   buildPixivReviewReleaseScript
 } from "./pixiv-dom-adapter.js";
 
@@ -76,6 +77,7 @@ const remoteReviewCache = new Map<string, RemoteReviewOutcome>();
 const remoteReviewPending = new Map<string, Promise<RemoteReviewOutcome>>();
 const pixivRevealToken = randomUUID();
 const remoteOneShotAllows = new Set<string>();
+const explorePromotionImageUrls = new Set<string>();
 let remoteVisionQueue: Promise<void> = Promise.resolve();
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const MAX_REMOTE_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -329,21 +331,31 @@ function ensureExploreView(): WebContentsView {
     (details, callback) => {
       if (details.resourceType === "image" && isPixivArtworkImageUrl(details.url)) {
         const normalizedUrl = normalizePixivArtworkImageUrl(details.url);
-        if (normalizedUrl && remoteOneShotAllows.delete(normalizedUrl)) {
-          callback({ cancel: false });
-          return;
-        }
-        void reviewRemoteArtwork(details.url, details.referrer, exploreSession)
-          .then(async (outcome) => {
-            if (!outcome.allowed && normalizedUrl) {
-              await contents.executeJavaScript(
-                buildPixivBlockedReviewScript(normalizedUrl, outcome.reasons),
-                true
-              ).catch((error: unknown) => {
-                console.error("[pixiv-placeholder] failed to install", error);
-              });
+        void isPixivPromotionImage(contents, normalizedUrl)
+          .then((isPromotion) => {
+            if (isPromotion) {
+              exploreBlockedFirstPartyPromotions += 1;
+              scheduleExploreState();
+              callback({ cancel: true });
+              return;
             }
-            callback({ cancel: !outcome.allowed });
+            if (normalizedUrl && remoteOneShotAllows.delete(normalizedUrl)) {
+              callback({ cancel: false });
+              return;
+            }
+            void reviewRemoteArtwork(details.url, details.referrer, exploreSession)
+              .then(async (outcome) => {
+                if (!outcome.allowed && normalizedUrl) {
+                  await contents.executeJavaScript(
+                    buildPixivBlockedReviewScript(normalizedUrl, outcome.reasons),
+                    true
+                  ).catch((error: unknown) => {
+                    console.error("[pixiv-placeholder] failed to install", error);
+                  });
+                }
+                callback({ cancel: !outcome.allowed });
+              })
+              .catch(() => callback({ cancel: true }));
           })
           .catch(() => callback({ cancel: true }));
         return;
@@ -417,6 +429,7 @@ function ensureExploreView(): WebContentsView {
   });
   contents.on("did-start-loading", () => {
     exploreError = "";
+    explorePromotionImageUrls.clear();
     scheduleExploreState();
   });
   contents.on("did-stop-loading", () => {
@@ -485,11 +498,22 @@ function currentExploreState(): ExploreState {
 async function installPixivDomAdapter(contents: Electron.WebContents): Promise<void> {
   if (contents.isDestroyed()) return;
   try {
-    const hiddenCount = await contents.executeJavaScript(
+    const adapterSnapshot: unknown = await contents.executeJavaScript(
       buildPixivDomAdapterScript(pixivRevealToken),
       true
     );
-    if (typeof hiddenCount === "number" && hiddenCount > 0) {
+    const hiddenCount = typeof adapterSnapshot === "number"
+      ? adapterSnapshot
+      : isAdapterSnapshot(adapterSnapshot)
+        ? adapterSnapshot.hiddenCount
+        : 0;
+    if (isAdapterSnapshot(adapterSnapshot)) {
+      for (const imageUrl of adapterSnapshot.promotionImages) {
+        const normalizedUrl = normalizePixivArtworkImageUrl(imageUrl);
+        if (normalizedUrl) explorePromotionImageUrls.add(normalizedUrl);
+      }
+    }
+    if (hiddenCount > 0) {
       exploreBlockedFirstPartyPromotions = Math.max(
         exploreBlockedFirstPartyPromotions,
         hiddenCount
@@ -499,6 +523,34 @@ async function installPixivDomAdapter(contents: Electron.WebContents): Promise<v
   } catch (error) {
     console.error("[pixiv-dom-adapter] failed to install", error);
   }
+}
+
+async function isPixivPromotionImage(
+  contents: Electron.WebContents,
+  normalizedUrl: string | null
+): Promise<boolean> {
+  if (!normalizedUrl || contents.isDestroyed()) return false;
+  if (explorePromotionImageUrls.has(normalizedUrl)) return true;
+  try {
+    return Boolean(await contents.executeJavaScript(
+      buildPixivPromotionImageCheckScript(normalizedUrl),
+      true
+    ));
+  } catch {
+    return false;
+  }
+}
+
+function isAdapterSnapshot(value: unknown): value is {
+  hiddenCount: number;
+  promotionImages: string[];
+} {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      typeof (value as { hiddenCount?: unknown }).hiddenCount === "number" &&
+      Array.isArray((value as { promotionImages?: unknown }).promotionImages)
+  );
 }
 
 function scheduleExploreState(): void {
