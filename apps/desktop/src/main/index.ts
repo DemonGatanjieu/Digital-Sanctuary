@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
@@ -38,7 +38,11 @@ import {
   shouldBlockExploreResource,
   type ExploreBounds
 } from "./explore-policy.js";
-import { buildPixivDomAdapterScript } from "./pixiv-dom-adapter.js";
+import {
+  buildPixivBlockedReviewScript,
+  buildPixivDomAdapterScript,
+  buildPixivReviewReleaseScript
+} from "./pixiv-dom-adapter.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -63,8 +67,15 @@ let exploreRemoteReviewCacheMisses = 0;
 let exploreError = "";
 let exploreStateTimer: ReturnType<typeof setTimeout> | undefined;
 let explorePromotionStatsTimer: ReturnType<typeof setInterval> | undefined;
-const remoteReviewCache = new Map<string, boolean>();
-const remoteReviewPending = new Map<string, Promise<boolean>>();
+interface RemoteReviewOutcome {
+  allowed: boolean;
+  reasons: string[];
+}
+
+const remoteReviewCache = new Map<string, RemoteReviewOutcome>();
+const remoteReviewPending = new Map<string, Promise<RemoteReviewOutcome>>();
+const pixivRevealToken = randomUUID();
+const remoteOneShotAllows = new Set<string>();
 let remoteVisionQueue: Promise<void> = Promise.resolve();
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const MAX_REMOTE_IMAGE_BYTES = 12 * 1024 * 1024;
@@ -305,8 +316,23 @@ function ensureExploreView(): WebContentsView {
     { urls: ["*://*/*"] },
     (details, callback) => {
       if (details.resourceType === "image" && isPixivArtworkImageUrl(details.url)) {
+        const normalizedUrl = normalizePixivArtworkImageUrl(details.url);
+        if (normalizedUrl && remoteOneShotAllows.delete(normalizedUrl)) {
+          callback({ cancel: false });
+          return;
+        }
         void reviewRemoteArtwork(details.url, details.referrer, exploreSession)
-          .then((allowed) => callback({ cancel: !allowed }))
+          .then(async (outcome) => {
+            if (!outcome.allowed && normalizedUrl) {
+              await contents.executeJavaScript(
+                buildPixivBlockedReviewScript(normalizedUrl, outcome.reasons),
+                true
+              ).catch((error: unknown) => {
+                console.error("[pixiv-placeholder] failed to install", error);
+              });
+            }
+            callback({ cancel: !outcome.allowed });
+          })
           .catch(() => callback({ cancel: true }));
         return;
       }
@@ -338,6 +364,24 @@ function ensureExploreView(): WebContentsView {
       scheduleExploreState();
     }
     return { action: "deny" };
+  });
+  contents.on("console-message", (_event, _level, message) => {
+    const prefix = `sanctuary-reveal:${pixivRevealToken}:`;
+    if (!message.startsWith(prefix)) return;
+    let normalizedUrl: string | null = null;
+    try {
+      normalizedUrl = normalizePixivArtworkImageUrl(
+        decodeURIComponent(message.slice(prefix.length))
+      );
+    } catch {
+      normalizedUrl = null;
+    }
+    if (!normalizedUrl) return;
+    remoteOneShotAllows.add(normalizedUrl);
+    void contents.executeJavaScript(buildPixivReviewReleaseScript(normalizedUrl), true)
+      .catch((error: unknown) => {
+        console.error("[pixiv-reveal] failed to release one-shot image", error);
+      });
   });
   contents.on("will-navigate", (event) => {
     if (!event.isMainFrame) {
@@ -429,7 +473,10 @@ function currentExploreState(): ExploreState {
 async function installPixivDomAdapter(contents: Electron.WebContents): Promise<void> {
   if (contents.isDestroyed()) return;
   try {
-    const hiddenCount = await contents.executeJavaScript(buildPixivDomAdapterScript(), true);
+    const hiddenCount = await contents.executeJavaScript(
+      buildPixivDomAdapterScript(pixivRevealToken),
+      true
+    );
     if (typeof hiddenCount === "number" && hiddenCount > 0) {
       exploreBlockedFirstPartyPromotions = Math.max(
         exploreBlockedFirstPartyPromotions,
@@ -455,11 +502,11 @@ function reviewRemoteArtwork(
   imageUrl: string,
   referrer: string,
   exploreSession: Session
-): Promise<boolean> {
-  if (!vision || !database) return Promise.resolve(false);
+): Promise<RemoteReviewOutcome> {
+  if (!vision || !database) return Promise.resolve({ allowed: false, reasons: ["视觉引擎不可用"] });
   const settings = database.listElementFilterSettings();
   const normalizedUrl = normalizePixivArtworkImageUrl(imageUrl);
-  if (!normalizedUrl) return Promise.resolve(false);
+  if (!normalizedUrl) return Promise.resolve({ allowed: false, reasons: ["无效图片地址"] });
   const cacheKey = {
     normalizedUrl,
     engine: vision.engine,
@@ -475,9 +522,13 @@ function reviewRemoteArtwork(
 
   const persisted = database.getRemoteImageReview(cacheKey);
   if (persisted) {
-    remoteReviewCache.set(memoryKey, persisted.decision.action === "allow");
+    const outcome = {
+      allowed: persisted.decision.action === "allow",
+      reasons: persisted.decision.reasons.map((reason) => reason.label)
+    };
+    remoteReviewCache.set(memoryKey, outcome);
     exploreRemoteReviewCacheHits += 1;
-    return Promise.resolve(persisted.decision.action === "allow");
+    return Promise.resolve(outcome);
   }
   const activeReview = remoteReviewPending.get(memoryKey);
   if (activeReview) return activeReview;
@@ -500,16 +551,19 @@ function reviewRemoteArtwork(
       exploreError = `图片审查失败，已保持遮挡：${
         error instanceof Error ? error.message : "未知错误"
       }`;
-      return null;
+      return { allowed: false, reasons: ["审查失败，默认保持遮挡"] };
     })
     .then((reviewResult) => {
-      if (!reviewResult) return false;
-      const allowed = reviewResult.decision.action === "allow";
-      remoteReviewCache.set(memoryKey, allowed);
+      if ("allowed" in reviewResult) return reviewResult;
+      const outcome = {
+        allowed: reviewResult.decision.action === "allow",
+        reasons: reviewResult.decision.reasons.map((reason) => reason.label)
+      };
+      remoteReviewCache.set(memoryKey, outcome);
       database?.saveRemoteImageReview(reviewResult);
-      if (allowed) exploreApprovedResources += 1;
+      if (outcome.allowed) exploreApprovedResources += 1;
       else exploreBlockedResources += 1;
-      return allowed;
+      return outcome;
     })
     .finally(() => {
       remoteReviewPending.delete(memoryKey);
