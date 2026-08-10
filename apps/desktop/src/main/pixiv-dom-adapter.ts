@@ -13,6 +13,8 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
     const placeholderClass = ${JSON.stringify(PLACEHOLDER_CLASS)};
     const revealToken = ${JSON.stringify(revealToken)};
     const markerWords = new Set(["pr", "推广", "promoted", "sponsored", "promotion", "advertisement", "广告"]);
+    const legacyPromotionClassHints = ["yfl-ads", "yfl-pr-band"];
+    const promotionLinkHosts = ["booth.pm", "fanbox.cc"];
     const markerAttributes = [
       "aria-label", "title", "alt", "data-label", "data-ad-label", "data-ad",
       "data-ad-type", "data-advertisement", "data-promotion", "data-testid", "data-test-id"
@@ -46,6 +48,15 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
     }
 
     const normalized = (value) => (value || "").replace(/\\s+/g, " ").trim().toLowerCase();
+    const isPromotionLink = (element) => {
+      if (!(element instanceof HTMLAnchorElement)) return false;
+      try {
+        const hostname = new URL(element.href).hostname.toLowerCase();
+        return promotionLinkHosts.some((host) => hostname === host || hostname.endsWith("." + host));
+      } catch {
+        return false;
+      }
+    };
     const normalizeArtworkUrl = (value) => {
       try {
         const url = new URL(value, document.baseURI);
@@ -61,6 +72,9 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
 
     const isMarker = (element) => {
       if (!(element instanceof Element)) return false;
+      const className = normalized(typeof element.className === "string" ? element.className : "");
+      if (legacyPromotionClassHints.some((hint) => className.includes(hint))) return true;
+      if (isPromotionLink(element)) return true;
       for (const attribute of markerAttributes) {
         const value = normalized(element.getAttribute(attribute));
         if (!value) continue;
@@ -79,17 +93,28 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
         const tag = current.tagName;
         if (tag !== "MAIN" && tag !== "NAV" && tag !== "HEADER" && tag !== "ASIDE" && tag !== "A") {
           const imageCount = current.querySelectorAll("img, picture").length;
-          const linkCount = current.querySelectorAll("a[href], [role=\"link\"], [data-gtm-id], [data-gtm-label]").length;
-          if (imageCount >= 1 && linkCount >= 1 && imageCount <= 8 && linkCount <= 12) return current;
+          const linkCount = current.querySelectorAll("a[href], [role=\"link\"], [data-gtm-id], [data-gtm-label], [onclick]").length;
+          if (imageCount >= 1 && linkCount >= 1 && imageCount <= 12 && linkCount <= 16) return current;
         }
         current = current.parentElement;
+      }
+
+      let scope = marker.parentElement;
+      for (let depth = 0; scope && scope !== document.body && depth < 4; depth += 1) {
+        const sibling = [...scope.children].find((candidate) => {
+          const imageCount = candidate.querySelectorAll("img, picture").length;
+          const linkCount = candidate.querySelectorAll("a[href], [role=\"link\"], [data-gtm-id], [data-gtm-label], [onclick]").length;
+          return imageCount >= 1 && linkCount >= 1 && imageCount <= 12 && linkCount <= 16;
+        });
+        if (sibling) return sibling;
+        scope = scope.parentElement;
       }
       return null;
     };
 
     const inspect = (root) => {
       if (!(root instanceof Element)) return;
-      const candidates = [root, ...root.querySelectorAll("[aria-label], [title], [alt], [data-label], [data-testid], img, svg, text, span, small, label, p, div, a, button, strong, em")];
+      const candidates = [root, ...root.querySelectorAll("[aria-label], [title], [alt], [data-label], [data-testid], [class*=yfl-ads], [class*=yfl-pr-band], img, svg, text, span, small, label, p, div, a, button, strong, em")];
       for (const candidate of candidates) {
         if (!isMarker(candidate)) continue;
         const card = findCard(candidate);

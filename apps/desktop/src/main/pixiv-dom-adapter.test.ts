@@ -20,6 +20,8 @@ describe("Pixiv DOM adapter", () => {
     expect(script).toContain("sanctuary-reveal:");
     expect(script).toContain("data-advertisement");
     expect(script).toContain("[alt]");
+    expect(script).toContain("yfl-pr-band");
+    expect(script).toContain("booth.pm");
     expect(script).not.toContain("ipcRenderer");
     expect(script).not.toContain("querySelectorAll(\"*\")");
   });
