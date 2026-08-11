@@ -331,7 +331,7 @@ function registerIpc(): void {
       let skippedPages = 0;
       await mapWithConcurrency(
         artworkIds,
-        PIXIV_DOWNLOAD_CONCURRENCY,
+        1, // 降级为单线程顺序执行，避免触发 P 站反爬虫
         async (artworkId, index) => {
           updateExploreDownloadState({
             message: `正在保存作品 ${artworkId}（任务 ${index + 1}/${artworkIds.length}）`
@@ -341,6 +341,15 @@ function registerIpc(): void {
             downloadedPages += result.downloadedPages;
             skippedPages += result.skippedPages;
             completedArtworks += 1;
+
+            // 如果没有命中快速跳过（即发起了真实网络请求），则强制加入随机安全延时 (Jitter)
+            if (!result.fastPathed && index < artworkIds.length - 1) {
+              const jitterMs = Math.floor(2000 + Math.random() * 2000); // 2s - 4s
+              updateExploreDownloadState({
+                message: `防封禁延时 ${jitterMs / 1000} 秒...（任务 ${index + 1}/${artworkIds.length}）`
+              });
+              await new Promise((resolve) => setTimeout(resolve, jitterMs));
+            }
           } catch (error) {
             failedArtworks += 1;
             console.error(`[pixiv-download] artwork ${artworkId}`, error);
@@ -840,35 +849,49 @@ async function fetchPixivJson(
   referrer: string
 ): Promise<unknown> {
   return pixivDownloadNetworkGate.run(async () => {
-    const now = Date.now();
-    const waitTime = Math.max(0, nextPixivApiCall - now);
-    nextPixivApiCall = now + waitTime + PIXIV_API_DELAY_MS;
-    if (waitTime > 0) {
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
-    }
-
-    const response = await targetSession.fetch(url, {
-      credentials: "include",
-      referrer,
-      headers: {
-        Accept: "application/json",
-        Referer: referrer
-      },
-      bypassCustomProtocolHandlers: true
-    });
-    if (response.status === 401 || response.status === 403) {
-      throw new Error("Pixiv 会话未登录或无权读取这些作品");
-    }
-    if (!response.ok) {
-      if (response.status === 429) {
-        throw new Error("P 站触发了频率限制 (HTTP 429)，请稍后再试");
+    let attempt = 0;
+    while (true) {
+      const now = Date.now();
+      const waitTime = Math.max(0, nextPixivApiCall - now);
+      nextPixivApiCall = now + waitTime + PIXIV_API_DELAY_MS;
+      if (waitTime > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
       }
-      throw new Error(`Pixiv 数据请求失败：HTTP ${response.status}`);
-    }
-    try {
-      return await response.json();
-    } catch {
-      throw new Error("Pixiv 返回的不是有效 JSON 数据");
+
+      const response = await targetSession.fetch(url, {
+        credentials: "include",
+        referrer,
+        headers: {
+          Accept: "application/json",
+          Referer: referrer
+        },
+        bypassCustomProtocolHandlers: true
+      });
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("Pixiv 会话未登录或无权读取这些作品");
+      }
+      if (!response.ok) {
+        if (response.status === 429) {
+          if (attempt < 5) {
+            attempt++;
+            const backoffMs = Math.pow(2, attempt) * 15000; // 30s, 60s, 120s, 240s, 480s
+            updateExploreDownloadState({
+              message: `触发防封禁保护，安全休眠 ${backoffMs / 1000} 秒...`
+            });
+            console.warn(`[Pixiv Rate Limit] 429 received on ${url}, backing off for ${backoffMs}ms (Attempt ${attempt})`);
+            await new Promise((resolve) => setTimeout(resolve, backoffMs));
+            nextPixivApiCall = Date.now(); // reset queue spacing
+            continue;
+          }
+          throw new Error("P 站触发了频率限制 (HTTP 429)，已达到最大重试次数");
+        }
+        throw new Error(`Pixiv 数据请求失败：HTTP ${response.status}`);
+      }
+      try {
+        return await response.json();
+      } catch {
+        throw new Error("Pixiv 返回的不是有效 JSON 数据");
+      }
     }
   });
 }
@@ -877,7 +900,7 @@ async function downloadPixivArtwork(
   artworkId: string,
   resetPageTotal: boolean,
   trustAsUserDownload: boolean
-): Promise<{ downloadedPages: number; skippedPages: number }> {
+): Promise<{ downloadedPages: number; skippedPages: number; fastPathed?: boolean }> {
   if (!database || !vision) throw new Error("本地画廊或视觉引擎尚未准备好");
 
   const localArtworks = database.listArtworks().filter((a) => a.source?.platform === "pixiv" && a.source?.workId === artworkId);
@@ -890,7 +913,7 @@ async function downloadPixivArtwork(
         for (const local of localArtworks) {
           if (trustAsUserDownload) database.trustArtwork(local.id);
         }
-        return { downloadedPages: 0, skippedPages: localArtworks.length };
+        return { downloadedPages: 0, skippedPages: localArtworks.length, fastPathed: true };
       }
     }
   }

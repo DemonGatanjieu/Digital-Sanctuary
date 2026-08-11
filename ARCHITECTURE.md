@@ -53,7 +53,10 @@ flowchart LR
 - `apps/desktop/src/main/explore-policy.ts`：可单元测试的 URL、权限、广告和资源策略。
 - `apps/desktop/src/main/pixiv-dom-adapter.ts`：幂等注入拦截占位层、“仅本次查看”和作品页下载按钮。宽泛的第一方 PR/BOOTH DOM 猜测已经移除，避免再次误伤普通作品。
 - `apps/desktop/src/shared/pixiv-download.ts`：Pixiv 页面上下文、AJAX 响应和原图 URL 的纯函数校验。
-- `apps/desktop/src/shared/bounded-concurrency.ts`：下载任务使用的通用并发门；当前原图和收藏作品任务上限均为 4。
+- `apps/desktop/src/shared/bounded-concurrency.ts`：下载任务使用的通用并发门；由于 P 站严格的请求频率限制 (Rate Limiting, HTTP 429)，对于批量下载（如“下载全部收藏”）采用了**单线程慢速滴漏模型 (Slow Drip Queue)**。
+- **并发控制**：在执行大量下载任务时，强行降级并发为 1。
+- **动态防封禁延时 (Jitter Delay)**：对于发起了真实网络请求的任务，结束后自动加入 2~4 秒的随机安全延时。
+- **指数退避重试 (Exponential Backoff)**：底层的 `fetchPixivJson` 在遇到 HTTP 429 时不再中断任务流，而是主动拦截错误，进入长达 30 秒至 8 分钟不等的指数级安全休眠，休眠结束后自动重试。这保证了即使用户挂机下载一整夜，遇到 P 站风控也能像“装死”一样自动恢复，实现无人值守的平稳入库。
 - `apps/desktop/src/main/explore-review-queue.ts` 与 `apps/desktop/src/preload/explore.ts`：视口优先审查实验。因 KI-0004 默认关闭，当前生产路径仍在网络回调中串行审查。
 - `apps/desktop/src/main/vision-client.ts`：版本化 JSON Lines 客户端、超时和子进程错误处理。
 - Pixiv 使用 `persist:pixiv` 独立持久化 session；本地 React 渲染器不能访问其 DOM 或 Cookie。单实例锁避免多个进程造成“登录一次却看似丢失会话”的错觉。
