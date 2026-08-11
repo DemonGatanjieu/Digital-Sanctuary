@@ -336,25 +336,29 @@ function registerIpc(): void {
           updateExploreDownloadState({
             message: `正在保存作品 ${artworkId}（任务 ${index + 1}/${artworkIds.length}）`
           });
+          let fastPathed = false;
           try {
             const result = await downloadPixivArtwork(artworkId, false, true);
             downloadedPages += result.downloadedPages;
             skippedPages += result.skippedPages;
             completedArtworks += 1;
-
-            // 如果没有命中快速跳过（即发起了真实网络请求），则强制加入随机安全延时 (Jitter)
-            if (!result.fastPathed && index < artworkIds.length - 1) {
-              const jitterMs = Math.floor(2000 + Math.random() * 2000); // 2s - 4s
-              updateExploreDownloadState({
-                message: `防封禁延时 ${jitterMs / 1000} 秒...（任务 ${index + 1}/${artworkIds.length}）`
-              });
-              await new Promise((resolve) => setTimeout(resolve, jitterMs));
-            }
+            fastPathed = !!result.fastPathed;
           } catch (error) {
             failedArtworks += 1;
             console.error(`[pixiv-download] artwork ${artworkId}`, error);
+            fastPathed = false;
           }
           updateExploreDownloadState({ completedArtworks, failedArtworks });
+
+          // 如果没有命中快速跳过（即发起了真实网络请求，或者请求失败报错了），则强制加入随机安全延时 (Jitter)
+          // 必须放在 try-catch 外，防止出现报错时瞬间无延迟重试导致死循环刷爆 P 站
+          if (!fastPathed && index < artworkIds.length - 1) {
+            const jitterMs = Math.floor(2000 + Math.random() * 2000); // 2s - 4s
+            updateExploreDownloadState({
+              message: `防封禁延时 ${jitterMs / 1000} 秒...（任务 ${index + 1}/${artworkIds.length}）`
+            });
+            await new Promise((resolve) => setTimeout(resolve, jitterMs));
+          }
         }
       );
 
@@ -858,16 +862,46 @@ async function fetchPixivJson(
         await new Promise((resolve) => setTimeout(resolve, waitTime));
       }
 
-      const response = await targetSession.fetch(url, {
-        credentials: "include",
-        referrer,
-        headers: {
-          Accept: "application/json",
-          Referer: referrer
-        },
-        bypassCustomProtocolHandlers: true
-      });
+      let response: Response;
+      try {
+        response = await targetSession.fetch(url, {
+          credentials: "include",
+          referrer,
+          headers: {
+            Accept: "application/json",
+            Referer: referrer
+          },
+          bypassCustomProtocolHandlers: true
+        });
+      } catch (networkError) {
+        if (attempt < 5) {
+          attempt++;
+          const backoffMs = Math.pow(2, attempt) * 15000;
+          updateExploreDownloadState({
+            message: `网络或连接异常，安全休眠 ${backoffMs / 1000} 秒...`
+          });
+          console.warn(`[Pixiv Network Error] on ${url}, backing off for ${backoffMs}ms`, networkError);
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          nextPixivApiCall = Date.now();
+          continue;
+        }
+        throw networkError;
+      }
+      
+      // 对于 403 Forbidden，很有可能是因为下载请求太快被 Cloudflare 拦截
+      // 也纳入退避重试，以免直接崩溃跳过
       if (response.status === 401 || response.status === 403) {
+        if (response.status === 403 && attempt < 5) {
+          attempt++;
+          const backoffMs = Math.pow(2, attempt) * 15000;
+          updateExploreDownloadState({
+            message: `触发拦截 (HTTP 403)，安全休眠 ${backoffMs / 1000} 秒...`
+          });
+          console.warn(`[Pixiv 403 Forbidden] on ${url}, backing off for ${backoffMs}ms`);
+          await new Promise((resolve) => setTimeout(resolve, backoffMs));
+          nextPixivApiCall = Date.now();
+          continue;
+        }
         throw new Error("Pixiv 会话未登录或无权读取这些作品");
       }
       if (!response.ok) {
