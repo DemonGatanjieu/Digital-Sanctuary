@@ -829,12 +829,22 @@ async function fetchPixivArtworkMetadata(
   );
 }
 
+let nextPixivApiCall = 0;
+const PIXIV_API_DELAY_MS = 600;
+
 async function fetchPixivJson(
   targetSession: Session,
   url: string,
   referrer: string
 ): Promise<unknown> {
   return pixivDownloadNetworkGate.run(async () => {
+    const now = Date.now();
+    const waitTime = Math.max(0, nextPixivApiCall - now);
+    nextPixivApiCall = now + waitTime + PIXIV_API_DELAY_MS;
+    if (waitTime > 0) {
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+    }
+
     const response = await targetSession.fetch(url, {
       credentials: "include",
       referrer,
@@ -848,6 +858,9 @@ async function fetchPixivJson(
       throw new Error("Pixiv 会话未登录或无权读取这些作品");
     }
     if (!response.ok) {
+      if (response.status === 429) {
+        throw new Error("P 站触发了频率限制 (HTTP 429)，请稍后再试");
+      }
       throw new Error(`Pixiv 数据请求失败：HTTP ${response.status}`);
     }
     try {
@@ -864,6 +877,21 @@ async function downloadPixivArtwork(
   trustAsUserDownload: boolean
 ): Promise<{ downloadedPages: number; skippedPages: number }> {
   if (!database || !vision) throw new Error("本地画廊或视觉引擎尚未准备好");
+
+  const localArtworks = database.listArtworks().filter((a) => a.source?.platform === "pixiv" && a.source?.workId === artworkId);
+  if (localArtworks.length > 0) {
+    const authorId = localArtworks[0].source?.authorId;
+    if (authorId) {
+      const existingArtist = database.listArtists().find((a) => a.id === authorId);
+      if (existingArtist) {
+        for (const local of localArtworks) {
+          if (trustAsUserDownload) database.trustArtwork(local.id);
+        }
+        return { downloadedPages: 0, skippedPages: localArtworks.length };
+      }
+    }
+  }
+
   const targetSession = requireExploreSession();
   const [pages, metadata] = await Promise.all([
     fetchPixivArtworkPages(targetSession, artworkId),
