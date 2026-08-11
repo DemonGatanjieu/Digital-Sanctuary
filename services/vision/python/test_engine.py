@@ -45,9 +45,12 @@ class WdTaggerRuntimeTests(unittest.TestCase):
 
         self.assertEqual(result["status"], "complete")
         self.assertEqual(result["engine"], MODEL_NAME)
+        self.assertIn(
+            result["executionProvider"],
+            ["CPUExecutionProvider", "CUDAExecutionProvider"],
+        )
         self.assertNotIn("explicit", result["labels"])
 
 
 if __name__ == "__main__":
     unittest.main()
-

@@ -6,6 +6,7 @@ import type {
   CollectionRecord,
   ElementFilterSetting,
   FilterDecision,
+  ArtworkSource,
   VisionAssessment
 } from "@sanctuary/domain";
 import {
@@ -21,6 +22,12 @@ interface ArtworkRow {
   assessment_json: string | null;
   decision_json: string | null;
   collection_id: string | null;
+  source_platform: string | null;
+  source_work_id: string | null;
+  source_page_index: number | null;
+  author_id: string | null;
+  author_name: string | null;
+  work_title: string | null;
 }
 
 interface CollectionRow {
@@ -106,6 +113,38 @@ export class LibraryDatabase {
       .run(JSON.stringify(assessment), JSON.stringify(decision), artworkId);
   }
 
+  trustArtwork(artworkId: string): void {
+    const decision: FilterDecision = {
+      action: "allow",
+      reasons: [],
+      decidedAt: new Date().toISOString()
+    };
+    this.#database
+      .prepare(
+        "UPDATE artworks SET assessment_json = NULL, decision_json = ? WHERE id = ?"
+      )
+      .run(JSON.stringify(decision), artworkId);
+  }
+
+  saveArtworkSource(artworkId: string, source: ArtworkSource): void {
+    this.#database
+      .prepare(
+        `UPDATE artworks
+            SET source_platform = ?, source_work_id = ?, source_page_index = ?,
+                author_id = ?, author_name = ?, work_title = ?
+          WHERE id = ?`
+      )
+      .run(
+        source.platform,
+        source.workId,
+        source.pageIndex,
+        source.authorId,
+        source.authorName,
+        source.title,
+        artworkId
+      );
+  }
+
   invalidateAssessmentsExcept(engine: string): number {
     const result = this.#database
       .prepare(
@@ -122,7 +161,9 @@ export class LibraryDatabase {
     const rows = this.#database
       .prepare(
         `SELECT a.id, a.path, a.file_name, a.imported_at,
-                a.assessment_json, a.decision_json, ca.collection_id
+                a.assessment_json, a.decision_json, ca.collection_id,
+                a.source_platform, a.source_work_id, a.source_page_index,
+                a.author_id, a.author_name, a.work_title
            FROM artworks a
            LEFT JOIN collection_artworks ca ON ca.artwork_id = a.id
           ORDER BY a.imported_at DESC, a.id`
@@ -144,7 +185,8 @@ export class LibraryDatabase {
         importedAt: row.imported_at,
         assessment: parseJson<VisionAssessment>(row.assessment_json),
         decision: parseJson<FilterDecision>(row.decision_json),
-        collectionIds: row.collection_id ? [row.collection_id] : []
+        collectionIds: row.collection_id ? [row.collection_id] : [],
+        source: parseArtworkSource(row)
       });
     }
     return [...byId.values()];
@@ -331,7 +373,13 @@ export class LibraryDatabase {
         file_name TEXT NOT NULL,
         imported_at TEXT NOT NULL,
         assessment_json TEXT,
-        decision_json TEXT
+        decision_json TEXT,
+        source_platform TEXT,
+        source_work_id TEXT,
+        source_page_index INTEGER,
+        author_id TEXT,
+        author_name TEXT,
+        work_title TEXT
       );
 
       CREATE TABLE IF NOT EXISTS collections (
@@ -372,10 +420,56 @@ export class LibraryDatabase {
       CREATE INDEX IF NOT EXISTS idx_remote_image_reviews_reviewed_at
         ON remote_image_reviews(reviewed_at DESC);
     `);
+    this.#ensureArtworkSourceColumns();
+    this.#database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_artworks_source_work
+        ON artworks(source_platform, source_work_id, source_page_index);
+      CREATE INDEX IF NOT EXISTS idx_artworks_author
+        ON artworks(source_platform, author_id, source_work_id);
+    `);
+  }
+
+  #ensureArtworkSourceColumns(): void {
+    const columns = new Set(
+      (this.#database.prepare("PRAGMA table_info(artworks)").all() as unknown as Array<{ name: string }>)
+        .map((column) => column.name)
+    );
+    const additions: ReadonlyArray<readonly [string, string]> = [
+      ["source_platform", "TEXT"],
+      ["source_work_id", "TEXT"],
+      ["source_page_index", "INTEGER"],
+      ["author_id", "TEXT"],
+      ["author_name", "TEXT"],
+      ["work_title", "TEXT"]
+    ];
+    for (const [name, type] of additions) {
+      if (!columns.has(name)) this.#database.exec(`ALTER TABLE artworks ADD COLUMN ${name} ${type}`);
+    }
   }
 }
 
 function parseJson<T>(value: string | null): T | null {
   if (!value) return null;
   return JSON.parse(value) as T;
+}
+
+function parseArtworkSource(row: ArtworkRow): ArtworkSource | null {
+  if (
+    row.source_platform !== "pixiv" ||
+    !row.source_work_id ||
+    row.source_page_index === null ||
+    !row.author_id ||
+    !row.author_name ||
+    !row.work_title
+  ) {
+    return null;
+  }
+  return {
+    platform: "pixiv",
+    workId: row.source_work_id,
+    pageIndex: row.source_page_index,
+    authorId: row.author_id,
+    authorName: row.author_name,
+    title: row.work_title
+  };
 }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import os
+import sys
 from pathlib import Path
 from time import perf_counter
 from typing import Any
@@ -25,9 +26,8 @@ class WdTaggerVisionEngine:
             raise FileNotFoundError(f"WD Tagger model files are missing: {directory}")
 
         self._tags = load_general_tags(tags_path)
-        self._session = onnxruntime.InferenceSession(
-            str(model_path), providers=["CPUExecutionProvider"]
-        )
+        self._session = create_inference_session(model_path)
+        self.execution_provider = self._session.get_providers()[0]
         model_input = self._session.get_inputs()[0]
         _, height, width, channels = model_input.shape
         if height != width or channels != 3 or not isinstance(height, int):
@@ -54,9 +54,33 @@ class WdTaggerVisionEngine:
             "status": "complete",
             "engine": MODEL_NAME,
             "engineVersion": f"v3/{MODEL_SHA256[:12]}/ort-{onnxruntime.__version__}",
+            "executionProvider": self.execution_provider,
             "labels": labels,
             "elapsedMs": max(1, round((perf_counter() - started_at) * 1000)),
         }
+
+
+def create_inference_session(model_path: Path) -> onnxruntime.InferenceSession:
+    requested = os.environ.get("SANCTUARY_ONNX_PROVIDER", "cpu").strip().lower()
+    if requested == "cuda":
+        try:
+            if hasattr(onnxruntime, "preload_dlls"):
+                onnxruntime.preload_dlls(directory="")
+            if "CUDAExecutionProvider" not in onnxruntime.get_available_providers():
+                raise RuntimeError("CUDAExecutionProvider is unavailable")
+            return onnxruntime.InferenceSession(
+                str(model_path),
+                providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            )
+        except Exception as error:
+            print(
+                f"[vision] CUDA initialization failed; falling back to CPU: {error}",
+                file=sys.stderr,
+                flush=True,
+            )
+    return onnxruntime.InferenceSession(
+        str(model_path), providers=["CPUExecutionProvider"]
+    )
 
 
 def default_model_directory() -> Path:
@@ -108,4 +132,3 @@ def select_general_labels(
         if confidence >= minimum_confidence:
             labels[name] = confidence
     return labels
-

@@ -19,6 +19,7 @@ export interface VisionProcessOptions {
   args: string[];
   engine: string;
   engineVersion: string;
+  executionProvider?: string;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -27,11 +28,13 @@ export class VisionClient {
   readonly #pending = new Map<string, PendingRequest>();
   readonly engine: string;
   readonly engineVersion: string;
+  executionProvider: string;
   #available = true;
 
   constructor(options: VisionProcessOptions) {
     this.engine = options.engine;
     this.engineVersion = options.engineVersion;
+    this.executionProvider = options.executionProvider ?? "unknown";
     this.#child = spawn(options.executable, options.args, {
       env: { ...process.env, ...options.env },
       stdio: ["pipe", "pipe", "pipe"],
@@ -93,6 +96,9 @@ export class VisionClient {
       if (response.type === "error") {
         pending.reject(new Error(response.payload.message));
       } else {
+        if (response.payload.executionProvider) {
+          this.executionProvider = response.payload.executionProvider;
+        }
         pending.resolve(response.payload);
       }
     } catch (error) {

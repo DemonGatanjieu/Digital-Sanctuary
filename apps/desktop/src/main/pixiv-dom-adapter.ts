@@ -1,40 +1,29 @@
 const ADAPTER_STATE_KEY = "__sanctuaryPixivDomAdapter";
-const HIDDEN_CLASS = "sanctuary-pixiv-promotion-hidden";
 const PLACEHOLDER_CLASS = "sanctuary-pixiv-review-placeholder";
 
 /**
  * Builds page-local JavaScript. The injected code has no Electron or IPC
- * access; it only marks first-party promotions and guarded artwork images.
+ * access; it only decorates guarded artwork images and supports one-shot reveal.
  */
 export function buildPixivDomAdapterScript(revealToken = ""): string {
   return `(() => {
     const stateKey = ${JSON.stringify(ADAPTER_STATE_KEY)};
-    const hiddenClass = ${JSON.stringify(HIDDEN_CLASS)};
     const placeholderClass = ${JSON.stringify(PLACEHOLDER_CLASS)};
     const revealToken = ${JSON.stringify(revealToken)};
-    const markerWords = new Set(["pr", "推广", "promoted", "sponsored", "promotion", "advertisement", "广告"]);
-    const legacyPromotionClassHints = ["yfl-ads", "yfl-pr-band"];
-    const promotionLinkHosts = ["booth.pm", "fanbox.cc"];
-    const markerAttributes = [
-      "aria-label", "title", "alt", "data-label", "data-ad-label", "data-ad",
-      "data-ad-type", "data-advertisement", "data-promotion", "data-testid", "data-test-id"
-    ];
-
-    const snapshot = (adapterState) => ({
-      hiddenCount: adapterState.hiddenCount ?? 0,
-      promotionImages: [...(adapterState.promotionImages || [])]
-    });
-    if (window[stateKey]?.installed) return snapshot(window[stateKey]);
+    if (window[stateKey]?.installed) {
+      window[stateKey].syncDownloadButton?.();
+      return true;
+    }
 
     const state = {
       installed: true,
-      hiddenCount: 0,
       observer: null,
       scheduled: false,
       pendingNodes: [],
       blockedReviews: new Map(),
       revealedUrls: new Set(),
-      promotionImages: new Set()
+      downloadButton: null,
+      syncDownloadButton: null
     };
     window[stateKey] = state;
 
@@ -43,25 +32,17 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       const style = document.createElement("style");
       style.id = styleId;
       style.textContent = [
-        "." + hiddenClass + " { display: none !important; }",
         "." + placeholderClass + " { display: grid; box-sizing: border-box; min-height: 160px; width: 100%; place-items: center; align-content: center; gap: 8px; padding: 18px; border: 1px solid #e1e5e9; border-radius: 12px; color: #69727d; background: #f3f5f7; font: 12px/1.5 sans-serif; text-align: center; }",
         "." + placeholderClass + " strong { color: #4e5863; font-size: 13px; }",
         "." + placeholderClass + " small { max-width: 28em; color: #818b96; }",
-        "." + placeholderClass + " button { padding: 6px 10px; border: 1px solid #b9ddf5; border-radius: 8px; color: #087fc0; background: #eef8fe; cursor: pointer; font: inherit; }"
+        "." + placeholderClass + " button { padding: 6px 10px; border: 1px solid #b9ddf5; border-radius: 8px; color: #087fc0; background: #eef8fe; cursor: pointer; font: inherit; }",
+        "#sanctuary-pixiv-download { position: fixed; right: 22px; bottom: 22px; z-index: 2147483646; display: flex; align-items: center; gap: 8px; padding: 11px 15px; border: 1px solid rgba(0,150,250,.35); border-radius: 999px; color: #fff; background: #0096fa; box-shadow: 0 8px 28px rgba(0,90,160,.28); cursor: pointer; font: 650 12px/1.2 sans-serif; }",
+        "#sanctuary-pixiv-download:hover { background: #0088e6; transform: translateY(-1px); }",
+        "#sanctuary-pixiv-download::before { content: '↓'; display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; color: #0088e6; background: #fff; font-size: 13px; }"
       ].join("\\n");
       (document.head || document.documentElement).appendChild(style);
     }
 
-    const normalized = (value) => (value || "").replace(/\\s+/g, " ").trim().toLowerCase();
-    const isPromotionLink = (element) => {
-      if (!(element instanceof HTMLAnchorElement)) return false;
-      try {
-        const hostname = new URL(element.href).hostname.toLowerCase();
-        return promotionLinkHosts.some((host) => hostname === host || hostname.endsWith("." + host));
-      } catch {
-        return false;
-      }
-    };
     const normalizeArtworkUrl = (value) => {
       try {
         const url = new URL(value, document.baseURI);
@@ -75,62 +56,40 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       }
     };
 
-    const isMarker = (element) => {
-      if (!(element instanceof Element)) return false;
-      const className = normalized(typeof element.className === "string" ? element.className : "");
-      if (legacyPromotionClassHints.some((hint) => className.includes(hint))) return true;
-      if (isPromotionLink(element)) return true;
-      for (const attribute of markerAttributes) {
-        const value = normalized(element.getAttribute(attribute));
-        if (!value) continue;
-        if (markerWords.has(value)) return true;
-        if (attribute.startsWith("data-") && value.split(/[^a-z0-9\u4e00-\u9fff]+/).some((token) => markerWords.has(token))) return true;
-      }
-      if (element.childElementCount === 0 && markerWords.has(normalized(element.textContent))) {
-        return ["SPAN", "SMALL", "LABEL", "P", "DIV", "A", "BUTTON", "STRONG", "EM", "SVG", "TEXT"].includes(element.tagName);
-      }
-      return false;
+    const currentArtworkId = () => {
+      const match = location.pathname.match(/^\\/artworks\\/(\\d+)(?:\\/|$)/);
+      return match?.[1] || "";
     };
 
-    const findCard = (marker) => {
-      let current = marker;
-      for (let depth = 0; current && current !== document.body && depth < 9; depth += 1) {
-        const tag = current.tagName;
-        if (tag !== "MAIN" && tag !== "NAV" && tag !== "HEADER" && tag !== "ASIDE" && tag !== "A") {
-          const imageCount = current.querySelectorAll("img, picture").length;
-          const linkCount = current.querySelectorAll("a[href], [role=\"link\"], [data-gtm-id], [data-gtm-label], [onclick]").length;
-          if (imageCount >= 1 && linkCount >= 1 && imageCount <= 12 && linkCount <= 16) return current;
-        }
-        current = current.parentElement;
+    state.syncDownloadButton = () => {
+      const artworkId = currentArtworkId();
+      if (!artworkId || !revealToken) {
+        state.downloadButton?.remove();
+        state.downloadButton = null;
+        return;
       }
-
-      let scope = marker.parentElement;
-      for (let depth = 0; scope && scope !== document.body && depth < 4; depth += 1) {
-        const sibling = [...scope.children].find((candidate) => {
-          const imageCount = candidate.querySelectorAll("img, picture").length;
-          const linkCount = candidate.querySelectorAll("a[href], [role=\"link\"], [data-gtm-id], [data-gtm-label], [onclick]").length;
-          return imageCount >= 1 && linkCount >= 1 && imageCount <= 12 && linkCount <= 16;
+      let button = document.getElementById("sanctuary-pixiv-download");
+      if (!(button instanceof HTMLButtonElement)) {
+        button = document.createElement("button");
+        button.id = "sanctuary-pixiv-download";
+        button.type = "button";
+        button.title = "由纯净领域保存全部页面；Pixiv 网页不会获得本地文件权限";
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const selectedArtworkId = currentArtworkId();
+          if (!selectedArtworkId) return;
+          button.textContent = "已加入下载任务";
+          console.info("sanctuary-download:" + revealToken + ":" + selectedArtworkId);
+          window.setTimeout(() => {
+            if (button?.isConnected) button.textContent = "保存到本地画廊";
+          }, 1600);
         });
-        if (sibling) return sibling;
-        scope = scope.parentElement;
+        (document.body || document.documentElement).appendChild(button);
       }
-      return null;
-    };
-
-    const inspect = (root) => {
-      if (!(root instanceof Element)) return;
-      const candidates = [root, ...root.querySelectorAll("[aria-label], [title], [alt], [data-label], [data-testid], [class*=yfl-ads], [class*=yfl-pr-band], img, svg, text, span, small, label, p, div, a, button, strong, em")];
-      for (const candidate of candidates) {
-        if (!isMarker(candidate)) continue;
-        const card = findCard(candidate);
-        if (!card || card.classList.contains(hiddenClass)) continue;
-        card.classList.add(hiddenClass);
-        for (const image of card.querySelectorAll("img")) {
-          const imageUrl = normalizeArtworkUrl(image.getAttribute("src") || image.currentSrc || image.src);
-          if (imageUrl) state.promotionImages.add(imageUrl);
-        }
-        state.hiddenCount += 1;
-      }
+      button.dataset.artworkId = artworkId;
+      if (!button.textContent) button.textContent = "保存到本地画廊";
+      state.downloadButton = button;
     };
 
     const removePlaceholder = (url, image) => {
@@ -187,11 +146,6 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       decorateAll(normalizedUrl, safeReasons);
     };
 
-    state.isPromotionImage = (url) => {
-      const normalizedUrl = normalizeArtworkUrl(url);
-      return Boolean(normalizedUrl && state.promotionImages.has(normalizedUrl));
-    };
-
     state.releaseOneShot = (url) => {
       const normalizedUrl = normalizeArtworkUrl(url);
       if (!normalizedUrl) return;
@@ -223,8 +177,8 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
 
     const flush = () => {
       state.scheduled = false;
+      state.syncDownloadButton();
       for (const node of state.pendingNodes) {
-        inspect(node);
         if (node instanceof Element) {
           for (const [url, reasons] of state.blockedReviews) {
             for (const image of node.matches("img") ? [node] : node.querySelectorAll("img")) decorateImage(image, url, reasons);
@@ -249,8 +203,8 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       if (nodes.length) schedule(nodes);
     });
     state.observer.observe(document.documentElement, { childList: true, subtree: true });
-    inspect(document.body || document.documentElement);
-    return snapshot(state);
+    state.syncDownloadButton();
+    return true;
   })()`;
 }
 
@@ -267,13 +221,6 @@ export function buildPixivBlockedReviewScript(url: string, reasons: readonly str
   })()`;
 }
 
-export function buildPixivPromotionImageCheckScript(url: string): string {
-  return `(() => {
-    const state = window[${JSON.stringify(ADAPTER_STATE_KEY)}];
-    return state?.isPromotionImage?.(${JSON.stringify(url)}) === true;
-  })()`;
-}
-
 export function buildPixivReviewReleaseScript(url: string): string {
   return `(() => {
     const state = window[${JSON.stringify(ADAPTER_STATE_KEY)}];
@@ -281,5 +228,4 @@ export function buildPixivReviewReleaseScript(url: string): string {
   })()`;
 }
 
-export const PIXIV_DOM_ADAPTER_HIDDEN_CLASS = HIDDEN_CLASS;
 export const PIXIV_DOM_ADAPTER_PLACEHOLDER_CLASS = PLACEHOLDER_CLASS;

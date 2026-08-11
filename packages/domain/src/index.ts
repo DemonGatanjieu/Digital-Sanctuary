@@ -4,6 +4,7 @@ export interface VisionAssessment {
   status: "complete" | "error";
   engine: string;
   engineVersion: string;
+  executionProvider?: string;
   labels: Record<string, number>;
   elapsedMs: number;
   error?: string;
@@ -41,6 +42,16 @@ export interface ArtworkRecord {
   assessment: VisionAssessment | null;
   decision: FilterDecision | null;
   collectionIds: string[];
+  source: ArtworkSource | null;
+}
+
+export interface ArtworkSource {
+  platform: "pixiv";
+  workId: string;
+  pageIndex: number;
+  authorId: string;
+  authorName: string;
+  title: string;
 }
 
 export interface CollectionRecord {

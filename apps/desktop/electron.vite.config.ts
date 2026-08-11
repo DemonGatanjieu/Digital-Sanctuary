@@ -36,7 +36,12 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin({ exclude: workspacePackages })],
     resolve: { alias },
     build: {
-      lib: { entry: resolve(desktopRoot, "src/preload/index.ts") },
+      lib: {
+        entry: {
+          index: resolve(desktopRoot, "src/preload/index.ts"),
+          explore: resolve(desktopRoot, "src/preload/explore.ts")
+        }
+      },
       outDir: resolve(desktopRoot, "out/preload"),
       rollupOptions: {
         output: {

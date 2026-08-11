@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { decideFilter, DEFAULT_FILTER_RULES, type VisionAssessment } from "../../domain/dist/index.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
@@ -25,6 +29,7 @@ describe("LibraryDatabase", () => {
     expect(stored?.assessment?.engine).toBe("test");
     expect(stored?.decision?.action).toBe("allow");
     expect(stored?.collectionIds).toEqual([collection.id]);
+    expect(stored?.source).toBeNull();
 
     expect(database.invalidateAssessmentsExcept("wd-swinv2-tagger-v3")).toBe(1);
     expect(database.listArtworks()[0]?.assessment).toBeNull();
@@ -94,5 +99,86 @@ describe("LibraryDatabase", () => {
     });
     expect(database.countRemoteImageReviews()).toBe(0);
     database.close();
+  });
+
+  it("marks a user-curated artwork as trusted without retaining AI output", () => {
+    const database = new LibraryDatabase(":memory:");
+    const artwork = database.importArtwork("E:\\gallery\\favorite.png");
+    const assessment: VisionAssessment = {
+      status: "complete",
+      engine: "test",
+      engineVersion: "1",
+      labels: { blood: 0.99 },
+      elapsedMs: 1
+    };
+    database.saveAssessment(
+      artwork.id,
+      assessment,
+      decideFilter(assessment, DEFAULT_FILTER_RULES)
+    );
+    expect(database.listArtworks()[0]?.decision?.action).toBe("hide");
+
+    database.trustArtwork(artwork.id);
+    const trusted = database.listArtworks()[0];
+    expect(trusted?.assessment).toBeNull();
+    expect(trusted?.decision?.action).toBe("allow");
+    expect(trusted?.decision?.reasons).toEqual([]);
+    database.close();
+  });
+
+  it("persists Pixiv author and work grouping metadata", () => {
+    const database = new LibraryDatabase(":memory:");
+    const artwork = database.importArtwork("E:\\gallery\\123_p2.jpg");
+    database.saveArtworkSource(artwork.id, {
+      platform: "pixiv",
+      workId: "123",
+      pageIndex: 2,
+      authorId: "456",
+      authorName: "画师",
+      title: "三页作品"
+    });
+    expect(database.listArtworks()[0]?.source).toEqual({
+      platform: "pixiv",
+      workId: "123",
+      pageIndex: 2,
+      authorId: "456",
+      authorName: "画师",
+      title: "三页作品"
+    });
+    database.close();
+  });
+
+  it("migrates a legacy artwork table before creating source indexes", () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-legacy-"));
+    const path = join(directory, "library.db");
+    try {
+      const legacy = new DatabaseSync(path);
+      legacy.exec(`
+        CREATE TABLE artworks (
+          id TEXT PRIMARY KEY,
+          path TEXT NOT NULL COLLATE NOCASE UNIQUE,
+          file_name TEXT NOT NULL,
+          imported_at TEXT NOT NULL,
+          assessment_json TEXT,
+          decision_json TEXT
+        );
+      `);
+      legacy.close();
+
+      const database = new LibraryDatabase(path);
+      const artwork = database.importArtwork("E:\\gallery\\legacy.png");
+      database.saveArtworkSource(artwork.id, {
+        platform: "pixiv",
+        workId: "10",
+        pageIndex: 0,
+        authorId: "20",
+        authorName: "旧库画师",
+        title: "迁移作品"
+      });
+      expect(database.listArtworks()[0]?.source?.authorName).toBe("旧库画师");
+      database.close();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });

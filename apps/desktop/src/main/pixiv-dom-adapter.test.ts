@@ -3,7 +3,6 @@ import {
   buildPixivBlockedReviewScript,
   buildPixivDomAdapterScript,
   buildPixivReviewReleaseScript,
-  PIXIV_DOM_ADAPTER_HIDDEN_CLASS,
   PIXIV_DOM_ADAPTER_PLACEHOLDER_CLASS
 } from "./pixiv-dom-adapter.js";
 
@@ -11,17 +10,18 @@ describe("Pixiv DOM adapter", () => {
   it("is page-local, idempotent, and observes only added subtrees", () => {
     const script = buildPixivDomAdapterScript();
     expect(script).toContain("__sanctuaryPixivDomAdapter");
-    expect(script).toContain(PIXIV_DOM_ADAPTER_HIDDEN_CLASS);
     expect(script).toContain("if (window[stateKey]?.installed)");
     expect(script).toContain("subtree: true");
     expect(script).toContain("childList: true");
     expect(script).toContain(PIXIV_DOM_ADAPTER_PLACEHOLDER_CLASS);
     expect(script).toContain("仅本次查看");
     expect(script).toContain("sanctuary-reveal:");
-    expect(script).toContain("data-advertisement");
-    expect(script).toContain("[alt]");
-    expect(script).toContain("yfl-pr-band");
-    expect(script).toContain("booth.pm");
+    expect(script).toContain("sanctuary-download:");
+    expect(script).toContain("保存到本地画廊");
+    expect(script).toContain("sanctuary-pixiv-download");
+    expect(script).not.toContain("isPromotionImage");
+    expect(script).not.toContain("promotionImages");
+    expect(script).not.toContain("booth.pm");
     expect(script).not.toContain("ipcRenderer");
     expect(script).not.toContain("querySelectorAll(\"*\")");
   });

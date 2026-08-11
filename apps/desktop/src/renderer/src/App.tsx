@@ -14,14 +14,16 @@ import type {
 
 interface AppStatus {
   visionEngine: string;
+  visionProvider: string;
   visionReady: boolean;
   modelBacked: boolean;
 }
 
 type ActiveView = "gallery" | "explore" | "rules";
+type GalleryMode = "flat" | "author-work";
 
 const actionText: Record<FilterAction, string> = {
-  allow: "已放行",
+  allow: "清晰",
   blur: "已模糊",
   hide: "已隐藏"
 };
@@ -35,6 +37,8 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [savingGroupId, setSavingGroupId] = useState("");
   const [error, setError] = useState("");
+  const [exploreState, setExploreState] = useState<ExploreState>(initialExploreState);
+  const [galleryMode, setGalleryMode] = useState<GalleryMode>("flat");
   const showError = useCallback((caught: unknown) => {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
@@ -113,6 +117,49 @@ export function App() {
     }
   }
 
+  async function openGallery() {
+    setActiveView("gallery");
+    try {
+      setArtworks(await window.sanctuary.listArtworks());
+    } catch (caught) {
+      showError(caught);
+    }
+  }
+
+  async function downloadCurrentArtwork() {
+    setError("");
+    try {
+      await window.sanctuary.downloadCurrentArtwork();
+      setArtworks(await window.sanctuary.listArtworks());
+    } catch (caught) {
+      showError(caught);
+    }
+  }
+
+  async function downloadAllBookmarks() {
+    setError("");
+    try {
+      const preview = await window.sanctuary.previewBookmarkDownload();
+      if (preview.total === 0) {
+        window.alert("这个收藏页中没有可下载的作品。");
+        return;
+      }
+      const confirmed = window.confirm(
+        `即将把 ${preview.total} 个收藏作品下载到本地画廊。\n\n` +
+        "多页作品会完整保存；已经下载过的文件会跳过。" +
+        "收藏内容视为你已确认，不再执行 AI 审查。是否继续？"
+      );
+      if (!confirmed) return;
+      await window.sanctuary.downloadAllBookmarks();
+      setArtworks(await window.sanctuary.listArtworks());
+    } catch (caught) {
+      showError(caught);
+    }
+  }
+
+  const downloadBusy = exploreState.download.phase === "discovering" ||
+    exploreState.download.phase === "downloading";
+
   return (
     <div className={`app-shell ${activeView === "explore" ? "exploring" : ""}`}>
       <aside className="sidebar">
@@ -125,7 +172,7 @@ export function App() {
         <nav>
           <button
             className={`nav-item ${activeView === "gallery" ? "active" : ""}`}
-            onClick={() => setActiveView("gallery")}
+            onClick={() => void openGallery()}
           >
             画廊
           </button>
@@ -143,11 +190,56 @@ export function App() {
           </button>
         </nav>
 
+        {activeView === "explore" && (
+          <section className="explore-sidebar-actions">
+            <p className="sidebar-section-label">保存到本地</p>
+            <button
+              className="explore-action primary-action"
+              disabled={exploreState.pageKind !== "artwork" || downloadBusy}
+              onClick={() => void downloadCurrentArtwork()}
+            >
+              <strong>保存当前作品</strong>
+              <small>
+                {exploreState.pageKind === "artwork"
+                  ? `作品 ${exploreState.artworkId} · 自动保存全部页`
+                  : "打开作品详情后可用"}
+              </small>
+            </button>
+            <button
+              className="explore-action"
+              disabled={exploreState.pageKind !== "bookmarks" || downloadBusy}
+              onClick={() => void downloadAllBookmarks()}
+            >
+              <strong>下载全部收藏</strong>
+              <small>
+                {exploreState.pageKind === "bookmarks"
+                  ? "用户信任 · 不执行 AI 审查"
+                  : "进入收藏作品页后可用"}
+              </small>
+            </button>
+            <p className="download-location">图片 → Digital Sanctuary → Pixiv</p>
+            {exploreState.download.phase !== "idle" && (
+              <div className={`download-progress ${exploreState.download.phase}`}>
+                <strong>{downloadPhaseLabel(exploreState.download.phase)}</strong>
+                <span>{exploreState.download.message}</span>
+                {(exploreState.download.totalArtworks > 0 || exploreState.download.totalPages > 0) && (
+                  <small>
+                    作品 {exploreState.download.completedArtworks}/{exploreState.download.totalArtworks}
+                    {exploreState.download.totalPages > 0
+                      ? ` · 页面 ${exploreState.download.completedPages}/${exploreState.download.totalPages}`
+                      : ""}
+                  </small>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
         <div className="sidebar-spacer" />
         <div className="engine-card">
           <span className={`status-dot ${status?.visionReady ? "online" : ""}`} />
           <div>
-            <small>视觉引擎</small>
+          <small>视觉引擎 · {status?.visionProvider ?? "检测中"}</small>
             <strong>{status?.visionEngine ?? "连接中"}</strong>
           </div>
         </div>
@@ -164,11 +256,13 @@ export function App() {
             artworks={artworks}
             collections={collections}
             counts={counts}
+            mode={galleryMode}
             busy={busy}
             error={error}
             onImport={importImages}
             onCreateCollection={createCollection}
             onAssignCollection={assignCollection}
+            onModeChange={setGalleryMode}
           />
         ) : activeView === "rules" ? (
           <RulesView
@@ -180,8 +274,9 @@ export function App() {
           />
         ) : (
           <ExploreView
+            state={exploreState}
             error={error}
-            onExit={() => setActiveView("gallery")}
+            onStateChange={setExploreState}
             onError={showError}
           />
         )}
@@ -198,26 +293,50 @@ const initialExploreState: ExploreState = {
   canGoForward: false,
   blockedResources: 0,
   blockedAds: 0,
-  blockedFirstPartyPromotions: 0,
   approvedResources: 0,
   pendingResources: 0,
+  queuedResources: 0,
   remoteReviewCacheHits: 0,
   remoteReviewCacheMisses: 0,
   error: "",
-  maximized: false
+  maximized: false,
+  pageKind: "other",
+  artworkId: "",
+  bookmarkUserId: "",
+  download: {
+    phase: "idle",
+    scope: null,
+    totalArtworks: 0,
+    completedArtworks: 0,
+    failedArtworks: 0,
+    totalPages: 0,
+    completedPages: 0,
+    skippedPages: 0,
+    message: ""
+  }
 };
 
+function downloadPhaseLabel(phase: ExploreState["download"]["phase"]): string {
+  if (phase === "discovering") return "正在读取";
+  if (phase === "downloading") return "正在保存";
+  if (phase === "complete") return "下载完成";
+  if (phase === "cancelled") return "已取消";
+  if (phase === "error") return "下载失败";
+  return "等待下载";
+}
+
 function ExploreView({
+  state,
   error,
-  onExit,
+  onStateChange,
   onError
 }: {
+  state: ExploreState;
   error: string;
-  onExit: () => void;
+  onStateChange: (state: ExploreState) => void;
   onError: (caught: unknown) => void;
 }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
-  const [state, setState] = useState<ExploreState>(initialExploreState);
   const [passwordSetupOpened, setPasswordSetupOpened] = useState(false);
 
   useEffect(() => {
@@ -225,7 +344,7 @@ function ExploreView({
     if (!surface) return;
     let active = true;
     let shown = false;
-    const unsubscribe = window.sanctuary.onExploreState(setState);
+    const unsubscribe = window.sanctuary.onExploreState(onStateChange);
 
     const measure = (): ExploreBounds | null => {
       const rect = surface.getBoundingClientRect();
@@ -240,7 +359,7 @@ function ExploreView({
         shown = true;
         void window.sanctuary.showExplore(bounds)
           .then((nextState) => {
-            if (active) setState(nextState);
+            if (active) onStateChange(nextState);
             else void window.sanctuary.hideExplore();
           })
           .catch(onError);
@@ -261,11 +380,11 @@ function ExploreView({
       unsubscribe();
       void window.sanctuary.hideExplore();
     };
-  }, [onError]);
+  }, [onError, onStateChange]);
 
   async function runCommand(command: ExploreCommand) {
     try {
-      setState(await window.sanctuary.exploreCommand(command));
+      onStateChange(await window.sanctuary.exploreCommand(command));
     } catch (caught) {
       onError(caught);
     }
@@ -273,7 +392,7 @@ function ExploreView({
 
   async function openPasswordSetup() {
     try {
-      setState(await window.sanctuary.exploreCommand("open-password-setup"));
+      onStateChange(await window.sanctuary.exploreCommand("open-password-setup"));
       setPasswordSetupOpened(true);
     } catch (caught) {
       onError(caught);
@@ -283,10 +402,6 @@ function ExploreView({
   return (
     <section className="explore-page">
       <div className="browser-toolbar">
-        <button className="exit-explore" title="返回本地画廊" onClick={onExit}>
-          ← 画廊
-        </button>
-        <span className="toolbar-divider" />
         <button
           title="后退"
           disabled={!state.canGoBack}
@@ -320,7 +435,7 @@ function ExploreView({
         </button>
         <div className="shield-status" title="作品图先由本地 WD Tagger 审查，未命中黑名单才显示">
           <span className="status-dot online" />
-          审查中 {state.pendingResources} · 放行 {state.approvedResources} · 内容拦截 {state.blockedResources} · 网络广告 {state.blockedAds} · 第一方推广 {state.blockedFirstPartyPromotions} · 缓存命中 {state.remoteReviewCacheHits}
+          队列 {state.queuedResources} · 审查中 {state.pendingResources} · 放行 {state.approvedResources} · 内容拦截 {state.blockedResources} · 网络广告 {state.blockedAds} · 缓存命中 {state.remoteReviewCacheHits}
         </div>
         <button
           className="maximize-button"
@@ -356,21 +471,40 @@ function GalleryView({
   artworks,
   collections,
   counts,
+  mode,
   busy,
   error,
   onImport,
   onCreateCollection,
-  onAssignCollection
+  onAssignCollection,
+  onModeChange
 }: {
   artworks: ArtworkRecord[];
   collections: CollectionRecord[];
   counts: { allow: number; guarded: number };
+  mode: GalleryMode;
   busy: boolean;
   error: string;
   onImport: () => void;
   onCreateCollection: () => void;
   onAssignCollection: (artworkId: string, collectionId: string) => void;
+  onModeChange: (mode: GalleryMode) => void;
 }) {
+  const authorGroups = useMemo(() => buildAuthorGroups(artworks), [artworks]);
+  const [selectedAuthorKey, setSelectedAuthorKey] = useState("");
+  const [selectedArtworkId, setSelectedArtworkId] = useState("");
+  const selectedAuthor = authorGroups.find((author) => author.key === selectedAuthorKey) ?? null;
+  const selectedArtwork = artworks.find((artwork) => artwork.id === selectedArtworkId) ?? null;
+  const lightboxPages = useMemo(
+    () => selectedArtwork ? artworkWorkPages(artworks, selectedArtwork) : [],
+    [artworks, selectedArtwork]
+  );
+  const missingPixivMetadata = artworks.filter(
+    (artwork) => !artwork.source && /^\d+_p\d+\./i.test(artwork.fileName)
+  ).length;
+  useEffect(() => {
+    if (mode !== "author-work") setSelectedAuthorKey("");
+  }, [mode]);
   return (
     <>
       <header className="topbar">
@@ -379,6 +513,20 @@ function GalleryView({
           <h1>你的数字庇护所</h1>
         </div>
         <div className="header-actions">
+          <div className="gallery-mode-switch" aria-label="画廊布局">
+            <button
+              className={mode === "flat" ? "active" : ""}
+              onClick={() => onModeChange("flat")}
+            >
+              平铺
+            </button>
+            <button
+              className={mode === "author-work" ? "active" : ""}
+              onClick={() => onModeChange("author-work")}
+            >
+              作者 · 作品
+            </button>
+          </div>
           <button className="secondary" onClick={onCreateCollection}>新建分类</button>
           <button className="primary" onClick={onImport} disabled={busy}>
             {busy ? "正在审查…" : "导入图片"}
@@ -390,7 +538,7 @@ function GalleryView({
 
       <section className="summary-row">
         <article><span>作品</span><strong>{artworks.length}</strong></article>
-        <article><span>已放行</span><strong>{counts.allow}</strong></article>
+        <article><span>清晰展示</span><strong>{counts.allow}</strong></article>
         <article><span>受保护</span><strong>{counts.guarded}</strong></article>
         <article><span>分类</span><strong>{collections.length}</strong></article>
       </section>
@@ -403,7 +551,7 @@ function GalleryView({
           <p>图片保留在原位置；纯净领域只建立索引、审查结果和分类关系。</p>
           <button className="primary" onClick={onImport} disabled={busy}>选择本地图片</button>
         </section>
-      ) : (
+      ) : mode === "flat" ? (
         <section className="gallery-grid">
           {artworks.map((artwork) => (
             <ArtworkCard
@@ -411,11 +559,280 @@ function GalleryView({
               artwork={artwork}
               collections={collections}
               onAssign={onAssignCollection}
+              onOpen={setSelectedArtworkId}
             />
           ))}
         </section>
+      ) : (
+        <section className="author-gallery">
+          {missingPixivMetadata > 0 && (
+            <div className="metadata-hint">
+              还有 {missingPixivMetadata} 页旧下载缺少作者信息。再次执行“下载全部收藏”会命中去重，
+              只补作者资料并恢复为用户信任。
+            </div>
+          )}
+          {!selectedAuthor ? (
+            <div className="author-browser-grid">
+              {authorGroups.map((author) => (
+                <AuthorBrowserCard
+                  key={author.key}
+                  author={author}
+                  onOpen={() => setSelectedAuthorKey(author.key)}
+                />
+              ))}
+            </div>
+          ) : (
+            <AuthorDetailPage
+              author={selectedAuthor}
+              collections={collections}
+              onBack={() => setSelectedAuthorKey("")}
+              onAssign={onAssignCollection}
+              onOpenArtwork={setSelectedArtworkId}
+            />
+          )}
+        </section>
+      )}
+      {selectedArtwork && (
+        <ArtworkLightbox
+          artwork={selectedArtwork}
+          pages={lightboxPages}
+          onClose={() => setSelectedArtworkId("")}
+          onSelect={(artwork) => setSelectedArtworkId(artwork.id)}
+        />
       )}
     </>
+  );
+}
+
+interface AuthorGalleryGroup {
+  key: string;
+  id: string;
+  name: string;
+  pageCount: number;
+  works: Array<{
+    key: string;
+    workId: string;
+    title: string;
+    pages: ArtworkRecord[];
+  }>;
+}
+
+function buildAuthorGroups(artworks: readonly ArtworkRecord[]): AuthorGalleryGroup[] {
+  const authors = new Map<string, AuthorGalleryGroup>();
+  for (const artwork of artworks) {
+    const inferred = inferPixivWorkFromFileName(artwork.fileName);
+    const authorId = artwork.source?.authorId ?? "";
+    const authorName = artwork.source?.authorName ?? "待补充作者信息";
+    const authorKey = authorId ? `pixiv:${authorId}` : "pixiv:unknown";
+    const workId = artwork.source?.workId ?? inferred?.workId ?? artwork.id;
+    const workKey = `${authorKey}:work:${workId}`;
+    let author = authors.get(authorKey);
+    if (!author) {
+      author = { key: authorKey, id: authorId, name: authorName, pageCount: 0, works: [] };
+      authors.set(authorKey, author);
+    }
+    let work = author.works.find((candidate) => candidate.key === workKey);
+    if (!work) {
+      work = {
+        key: workKey,
+        workId,
+        title: artwork.source?.title ?? (inferred ? `Pixiv 作品 ${workId}` : artwork.fileName),
+        pages: []
+      };
+      author.works.push(work);
+    }
+    work.pages.push(artwork);
+    author.pageCount += 1;
+  }
+  for (const author of authors.values()) {
+    for (const work of author.works) {
+      work.pages.sort((left, right) => artworkPageIndex(left) - artworkPageIndex(right));
+    }
+  }
+  return [...authors.values()];
+}
+
+function inferPixivWorkFromFileName(fileName: string): { workId: string; pageIndex: number } | null {
+  const match = fileName.match(/^(\d+)_p(\d+)\.[^.]+$/i);
+  const workId = match?.[1];
+  const pageIndex = Number(match?.[2]);
+  return workId && Number.isSafeInteger(pageIndex) ? { workId, pageIndex } : null;
+}
+
+function artworkPageIndex(artwork: ArtworkRecord): number {
+  return artwork.source?.pageIndex ?? inferPixivWorkFromFileName(artwork.fileName)?.pageIndex ?? 0;
+}
+
+function artworkWorkPages(
+  artworks: readonly ArtworkRecord[],
+  selected: ArtworkRecord
+): ArtworkRecord[] {
+  const selectedWorkId = selected.source?.workId ?? inferPixivWorkFromFileName(selected.fileName)?.workId;
+  if (!selectedWorkId) return [selected];
+  return artworks
+    .filter((artwork) =>
+      (artwork.source?.workId ?? inferPixivWorkFromFileName(artwork.fileName)?.workId) === selectedWorkId
+    )
+    .sort((left, right) => artworkPageIndex(left) - artworkPageIndex(right));
+}
+
+function AuthorBrowserCard({
+  author,
+  onOpen
+}: {
+  author: AuthorGalleryGroup;
+  onOpen: () => void;
+}) {
+  const covers = author.works.flatMap((work) => work.pages).slice(0, 3);
+  return (
+    <button className="author-browser-card" onClick={onOpen}>
+      <span className={`author-cover-grid covers-${Math.min(3, covers.length)}`}>
+        {covers.map((artwork) => {
+          const action = artwork.decision?.action ?? "blur";
+          return action === "hide" ? (
+            <span className="author-cover-shield" key={artwork.id}>◇</span>
+          ) : (
+            <LazyArtworkImage
+              key={artwork.id}
+              src={artworkImageUrl(artwork)}
+              className={action === "blur" ? "blurred" : ""}
+            />
+          );
+        })}
+      </span>
+      <span className="author-card-body">
+        <span className="author-monogram">{author.name.slice(0, 1).toUpperCase()}</span>
+        <span className="author-card-copy">
+          <strong>{author.name}</strong>
+          <small>{author.works.length} 个作品 · {author.pageCount} 页</small>
+        </span>
+        <span className="author-card-arrow">→</span>
+      </span>
+    </button>
+  );
+}
+
+function AuthorDetailPage({
+  author,
+  collections,
+  onBack,
+  onAssign,
+  onOpenArtwork
+}: {
+  author: AuthorGalleryGroup;
+  collections: CollectionRecord[];
+  onBack: () => void;
+  onAssign: (artworkId: string, collectionId: string) => void;
+  onOpenArtwork: (artworkId: string) => void;
+}) {
+  return (
+    <section className="author-detail-page">
+      <button className="author-back" onClick={onBack}>← 全部作者</button>
+      <header className="author-detail-hero">
+        <span className="author-monogram large">{author.name.slice(0, 1).toUpperCase()}</span>
+        <div>
+          <p className="eyebrow">CREATOR LIBRARY</p>
+          <h2>{author.name}</h2>
+          <span>{author.works.length} 个作品 · {author.pageCount} 页</span>
+        </div>
+        {author.id && <code>pixiv/{author.id}</code>}
+      </header>
+      <div className="author-works">
+        {author.works.map((work) => (
+          <section className="work-group" key={work.key}>
+            <header className="work-header">
+              <div>
+                <span>WORK {work.workId}</span>
+                <h3>{work.title}</h3>
+              </div>
+              <strong>{work.pages.length} 页</strong>
+            </header>
+            <div className="work-page-grid">
+              {work.pages.map((artwork) => (
+                <ArtworkCard
+                  key={artwork.id}
+                  artwork={artwork}
+                  collections={collections}
+                  onAssign={onAssign}
+                  onOpen={onOpenArtwork}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ArtworkLightbox({
+  artwork,
+  pages,
+  onClose,
+  onSelect
+}: {
+  artwork: ArtworkRecord;
+  pages: ArtworkRecord[];
+  onClose: () => void;
+  onSelect: (artwork: ArtworkRecord) => void;
+}) {
+  const currentIndex = Math.max(0, pages.findIndex((page) => page.id === artwork.id));
+  const previous = pages[currentIndex - 1];
+  const next = pages[currentIndex + 1];
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      else if (event.key === "ArrowLeft" && previous) onSelect(previous);
+      else if (event.key === "ArrowRight" && next) onSelect(next);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [next, onClose, onSelect, previous]);
+
+  return (
+    <div
+      className="artwork-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label={artwork.source?.title ?? artwork.fileName}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <button className="lightbox-close" aria-label="关闭大图" onClick={onClose}>×</button>
+      <button
+        className="lightbox-nav previous"
+        aria-label="上一页"
+        disabled={!previous}
+        onClick={() => previous && onSelect(previous)}
+      >
+        ‹
+      </button>
+      <figure className="lightbox-figure">
+        <img
+          src={artworkImageUrl(artwork)}
+          alt=""
+          className={artwork.decision?.action === "blur" ? "blurred" : ""}
+          decoding="async"
+        />
+        <figcaption>
+          <div>
+            <strong>{artwork.source?.title ?? artwork.fileName}</strong>
+            <small>{artwork.source?.authorName ?? "本地作品"}</small>
+          </div>
+          <span>{pages.length > 1 ? `${currentIndex + 1} / ${pages.length}` : "原图"}</span>
+        </figcaption>
+      </figure>
+      <button
+        className="lightbox-nav next"
+        aria-label="下一页"
+        disabled={!next}
+        onClick={() => next && onSelect(next)}
+      >
+        ›
+      </button>
+    </div>
   );
 }
 
@@ -509,17 +926,22 @@ function RulesView({
 function ArtworkCard({
   artwork,
   collections,
-  onAssign
+  onAssign,
+  onOpen
 }: {
   artwork: ArtworkRecord;
   collections: CollectionRecord[];
   onAssign: (artworkId: string, collectionId: string) => void;
+  onOpen: (artworkId: string) => void;
 }) {
   const action = artwork.decision?.action ?? "blur";
-  const imageUrl = `sanctuary-image://local/${encodeURIComponent(artwork.path)}`;
+  const imageUrl = artworkImageUrl(artwork);
   const reason = artwork.decision?.reasons[0];
   const analysisFailed = artwork.assessment?.status === "error";
-  const detail = analysisFailed
+  const trustedByUser = artwork.decision?.action === "allow" && !artwork.assessment;
+  const detail = trustedByUser
+    ? "Pixiv 主动下载 · 用户信任"
+    : analysisFailed
     ? `分析失败 · ${artwork.assessment?.error ?? "未知错误"}`
     : reason
       ? `${reason.label} · ${Math.round(reason.confidence * 100)}%`
@@ -527,16 +949,28 @@ function ArtworkCard({
 
   return (
     <article className={`art-card action-${action}`}>
-      <div className="art-preview">
-        {action === "hide" ? (
+      {action === "hide" ? (
+        <div className="art-preview">
           <div className="shield"><span>◇</span><strong>内容已隐藏</strong></div>
-        ) : (
-          <img src={imageUrl} alt="" className={action === "blur" ? "blurred" : ""} />
-        )}
-        <span className={`decision-badge ${action}`}>
-          {analysisFailed ? "分析失败" : actionText[action]}
-        </span>
-      </div>
+          <span className={`decision-badge ${action}`}>{actionText[action]}</span>
+        </div>
+      ) : (
+        <button
+          className="art-preview art-preview-button"
+          aria-label={`放大 ${artwork.source?.title ?? artwork.fileName}`}
+          onClick={() => onOpen(artwork.id)}
+        >
+          <LazyArtworkImage
+            src={imageUrl}
+            className={action === "blur" ? "blurred" : ""}
+          />
+          {action !== "allow" && (
+            <span className={`decision-badge ${action}`}>
+              {analysisFailed ? "分析失败" : actionText[action]}
+            </span>
+          )}
+        </button>
+      )}
       <div className="art-meta">
         <strong title={artwork.fileName}>{artwork.fileName}</strong>
         <small title={detail}>{detail}</small>
@@ -554,5 +988,52 @@ function ArtworkCard({
         </select>
       </div>
     </article>
+  );
+}
+
+function artworkImageUrl(artwork: ArtworkRecord): string {
+  return `sanctuary-image://local/${encodeURIComponent(artwork.path)}`;
+}
+
+function LazyArtworkImage({
+  src,
+  className = ""
+}: {
+  src: string;
+  className?: string;
+}) {
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+
+  useEffect(() => {
+    const image = imageRef.current;
+    if (!image || shouldLoad) return;
+    if (!("IntersectionObserver" in window)) {
+      setShouldLoad(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setShouldLoad(true);
+        observer.disconnect();
+      },
+      { rootMargin: "800px 0px", threshold: 0.01 }
+    );
+    observer.observe(image);
+    return () => observer.disconnect();
+  }, [shouldLoad]);
+
+  return (
+    <img
+      ref={imageRef}
+      src={shouldLoad ? src : undefined}
+      alt=""
+      className={className}
+      loading="lazy"
+      decoding="async"
+      fetchPriority="low"
+      data-lazy-state={shouldLoad ? "loaded" : "waiting"}
+    />
   );
 }

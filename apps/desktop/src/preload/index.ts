@@ -4,6 +4,12 @@ import type {
   CollectionRecord,
   ElementFilterSetting
 } from "@sanctuary/domain";
+import type {
+  BookmarkDownloadPreview,
+  ExploreDownloadResult,
+  ExploreDownloadState,
+  PixivPageKind
+} from "../shared/pixiv-download.js";
 
 export interface ExploreBounds {
   x: number;
@@ -20,13 +26,17 @@ export interface ExploreState {
   canGoForward: boolean;
   blockedResources: number;
   blockedAds: number;
-  blockedFirstPartyPromotions: number;
   approvedResources: number;
   pendingResources: number;
+  queuedResources: number;
   remoteReviewCacheHits: number;
   remoteReviewCacheMisses: number;
   error: string;
   maximized: boolean;
+  pageKind: PixivPageKind;
+  artworkId: string;
+  bookmarkUserId: string;
+  download: ExploreDownloadState;
 }
 
 export type ExploreCommand =
@@ -51,9 +61,13 @@ export interface SanctuaryApi {
   hideExplore(): Promise<void>;
   exploreCommand(command: ExploreCommand): Promise<ExploreState>;
   getExploreState(): Promise<ExploreState>;
+  downloadCurrentArtwork(): Promise<ExploreDownloadResult>;
+  previewBookmarkDownload(): Promise<BookmarkDownloadPreview>;
+  downloadAllBookmarks(): Promise<ExploreDownloadResult>;
   onExploreState(listener: (state: ExploreState) => void): () => void;
   status(): Promise<{
     visionEngine: string;
+    visionProvider: string;
     visionReady: boolean;
     modelBacked: boolean;
   }>;
@@ -83,6 +97,12 @@ const api: SanctuaryApi = {
   exploreCommand: (command) =>
     ipcRenderer.invoke("explore:command", command) as Promise<ExploreState>,
   getExploreState: () => ipcRenderer.invoke("explore:state") as Promise<ExploreState>,
+  downloadCurrentArtwork: () =>
+    ipcRenderer.invoke("explore:download-current") as Promise<ExploreDownloadResult>,
+  previewBookmarkDownload: () =>
+    ipcRenderer.invoke("explore:bookmarks-preview") as Promise<BookmarkDownloadPreview>,
+  downloadAllBookmarks: () =>
+    ipcRenderer.invoke("explore:download-bookmarks") as Promise<ExploreDownloadResult>,
   onExploreState: (listener) => {
     const wrapped = (_event: Electron.IpcRendererEvent, state: ExploreState) => listener(state);
     ipcRenderer.on("explore:state-changed", wrapped);
