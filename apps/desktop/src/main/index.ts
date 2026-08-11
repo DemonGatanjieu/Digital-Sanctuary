@@ -200,7 +200,9 @@ function createWindow(): void {
 function registerImageProtocol(): void {
   protocol.handle("sanctuary-image", (request) => {
     const imagePath = decodeURIComponent(new URL(request.url).pathname.slice(1));
-    if (!database?.hasArtworkPath(imagePath) || !existsSync(imagePath)) {
+    const isArtwork = database?.hasArtworkPath(imagePath) ?? false;
+    const isAvatar = database?.hasAvatarPath(imagePath) ?? false;
+    if ((!isArtwork && !isAvatar) || !existsSync(imagePath)) {
       return new Response("Not found", { status: 404 });
     }
     return net.fetch(pathToFileURL(imagePath).toString());
@@ -880,10 +882,11 @@ async function downloadPixivArtwork(
 
   const localArtworks = database.listArtworks().filter((a) => a.source?.platform === "pixiv" && a.source?.workId === artworkId);
   if (localArtworks.length > 0) {
-    const authorId = localArtworks[0].source?.authorId;
+    const authorId = localArtworks[0]?.source?.authorId;
     if (authorId) {
       const existingArtist = database.listArtists().find((a) => a.id === authorId);
-      if (existingArtist) {
+      // Fast path is only valid if we don't have a pending avatar to download
+      if (existingArtist && (!existingArtist.avatarUrl || existingArtist.avatarLocalPath)) {
         for (const local of localArtworks) {
           if (trustAsUserDownload) database.trustArtwork(local.id);
         }
@@ -905,11 +908,34 @@ async function downloadPixivArtwork(
     message: `正在保存作品 ${artworkId}（共 ${pages.length} 页）`
   });
 
+  let avatarLocalPath: string | null = null;
+  const existingArtistBefore = database.listArtists().find(a => a.id === metadata.authorId);
+  if (existingArtistBefore?.avatarLocalPath) {
+    avatarLocalPath = existingArtistBefore.avatarLocalPath;
+  }
+  
+  if (metadata.authorAvatarUrl && !avatarLocalPath) {
+    const extension = safePixivImageExtension(metadata.authorAvatarUrl);
+    const avatarDir = join(pixivGalleryDirectory(), "..", "avatars");
+    await mkdir(avatarDir, { recursive: true });
+    const newAvatarLocalPath = join(avatarDir, `${metadata.authorId}${extension}`);
+    if (!existsSync(newAvatarLocalPath)) {
+      try {
+        await downloadPixivOriginalImage(metadata.authorAvatarUrl, `${PIXIV_HOME_URL}users/${metadata.authorId}`, newAvatarLocalPath);
+        avatarLocalPath = newAvatarLocalPath;
+      } catch (err) {
+        console.error("Failed to download avatar", err);
+      }
+    } else {
+      avatarLocalPath = newAvatarLocalPath;
+    }
+  }
+
   database.importArtist({
     id: metadata.authorId,
     name: metadata.authorName,
     avatarUrl: metadata.authorAvatarUrl,
-    avatarLocalPath: null,
+    avatarLocalPath,
     updatedAt: new Date().toISOString()
   });
 

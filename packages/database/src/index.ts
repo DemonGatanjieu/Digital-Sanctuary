@@ -207,6 +207,12 @@ export class LibraryDatabase {
     );
   }
 
+  hasAvatarPath(path: string): boolean {
+    return Boolean(
+      this.#database.prepare("SELECT 1 AS found FROM artists WHERE avatar_local_path = ?").get(path)
+    );
+  }
+
   createCollection(name: string, description = ""): CollectionRecord {
     const collection: CollectionRecord = {
       id: randomUUID(),

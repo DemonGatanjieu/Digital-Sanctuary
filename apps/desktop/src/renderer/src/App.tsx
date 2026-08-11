@@ -738,8 +738,8 @@ function AuthorBrowserCard({
         })}
       </span>
       <span className="author-card-body">
-        {author.artistRecord?.avatarUrl ? (
-          <img className="author-monogram avatar" src={author.artistRecord.avatarUrl} alt="" loading="lazy" />
+        {author.artistRecord?.avatarLocalPath || author.artistRecord?.avatarUrl ? (
+          <img className="author-monogram avatar" src={author.artistRecord.avatarLocalPath ? `sanctuary-image://local/${encodeURIComponent(author.artistRecord.avatarLocalPath)}` : author.artistRecord.avatarUrl!} alt="" loading="lazy" />
         ) : (
           <span className="author-monogram">{author.name.slice(0, 1).toUpperCase()}</span>
         )}
@@ -770,8 +770,8 @@ function AuthorDetailPage({
     <section className="author-detail-page">
       <button className="author-back" onClick={onBack}>← 全部作者</button>
       <header className="author-detail-hero">
-        {author.artistRecord?.avatarUrl ? (
-          <img className="author-monogram large avatar" src={author.artistRecord.avatarUrl} alt="" loading="lazy" />
+        {author.artistRecord?.avatarLocalPath || author.artistRecord?.avatarUrl ? (
+          <img className="author-monogram large avatar" src={author.artistRecord.avatarLocalPath ? `sanctuary-image://local/${encodeURIComponent(author.artistRecord.avatarLocalPath)}` : author.artistRecord.avatarUrl!} alt="" loading="lazy" />
         ) : (
           <span className="author-monogram large">{author.name.slice(0, 1).toUpperCase()}</span>
         )}
