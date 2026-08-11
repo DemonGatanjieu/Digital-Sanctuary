@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  completedDownloadPhase,
+  hasContiguousPixivPages,
   parsePixivArtworkPages,
   parsePixivArtworkMetadata,
   parsePixivBookmarkPage,
   parsePixivPageContext,
+  reachedConsecutiveFailureLimit,
   safePixivImageExtension
 } from "./pixiv-download.js";
 
@@ -64,6 +67,48 @@ describe("Pixiv response validation", () => {
       authorName: "画师",
       authorAvatarUrl: null
     });
+  });
+
+  it("accepts only Pixiv-hosted author avatars", () => {
+    expect(parsePixivArtworkMetadata({
+      error: false,
+      body: {
+        title: "夜色",
+        userId: "456",
+        userName: "画师",
+        userUrl: "https://evil.example/avatar.jpg"
+      }
+    }, "123").authorAvatarUrl).toBeNull();
+    expect(parsePixivArtworkMetadata({
+      error: false,
+      body: {
+        title: "夜色",
+        userId: "456",
+        userName: "画师",
+        userUrl: "https://i.pximg.net/user-profile/img/avatar.jpg"
+      }
+    }, "123").authorAvatarUrl).toBe("https://i.pximg.net/user-profile/img/avatar.jpg");
+  });
+});
+
+describe("download completion state", () => {
+  it("distinguishes complete, partial, and failed batches", () => {
+    expect(completedDownloadPhase(12, 0)).toBe("complete");
+    expect(completedDownloadPhase(8, 4)).toBe("partial");
+    expect(completedDownloadPhase(0, 4)).toBe("error");
+  });
+
+  it("accepts only a unique, zero-based contiguous page set", () => {
+    expect(hasContiguousPixivPages([2, 0, 1])).toBe(true);
+    expect(hasContiguousPixivPages([0, 2])).toBe(false);
+    expect(hasContiguousPixivPages([0, 0])).toBe(false);
+    expect(hasContiguousPixivPages([])).toBe(false);
+  });
+
+  it("opens the batch circuit at the configured failure threshold", () => {
+    expect(reachedConsecutiveFailureLimit(4)).toBe(false);
+    expect(reachedConsecutiveFailureLimit(5)).toBe(true);
+    expect(reachedConsecutiveFailureLimit(3, 3)).toBe(true);
   });
 });
 

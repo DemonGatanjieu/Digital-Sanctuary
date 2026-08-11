@@ -15,15 +15,41 @@ if not exist "%SANCTUARY_ELECTRON%" (
   exit /b 1
 )
 
+powershell.exe -NoProfile -Command "$root=[IO.Path]::GetFullPath('%~dp0'); $running=Get-CimInstance Win32_Process -Filter 'Name = ''electron.exe''' -ErrorAction SilentlyContinue ^| Where-Object { $_.CommandLine -like ('*' + $root + '*') -and $_.CommandLine -notmatch '--type=' }; if ($running) { exit 2 }"
+if "%errorlevel%"=="2" (
+  echo [ERROR] Digital Sanctuary is already running.
+  echo Close the existing window before launching an updated build.
+  echo.
+  pause
+  exit /b 2
+)
+
+where npm.cmd >nul 2>nul
+if errorlevel 1 (
+  echo [ERROR] npm.cmd was not found. Install Node.js or add it to PATH.
+  echo.
+  pause
+  exit /b 1
+)
+
+echo Building the latest source...
+call npm.cmd run build
+if errorlevel 1 (
+  echo.
+  echo [ERROR] Build failed. The previous build was not started.
+  pause
+  exit /b 1
+)
+
 if not exist "%SANCTUARY_MAIN%" (
-  echo [ERROR] The built application was not found.
+  echo [ERROR] The built application was not found after building.
   echo.
   pause
   exit /b 1
 )
 
 if not exist "%SANCTUARY_RENDERER%" (
-  echo [ERROR] The built interface was not found.
+  echo [ERROR] The built interface was not found after building.
   echo.
   pause
   exit /b 1

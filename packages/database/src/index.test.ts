@@ -148,6 +148,32 @@ describe("LibraryDatabase", () => {
     database.close();
   });
 
+  it("persists artists and explicit collection covers", () => {
+    const database = new LibraryDatabase(":memory:");
+    const artwork = database.importArtwork("E:\\gallery\\cover.jpg");
+    const collection = database.createCollection("封面测试");
+    database.addArtworkToCollection(artwork.id, collection.id);
+    database.updateCollectionCover(collection.id, artwork.id);
+    database.importArtist({
+      id: "456",
+      name: "画师",
+      avatarUrl: "https://i.pximg.net/user-profile/img/avatar.jpg",
+      avatarLocalPath: "E:\\gallery\\avatars\\456.jpg",
+      updatedAt: "2026-08-12T00:00:00.000Z"
+    });
+
+    expect(database.listCollections()[0]?.coverArtworkId).toBe(artwork.id);
+    expect(database.listArtists()[0]).toEqual({
+      id: "456",
+      name: "画师",
+      avatarUrl: "https://i.pximg.net/user-profile/img/avatar.jpg",
+      avatarLocalPath: "E:\\gallery\\avatars\\456.jpg",
+      updatedAt: "2026-08-12T00:00:00.000Z"
+    });
+    expect(database.hasAvatarPath("E:\\gallery\\avatars\\456.jpg")).toBe(true);
+    database.close();
+  });
+
   it("migrates a legacy artwork table before creating source indexes", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-legacy-"));
     const path = join(directory, "library.db");

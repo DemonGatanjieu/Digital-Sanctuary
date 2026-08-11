@@ -45,6 +45,17 @@ export function App() {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
 
+  const refreshLibrary = useCallback(async () => {
+    const [nextArtworks, nextCollections, nextArtists] = await Promise.all([
+      window.sanctuary.listArtworks(),
+      window.sanctuary.listCollections(),
+      window.sanctuary.listArtists()
+    ]);
+    setArtworks(nextArtworks);
+    setCollections(nextCollections);
+    setArtists(nextArtists);
+  }, []);
+
   useEffect(() => {
     void Promise.all([
       window.sanctuary.listArtworks(),
@@ -102,6 +113,14 @@ export function App() {
     }
   }
 
+  async function updateCollectionCover(collectionId: string, artworkId: string | null) {
+    try {
+      setCollections(await window.sanctuary.updateCollectionCover(collectionId, artworkId));
+    } catch (caught) {
+      showError(caught);
+    }
+  }
+
   function editFilterSetting(next: ElementFilterSetting) {
     setFilterSettings((current) =>
       current.map((setting) => (setting.groupId === next.groupId ? next : setting))
@@ -124,7 +143,7 @@ export function App() {
   async function openGallery() {
     setActiveView("gallery");
     try {
-      setArtworks(await window.sanctuary.listArtworks());
+      await refreshLibrary();
     } catch (caught) {
       showError(caught);
     }
@@ -134,7 +153,7 @@ export function App() {
     setError("");
     try {
       await window.sanctuary.downloadCurrentArtwork();
-      setArtworks(await window.sanctuary.listArtworks());
+      await refreshLibrary();
     } catch (caught) {
       showError(caught);
     }
@@ -155,7 +174,7 @@ export function App() {
       );
       if (!confirmed) return;
       await window.sanctuary.downloadAllBookmarks();
-      setArtworks(await window.sanctuary.listArtworks());
+      await refreshLibrary();
     } catch (caught) {
       showError(caught);
     }
@@ -228,9 +247,10 @@ export function App() {
                 <span>{exploreState.download.message}</span>
                 {(exploreState.download.totalArtworks > 0 || exploreState.download.totalPages > 0) && (
                   <small>
-                    作品 {exploreState.download.completedArtworks}/{exploreState.download.totalArtworks}
+                    作品已处理 {exploreState.download.completedArtworks + exploreState.download.failedArtworks}/{exploreState.download.totalArtworks}
+                    {`（成功 ${exploreState.download.completedArtworks} · 失败 ${exploreState.download.failedArtworks}）`}
                     {exploreState.download.totalPages > 0
-                      ? ` · 页面 ${exploreState.download.completedPages}/${exploreState.download.totalPages}`
+                      ? ` · 已知页面 ${exploreState.download.completedPages}/${exploreState.download.totalPages}`
                       : ""}
                   </small>
                 )}
@@ -267,6 +287,7 @@ export function App() {
             onImport={importImages}
             onCreateCollection={createCollection}
             onAssignCollection={assignCollection}
+            onUpdateCollectionCover={updateCollectionCover}
             onModeChange={setGalleryMode}
           />
         ) : activeView === "rules" ? (
@@ -317,6 +338,7 @@ const initialExploreState: ExploreState = {
     totalPages: 0,
     completedPages: 0,
     skippedPages: 0,
+    lastFailure: "",
     message: ""
   }
 };
@@ -325,6 +347,7 @@ function downloadPhaseLabel(phase: ExploreState["download"]["phase"]): string {
   if (phase === "discovering") return "正在读取";
   if (phase === "downloading") return "正在保存";
   if (phase === "complete") return "下载完成";
+  if (phase === "partial") return "部分完成";
   if (phase === "cancelled") return "已取消";
   if (phase === "error") return "下载失败";
   return "等待下载";
@@ -483,6 +506,7 @@ function GalleryView({
   onImport,
   onCreateCollection,
   onAssignCollection,
+  onUpdateCollectionCover,
   onModeChange
 }: {
   artworks: ArtworkRecord[];
@@ -495,12 +519,15 @@ function GalleryView({
   onImport: () => void;
   onCreateCollection: () => void;
   onAssignCollection: (artworkId: string, collectionId: string) => void;
+  onUpdateCollectionCover: (collectionId: string, artworkId: string | null) => void;
   onModeChange: (mode: GalleryMode) => void;
 }) {
   const authorGroups = useMemo(() => buildAuthorGroups(artworks, artists), [artworks, artists]);
   const [selectedAuthorKey, setSelectedAuthorKey] = useState("");
+  const [selectedCollectionId, setSelectedCollectionId] = useState("");
   const [selectedArtworkId, setSelectedArtworkId] = useState("");
   const selectedAuthor = authorGroups.find((author) => author.key === selectedAuthorKey) ?? null;
+  const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId) ?? null;
   const selectedArtwork = artworks.find((artwork) => artwork.id === selectedArtworkId) ?? null;
   const lightboxPages = useMemo(
     () => selectedArtwork ? artworkWorkPages(artworks, selectedArtwork) : [],
@@ -511,6 +538,7 @@ function GalleryView({
   ).length;
   useEffect(() => {
     if (mode !== "author-work") setSelectedAuthorKey("");
+    if (mode !== "collections") setSelectedCollectionId("");
   }, [mode]);
   return (
     <>
@@ -565,26 +593,35 @@ function GalleryView({
           <button className="primary" onClick={onImport} disabled={busy}>选择本地图片</button>
         </section>
       ) : mode === "collections" ? (
-        <section className="collections-grid">
-          {collections.length === 0 && (
-            <div className="empty-state">
-              <p className="eyebrow">NO COLLECTIONS</p>
-              <h2>暂无分类</h2>
-              <p>点击上方“新建分类”来组织你的画廊</p>
-            </div>
-          )}
-          {collections.map(collection => (
-            <CollectionCard
-              key={collection.id}
-              collection={collection}
-              artworks={artworks}
-              onOpen={() => {
-                // In MVP, we might just switch to a flat view filtered by collection, 
-                // but for now let's just make it visually distinct.
-              }}
-            />
-          ))}
-        </section>
+        selectedCollection ? (
+          <CollectionDetailPage
+            collection={selectedCollection}
+            artworks={artworks}
+            collections={collections}
+            onBack={() => setSelectedCollectionId("")}
+            onAssign={onAssignCollection}
+            onOpenArtwork={setSelectedArtworkId}
+            onSetCover={(artworkId) => onUpdateCollectionCover(selectedCollection.id, artworkId)}
+          />
+        ) : (
+          <section className="collections-grid">
+            {collections.length === 0 && (
+              <div className="empty-state">
+                <p className="eyebrow">NO COLLECTIONS</p>
+                <h2>暂无分类</h2>
+                <p>点击上方“新建分类”来组织你的画廊</p>
+              </div>
+            )}
+            {collections.map(collection => (
+              <CollectionCard
+                key={collection.id}
+                collection={collection}
+                artworks={artworks}
+                onOpen={() => setSelectedCollectionId(collection.id)}
+              />
+            ))}
+          </section>
+        )
       ) : mode === "flat" ? (
         <section className="gallery-grid">
           {artworks.map((artwork) => (
@@ -713,6 +750,32 @@ function artworkWorkPages(
     .sort((left, right) => artworkPageIndex(left) - artworkPageIndex(right));
 }
 
+function AuthorAvatar({
+  author,
+  large = false
+}: {
+  author: AuthorGalleryGroup;
+  large?: boolean;
+}) {
+  const localPath = author.artistRecord?.avatarLocalPath ?? "";
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [localPath]);
+  const className = `author-monogram${large ? " large" : ""}`;
+  if (localPath && !failed) {
+    return (
+      <img
+        className={`${className} avatar`}
+        src={`sanctuary-image://local/${encodeURIComponent(localPath)}`}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+  return <span className={className}>{author.name.slice(0, 1).toUpperCase()}</span>;
+}
+
 function AuthorBrowserCard({
   author,
   onOpen
@@ -738,11 +801,7 @@ function AuthorBrowserCard({
         })}
       </span>
       <span className="author-card-body">
-        {author.artistRecord?.avatarLocalPath || author.artistRecord?.avatarUrl ? (
-          <img className="author-monogram avatar" src={author.artistRecord.avatarLocalPath ? `sanctuary-image://local/${encodeURIComponent(author.artistRecord.avatarLocalPath)}` : author.artistRecord.avatarUrl!} alt="" loading="lazy" />
-        ) : (
-          <span className="author-monogram">{author.name.slice(0, 1).toUpperCase()}</span>
-        )}
+        <AuthorAvatar author={author} />
         <span className="author-card-copy">
           <strong>{author.name}</strong>
           <small>{author.works.length} 个作品 · {author.pageCount} 页</small>
@@ -770,11 +829,7 @@ function AuthorDetailPage({
     <section className="author-detail-page">
       <button className="author-back" onClick={onBack}>← 全部作者</button>
       <header className="author-detail-hero">
-        {author.artistRecord?.avatarLocalPath || author.artistRecord?.avatarUrl ? (
-          <img className="author-monogram large avatar" src={author.artistRecord.avatarLocalPath ? `sanctuary-image://local/${encodeURIComponent(author.artistRecord.avatarLocalPath)}` : author.artistRecord.avatarUrl!} alt="" loading="lazy" />
-        ) : (
-          <span className="author-monogram large">{author.name.slice(0, 1).toUpperCase()}</span>
-        )}
+        <AuthorAvatar author={author} large />
         <div>
           <p className="eyebrow">CREATOR LIBRARY</p>
           <h2>{author.name}</h2>
@@ -1084,6 +1139,63 @@ function LazyArtworkImage({
       fetchPriority="low"
       data-lazy-state={shouldLoad ? "loaded" : "waiting"}
     />
+  );
+}
+
+function CollectionDetailPage({
+  collection,
+  artworks,
+  collections,
+  onBack,
+  onAssign,
+  onOpenArtwork,
+  onSetCover
+}: {
+  collection: CollectionRecord;
+  artworks: ArtworkRecord[];
+  collections: CollectionRecord[];
+  onBack: () => void;
+  onAssign: (artworkId: string, collectionId: string) => void;
+  onOpenArtwork: (artworkId: string) => void;
+  onSetCover: (artworkId: string) => void;
+}) {
+  const items = artworks.filter((artwork) => artwork.collectionIds.includes(collection.id));
+  return (
+    <section className="author-detail-page collection-detail-page">
+      <button className="author-back" onClick={onBack}>← 全部分类</button>
+      <header className="author-detail-hero">
+        <span className="author-monogram large">◇</span>
+        <div>
+          <p className="eyebrow">LOCAL COLLECTION</p>
+          <h2>{collection.name}</h2>
+          <span>{items.length} 张图片</span>
+        </div>
+      </header>
+      {items.length === 0 ? (
+        <div className="collection-detail-empty">这个分类还没有图片。</div>
+      ) : (
+        <div className="gallery-grid collection-detail-grid">
+          {items.map((artwork) => (
+            <div className="collection-artwork" key={artwork.id}>
+              <ArtworkCard
+                artwork={artwork}
+                collections={collections}
+                onAssign={onAssign}
+                onOpen={onOpenArtwork}
+              />
+              <button
+                type="button"
+                className={`collection-cover-action ${collection.coverArtworkId === artwork.id ? "active" : ""}`}
+                onClick={() => onSetCover(artwork.id)}
+                disabled={collection.coverArtworkId === artwork.id}
+              >
+                {collection.coverArtworkId === artwork.id ? "当前封面" : "设为分类封面"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -9,3 +9,5 @@
 | [KI-0003](./KI-0003-explore-filter-regression.md) | 已止血 / 第一方美容过滤冻结 | 宽泛 PR/BOOTH DOM 猜测曾把普通作品列表整块误拦 |
 | [KI-0004](./KI-0004-viewport-review-hides-all-images.md) | 已确认 / 实验功能已关闭 | 视口驱动审查启用后，Pixiv 作品图全部停留在保护态 |
 | [KI-0005](./KI-0005-download-blocked-by-explore-filter.md) | 已修复 / 实机闭环通过 | “保存当前作品”的原图请求曾被探索过滤器以 `ERR_BLOCKED_BY_CLIENT` 取消 |
+| [KI-0006](./KI-0006-author-avatar-download-failure.md) | 代码已修复 / 待实机复核 | 画师头像下载失败或完成后界面不刷新 |
+| [KI-0007](./KI-0007-stale-build-and-bulk-download-failure-cascade.md) | 已修复 / 待真实收藏任务复核 | 旧构建掩盖更新，批量下载把全局故障级联为数百个作品失败 |

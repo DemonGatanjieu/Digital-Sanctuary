@@ -61,6 +61,7 @@ nav { display: grid; gap: 8px; }
 .download-location { margin: 1px 4px 0; color: #a0a6ae; font-size: 8px; line-height: 1.5; }
 .download-progress { display: grid; gap: 5px; margin-top: 3px; padding: 10px; border: 1px solid #d9eaf5; border-radius: 10px; color: #3d728f; background: #f5fbff; }
 .download-progress.complete { border-color: #cdeee3; color: #247f65; background: #f0fbf7; }
+.download-progress.partial { border-color: #f0d7a8; color: #91651d; background: #fff9ee; }
 .download-progress.error { border-color: #ffc9cf; color: #b83e50; background: #fff2f4; }
 .download-progress strong { font-size: 10px; }
 .download-progress span, .download-progress small { font-size: 8px; line-height: 1.45; }
@@ -244,6 +245,13 @@ button:disabled { opacity: .5; cursor: wait; }
 .collection-info h3 { margin: 0; font-size: 16px; color: #1e252e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .collection-info small { color: #8b929c; font-size: 11px; margin-top: 4px; display: block; }
 .collection-desc { margin: 8px 0 0; color: #6e7681; font-size: 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.collection-detail-page { min-height: 360px; }
+.collection-detail-grid { padding: 20px; }
+.collection-detail-empty { padding: 48px 20px; color: #8b929c; text-align: center; }
+.collection-artwork { min-width: 0; }
+.collection-cover-action { width: 100%; margin-top: 8px; padding: 8px 10px; border: 1px solid #dbe5ec; border-radius: 9px; color: #64717d; background: #fff; cursor: pointer; }
+.collection-cover-action:hover { border-color: #b9ddf5; color: #087fc0; background: #f4fbff; }
+.collection-cover-action.active, .collection-cover-action:disabled { color: #247f65; border-color: #cdeee3; background: #f0fbf7; cursor: default; }
 
 @media (max-width: 1000px) {
   .app-shell { grid-template-columns: 184px 1fr; }

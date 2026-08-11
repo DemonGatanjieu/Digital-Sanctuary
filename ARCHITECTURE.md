@@ -53,10 +53,10 @@ flowchart LR
 - `apps/desktop/src/main/explore-policy.ts`：可单元测试的 URL、权限、广告和资源策略。
 - `apps/desktop/src/main/pixiv-dom-adapter.ts`：幂等注入拦截占位层、“仅本次查看”和作品页下载按钮。宽泛的第一方 PR/BOOTH DOM 猜测已经移除，避免再次误伤普通作品。
 - `apps/desktop/src/shared/pixiv-download.ts`：Pixiv 页面上下文、AJAX 响应和原图 URL 的纯函数校验。
-- `apps/desktop/src/shared/bounded-concurrency.ts`：下载任务使用的通用并发门；由于 P 站严格的请求频率限制 (Rate Limiting, HTTP 429)，对于批量下载（如“下载全部收藏”）采用了**单线程慢速滴漏模型 (Slow Drip Queue)**。
-- **并发控制**：在执行大量下载任务时，强行降级并发为 1。
-- **动态防封禁延时 (Jitter Delay)**：对于发起了真实网络请求的任务，结束后自动加入 2~4 秒的随机安全延时。
-- **指数退避重试 (Exponential Backoff)**：底层的 `fetchPixivJson` 在遇到 HTTP 429 时不再中断任务流，而是主动拦截错误，进入长达 30 秒至 8 分钟不等的指数级安全休眠，休眠结束后自动重试。这保证了即使用户挂机下载一整夜，遇到 P 站风控也能像“装死”一样自动恢复，实现无人值守的平稳入库。
+- `apps/desktop/src/shared/bounded-concurrency.ts`：下载任务使用的通用并发门。收藏作品按顺序处理，单作品内部原图最多四路；Pixiv JSON API 全局间隔至少 800 ms。
+- **有界重试**：429、网络异常和 5xx 最多重试两次，单次等待不超过 30 秒；仍失败时抛出批次级错误并停止，不把同一全局故障记成数百个作品失败。
+- **连续失败熔断**：下架或无权限作品可以单项跳过，但连续 5 项失败自动停止。403 不再盲目等待 15 分钟。
+- **结果语义**：零失败才显示“下载完成”；有成功也有失败时显示“部分完成”，作品进度按“已处理 = 成功 + 失败”计算。
 - `apps/desktop/src/main/explore-review-queue.ts` 与 `apps/desktop/src/preload/explore.ts`：视口优先审查实验。因 KI-0004 默认关闭，当前生产路径仍在网络回调中串行审查。
 - `apps/desktop/src/main/vision-client.ts`：版本化 JSON Lines 客户端、超时和子进程错误处理。
 - Pixiv 使用 `persist:pixiv` 独立持久化 session；本地 React 渲染器不能访问其 DOM 或 Cookie。单实例锁避免多个进程造成“登录一次却看似丢失会话”的错觉。
@@ -93,7 +93,7 @@ flowchart LR
 1. 只有作品详情页允许“保存当前作品”；只有收藏作品页允许“下载全部收藏”。网页内按钮携带的作品 ID 必须与当前顶层 URL 一致。
 2. 主进程通过登录 session 获取作品页清单、作者信息和公开/非公开收藏 ID；所有 JSON 响应和 `i.pximg.net` 原图 URL 都经过严格校验。
 3. 原图请求绕开探索页内容拦截器，使用 Pixiv 作品页 `Referer`、流式临时文件和原子改名；全局网络并发上限为 4。
-4. 文件保存在用户“图片/Digital Sanctuary/Pixiv/作品 ID”中；对于已有文件且已补全画师信息的作品，触发本地快速去重跳过，彻底免除一切网络请求，大幅降低批量下载（如全量收藏）时的频率限制（HTTP 429）风险。所有 P 站 API 请求均已接入 600ms 的全局节流机制。
+4. 文件保存在用户“图片/Digital Sanctuary/Pixiv/作品 ID”中；已索引页码连续、文件存在且作者资料已经入库的作品触发本地快速跳过。所有 Pixiv JSON API 请求接入 800 ms 全局节流。
 5. 所有用户主动下载都调用 `trustArtwork`：清除旧模型结果并保存明确的 `allow` 决策，不自动运行 WD Tagger。
 6. SQLite 保存 `workId`、`pageIndex`、`authorId`、`authorName` 和标题；分离画师实体独立入库（并保存头像快照）；画廊据此聚合同一作品的多页和同一作者的作品。
 7. 本地图片仅通过 `sanctuary-image` 自定义协议返回，并且只有数据库已索引、文件仍存在的路径可以读取。
@@ -179,9 +179,9 @@ CREATE TABLE remote_image_reviews (
 1. **已完成**：元素黑名单、远程失败闭合、持久化审查缓存、占位层和一次性查看。
 2. **已完成**：作品全部页保存、公开/非公开收藏批量下载、四路限流、原子落盘、去重与来源元数据。
 3. **已完成**：主动下载信任边界、原图懒加载、平铺/作者两级浏览和沉浸式大图层。
-4. **已完成**：MVP 画廊资产管理重构，引入独立 `ArtistRecord`（画师头像）并扩展 `CollectionRecord`（自定义封面）。
+4. **已完成**：MVP 画廊资产管理重构，引入独立 `ArtistRecord`（本地头像）并扩展 `CollectionRecord`（自定义封面与分类详情浏览）。
 5. **冻结**：第一方广告美容过滤；宽泛 DOM 方案不得恢复。视口审查实验保持关闭，直到本地 fixture 能覆盖候选上报到图片重载的完整链路。
-5. **下一阶段**：把“模型整理”设计为显式、可预览、可撤销的标签建议流程，并将分析结果与展示信任状态分表保存。
-6. **随后进行**：按上面的 `explore/`、`download/`、`library/` 边界拆分 `main/index.ts`，再评估审查字节复用和可选缩略图缓存。
+6. **下一阶段**：把“模型整理”设计为显式、可预览、可撤销的标签建议流程，并将分析结果与展示信任状态分表保存。
+7. **随后进行**：按上面的 `explore/`、`download/`、`library/` 边界拆分 `main/index.ts`，再评估审查字节复用和可选缩略图缓存。
 
 详细任务与止损条件见 `docs/plans/ACTIVE_ROADMAP.md`，验收步骤见 `docs/handoff/02_VERIFICATION_CHECKLIST.md`。

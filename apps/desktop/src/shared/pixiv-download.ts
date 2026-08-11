@@ -29,6 +29,7 @@ export type ExploreDownloadPhase =
   | "discovering"
   | "downloading"
   | "complete"
+  | "partial"
   | "error"
   | "cancelled";
 
@@ -43,6 +44,7 @@ export interface ExploreDownloadState {
   totalPages: number;
   completedPages: number;
   skippedPages: number;
+  lastFailure: string;
   message: string;
 }
 
@@ -56,6 +58,7 @@ export interface ExploreDownloadResult {
   failedArtworks: number;
   downloadedPages: number;
   skippedPages: number;
+  lastFailure: string;
   destination: string;
 }
 
@@ -71,8 +74,31 @@ export const IDLE_EXPLORE_DOWNLOAD_STATE: ExploreDownloadState = {
   totalPages: 0,
   completedPages: 0,
   skippedPages: 0,
+  lastFailure: "",
   message: ""
 };
+
+export function completedDownloadPhase(
+  completedArtworks: number,
+  failedArtworks: number
+): ExploreDownloadPhase {
+  if (failedArtworks === 0) return "complete";
+  return completedArtworks > 0 ? "partial" : "error";
+}
+
+export function hasContiguousPixivPages(pageIndexes: readonly number[]): boolean {
+  if (pageIndexes.length === 0) return false;
+  const sorted = [...pageIndexes].sort((left, right) => left - right);
+  if (new Set(sorted).size !== sorted.length) return false;
+  return sorted.every((pageIndex, index) => pageIndex === index);
+}
+
+export function reachedConsecutiveFailureLimit(
+  consecutiveFailures: number,
+  limit = 5
+): boolean {
+  return consecutiveFailures >= limit;
+}
 
 export function parsePixivPageContext(value: string): PixivPageContext {
   const empty: PixivPageContext = {
@@ -156,13 +182,16 @@ export function parsePixivArtworkMetadata(
   const authorName = normalizeDisplayText(body.userName, `作者 ${authorId}`);
 
   let authorAvatarUrl: string | null = null;
-  if (typeof body.userUrl === "string") {
+  if (typeof body.userUrl === "string" && isPixivOriginalImageUrl(body.userUrl)) {
     authorAvatarUrl = body.userUrl;
   } else {
     // Sometimes it's nested or named differently, try common Pixiv patterns
     const userDict = asRecord(body.user);
-    if (userDict && typeof userDict.imageBig === "string") authorAvatarUrl = userDict.imageBig;
-    else if (userDict && typeof userDict.image === "string") authorAvatarUrl = userDict.image;
+    if (userDict && typeof userDict.imageBig === "string" && isPixivOriginalImageUrl(userDict.imageBig)) {
+      authorAvatarUrl = userDict.imageBig;
+    } else if (userDict && typeof userDict.image === "string" && isPixivOriginalImageUrl(userDict.image)) {
+      authorAvatarUrl = userDict.image;
+    }
   }
   if (authorAvatarUrl && authorAvatarUrl.includes("no_profile")) {
     authorAvatarUrl = null;

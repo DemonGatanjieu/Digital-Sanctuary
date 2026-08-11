@@ -22,6 +22,7 @@ import {
   decideFilter,
   isElementFilterSetting,
   rulesFingerprint,
+  type ArtworkRecord,
   type VisionAssessment
 } from "@sanctuary/domain";
 import { VisionClient } from "./vision-client.js";
@@ -50,11 +51,14 @@ import {
   buildPixivReviewReleaseScript
 } from "./pixiv-dom-adapter.js";
 import {
+  completedDownloadPhase,
+  hasContiguousPixivPages,
   IDLE_EXPLORE_DOWNLOAD_STATE,
   parsePixivArtworkMetadata,
   parsePixivArtworkPages,
   parsePixivBookmarkPage,
   parsePixivPageContext,
+  reachedConsecutiveFailureLimit,
   safePixivImageExtension,
   type BookmarkDownloadPreview,
   type ExploreDownloadResult,
@@ -329,6 +333,8 @@ function registerIpc(): void {
       let failedArtworks = 0;
       let downloadedPages = 0;
       let skippedPages = 0;
+      let consecutiveFailures = 0;
+      let lastFailure = "";
       await mapWithConcurrency(
         artworkIds,
         1, // 降级为单线程顺序执行，避免触发 P 站反爬虫
@@ -342,13 +348,29 @@ function registerIpc(): void {
             downloadedPages += result.downloadedPages;
             skippedPages += result.skippedPages;
             completedArtworks += 1;
+            consecutiveFailures = 0;
             fastPathed = !!result.fastPathed;
           } catch (error) {
+            if (error instanceof PixivBatchAbortError) throw error;
             failedArtworks += 1;
-            console.error(`[pixiv-download] artwork ${artworkId}`, error);
+            consecutiveFailures += 1;
+            const reason = errorMessage(error);
+            lastFailure = `${artworkId}：${reason}`;
+            console.error(`[pixiv-download] artwork ${artworkId}: ${reason}`, error);
             fastPathed = false;
+            updateExploreDownloadState({
+              completedArtworks,
+              failedArtworks,
+              lastFailure,
+              message: `作品 ${artworkId} 保存失败：${reason}`
+            });
+            if (reachedConsecutiveFailureLimit(consecutiveFailures)) {
+              throw new PixivBatchAbortError(
+                `连续 ${consecutiveFailures} 个作品失败，任务已自动停止。最后失败：${lastFailure}`
+              );
+            }
           }
-          updateExploreDownloadState({ completedArtworks, failedArtworks });
+          updateExploreDownloadState({ completedArtworks, failedArtworks, lastFailure });
 
           // 如果没有命中快速跳过（即发起了真实网络请求，或者请求失败报错了），则强制加入随机安全延时 (Jitter)
           // 必须放在 try-catch 外，防止出现报错时瞬间无延迟重试导致死循环刷爆 P 站
@@ -367,6 +389,7 @@ function registerIpc(): void {
         failedArtworks,
         downloadedPages,
         skippedPages,
+        lastFailure,
         destination: pixivGalleryDirectory()
       };
     });
@@ -396,6 +419,15 @@ function registerIpc(): void {
   ipcMain.handle("collections:update-cover", (_event, collectionId: unknown, artworkId: unknown) => {
     if (!database || typeof collectionId !== "string" || (artworkId !== null && typeof artworkId !== "string")) {
       throw new Error("Invalid collection cover assignment");
+    }
+    if (!database.listCollections().some((collection) => collection.id === collectionId)) {
+      throw new Error("Collection does not exist");
+    }
+    if (artworkId !== null) {
+      const artwork = database.listArtworks().find((candidate) => candidate.id === artworkId);
+      if (!artwork?.collectionIds.includes(collectionId)) {
+        throw new Error("Collection cover must belong to the selected collection");
+      }
     }
     database.updateCollectionCover(collectionId, artworkId);
     return database.listCollections();
@@ -677,10 +709,6 @@ function downloadCurrentPixivArtwork(): Promise<ExploreDownloadResult> {
     throw new Error("请先打开一个 Pixiv 作品详情页");
   }
   
-  if (database?.listArtworks().some(a => a.source?.platform === "pixiv" && a.source?.workId === context.artworkId)) {
-    throw new Error("该作品已在本地画廊中，无需重复下载");
-  }
-
   return startExploreDownload("current", async () => {
     updateExploreDownloadState({
       phase: "discovering",
@@ -694,6 +722,7 @@ function downloadCurrentPixivArtwork(): Promise<ExploreDownloadResult> {
       failedArtworks: 0,
       downloadedPages: result.downloadedPages,
       skippedPages: result.skippedPages,
+      lastFailure: "",
       destination: pixivGalleryDirectory()
     };
   });
@@ -717,18 +746,19 @@ function startExploreDownload(
   const running = task()
     .then((result) => {
       updateExploreDownloadState({
-        phase: "complete",
+        phase: completedDownloadPhase(result.completedArtworks, result.failedArtworks),
         completedArtworks: result.completedArtworks,
         failedArtworks: result.failedArtworks,
+        lastFailure: result.lastFailure,
         message: result.failedArtworks > 0
-          ? `已保存 ${result.completedArtworks} 个作品，${result.failedArtworks} 个失败`
+          ? `已保存 ${result.completedArtworks} 个作品，${result.failedArtworks} 个失败。${result.lastFailure ? `最后失败：${result.lastFailure}` : ""}`
           : `已保存 ${result.completedArtworks} 个作品到本地画廊`
       });
       return result;
     })
     .catch((error: unknown) => {
       const message = error instanceof Error ? error.message : "下载失败";
-      updateExploreDownloadState({ phase: "error", message });
+      updateExploreDownloadState({ phase: "error", message, lastFailure: message });
       throw error;
     })
     .finally(() => {
@@ -845,89 +875,117 @@ async function fetchPixivArtworkMetadata(
 }
 
 let nextPixivApiCall = 0;
-const PIXIV_API_DELAY_MS = 600;
+const PIXIV_API_DELAY_MS = 800;
+const PIXIV_API_MAX_RETRIES = 2;
+
+class PixivBatchAbortError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PixivBatchAbortError";
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "未知错误";
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function waitForPixivApiSlot(): Promise<void> {
+  const now = Date.now();
+  const waitTime = Math.max(0, nextPixivApiCall - now);
+  nextPixivApiCall = now + waitTime + PIXIV_API_DELAY_MS;
+  if (waitTime > 0) await delay(waitTime);
+}
+
+function pixivRetryDelay(response: Response | null, attempt: number): number {
+  const retryAfter = response?.headers.get("retry-after")?.trim() ?? "";
+  const seconds = Number(retryAfter);
+  const headerDelay = Number.isFinite(seconds) && seconds >= 0
+    ? seconds * 1_000
+    : 0;
+  const fallback = attempt === 0 ? 5_000 : 15_000;
+  return Math.min(30_000, Math.max(headerDelay, fallback));
+}
 
 async function fetchPixivJson(
   targetSession: Session,
   url: string,
   referrer: string
 ): Promise<unknown> {
-  return pixivDownloadNetworkGate.run(async () => {
-    let attempt = 0;
-    while (true) {
-      const now = Date.now();
-      const waitTime = Math.max(0, nextPixivApiCall - now);
-      nextPixivApiCall = now + waitTime + PIXIV_API_DELAY_MS;
-      if (waitTime > 0) {
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
+  let attempt = 0;
+  while (true) {
+    await waitForPixivApiSlot();
+    let response: Response;
+    try {
+      response = await pixivDownloadNetworkGate.run(() => targetSession.fetch(url, {
+        credentials: "include",
+        referrer,
+        headers: {
+          Accept: "application/json",
+          Referer: referrer
+        },
+        bypassCustomProtocolHandlers: true
+      }));
+    } catch (networkError) {
+      if (attempt >= PIXIV_API_MAX_RETRIES) {
+        throw new PixivBatchAbortError(
+          `Pixiv 网络连续失败，批量任务已停止：${errorMessage(networkError)}`
+        );
       }
-
-      let response: Response;
-      try {
-        response = await targetSession.fetch(url, {
-          credentials: "include",
-          referrer,
-          headers: {
-            Accept: "application/json",
-            Referer: referrer
-          },
-          bypassCustomProtocolHandlers: true
-        });
-      } catch (networkError) {
-        if (attempt < 5) {
-          attempt++;
-          const backoffMs = Math.pow(2, attempt) * 15000;
-          updateExploreDownloadState({
-            message: `网络或连接异常，安全休眠 ${backoffMs / 1000} 秒...`
-          });
-          console.warn(`[Pixiv Network Error] on ${url}, backing off for ${backoffMs}ms`, networkError);
-          await new Promise((resolve) => setTimeout(resolve, backoffMs));
-          nextPixivApiCall = Date.now();
-          continue;
-        }
-        throw networkError;
-      }
-      
-      // 对于 403 Forbidden，很有可能是因为下载请求太快被 Cloudflare 拦截
-      // 也纳入退避重试，以免直接崩溃跳过
-      if (response.status === 401 || response.status === 403) {
-        if (response.status === 403 && attempt < 5) {
-          attempt++;
-          const backoffMs = Math.pow(2, attempt) * 15000;
-          updateExploreDownloadState({
-            message: `触发拦截 (HTTP 403)，安全休眠 ${backoffMs / 1000} 秒...`
-          });
-          console.warn(`[Pixiv 403 Forbidden] on ${url}, backing off for ${backoffMs}ms`);
-          await new Promise((resolve) => setTimeout(resolve, backoffMs));
-          nextPixivApiCall = Date.now();
-          continue;
-        }
-        throw new Error("Pixiv 会话未登录或无权读取这些作品");
-      }
-      if (!response.ok) {
-        if (response.status === 429) {
-          if (attempt < 5) {
-            attempt++;
-            const backoffMs = Math.pow(2, attempt) * 15000; // 30s, 60s, 120s, 240s, 480s
-            updateExploreDownloadState({
-              message: `触发防封禁保护，安全休眠 ${backoffMs / 1000} 秒...`
-            });
-            console.warn(`[Pixiv Rate Limit] 429 received on ${url}, backing off for ${backoffMs}ms (Attempt ${attempt})`);
-            await new Promise((resolve) => setTimeout(resolve, backoffMs));
-            nextPixivApiCall = Date.now(); // reset queue spacing
-            continue;
-          }
-          throw new Error("P 站触发了频率限制 (HTTP 429)，已达到最大重试次数");
-        }
-        throw new Error(`Pixiv 数据请求失败：HTTP ${response.status}`);
-      }
-      try {
-        return await response.json();
-      } catch {
-        throw new Error("Pixiv 返回的不是有效 JSON 数据");
-      }
+      const backoffMs = pixivRetryDelay(null, attempt);
+      attempt += 1;
+      updateExploreDownloadState({
+        message: `网络异常，${Math.ceil(backoffMs / 1_000)} 秒后重试 (${attempt}/${PIXIV_API_MAX_RETRIES})…`
+      });
+      await delay(backoffMs);
+      continue;
     }
-  });
+
+    if (response.status === 429) {
+      if (attempt >= PIXIV_API_MAX_RETRIES) {
+        throw new PixivBatchAbortError(
+          "Pixiv 已限制请求频率，批量任务已停止。请稍后从收藏页重新开始，已保存作品会自动跳过。"
+        );
+      }
+      const backoffMs = pixivRetryDelay(response, attempt);
+      attempt += 1;
+      updateExploreDownloadState({
+        message: `Pixiv 频率限制，${Math.ceil(backoffMs / 1_000)} 秒后重试 (${attempt}/${PIXIV_API_MAX_RETRIES})…`
+      });
+      await delay(backoffMs);
+      continue;
+    }
+
+    if (response.status === 401) {
+      throw new PixivBatchAbortError("Pixiv 登录会话已失效，请重新登录后再继续下载");
+    }
+    if (response.status === 403) {
+      throw new Error("作品不可访问、已删除或当前账号无权读取 (HTTP 403)");
+    }
+    if (response.status >= 500 && response.status <= 599) {
+      if (attempt >= PIXIV_API_MAX_RETRIES) {
+        throw new PixivBatchAbortError(`Pixiv 服务连续返回 HTTP ${response.status}，批量任务已停止`);
+      }
+      const backoffMs = pixivRetryDelay(response, attempt);
+      attempt += 1;
+      updateExploreDownloadState({
+        message: `Pixiv 服务暂时异常，${Math.ceil(backoffMs / 1_000)} 秒后重试 (${attempt}/${PIXIV_API_MAX_RETRIES})…`
+      });
+      await delay(backoffMs);
+      continue;
+    }
+    if (!response.ok) {
+      throw new Error(`Pixiv 数据请求失败：HTTP ${response.status}`);
+    }
+    try {
+      return await response.json();
+    } catch {
+      throw new Error("Pixiv 返回的不是有效 JSON 数据");
+    }
+  }
 }
 
 async function downloadPixivArtwork(
@@ -938,25 +996,20 @@ async function downloadPixivArtwork(
   if (!database || !vision) throw new Error("本地画廊或视觉引擎尚未准备好");
 
   const localArtworks = database.listArtworks().filter((a) => a.source?.platform === "pixiv" && a.source?.workId === artworkId);
-  if (localArtworks.length > 0) {
-    const authorId = localArtworks[0]?.source?.authorId;
-    if (authorId) {
-      const existingArtist = database.listArtists().find((a) => a.id === authorId);
-      // Fast path is only valid if we don't have a pending avatar to download
-      if (existingArtist && (!existingArtist.avatarUrl || existingArtist.avatarLocalPath)) {
-        for (const local of localArtworks) {
-          if (trustAsUserDownload) database.trustArtwork(local.id);
-        }
-        return { downloadedPages: 0, skippedPages: localArtworks.length, fastPathed: true };
-      }
+  const authorId = localArtworks[0]?.source?.authorId;
+  const existingArtist = authorId
+    ? database.listArtists().find((artist) => artist.id === authorId)
+    : undefined;
+  if (existingArtist && isCompleteIndexedPixivWork(localArtworks)) {
+    for (const local of localArtworks) {
+      if (trustAsUserDownload) database.trustArtwork(local.id);
     }
+    return { downloadedPages: 0, skippedPages: localArtworks.length, fastPathed: true };
   }
 
   const targetSession = requireExploreSession();
-  const [pages, metadata] = await Promise.all([
-    fetchPixivArtworkPages(targetSession, artworkId),
-    fetchPixivArtworkMetadata(targetSession, artworkId)
-  ]);
+  const metadata = await fetchPixivArtworkMetadata(targetSession, artworkId);
+  const pages = await fetchPixivArtworkPages(targetSession, artworkId);
   updateExploreDownloadState({
     phase: "downloading",
     totalPages: resetPageTotal
@@ -978,10 +1031,15 @@ async function downloadPixivArtwork(
     const newAvatarLocalPath = join(avatarDir, `${metadata.authorId}${extension}`);
     if (!existsSync(newAvatarLocalPath)) {
       try {
-        await downloadPixivOriginalImage(metadata.authorAvatarUrl, `${PIXIV_HOME_URL}users/${metadata.authorId}`, newAvatarLocalPath);
+        await downloadPixivSessionImage(
+          targetSession,
+          metadata.authorAvatarUrl,
+          `${PIXIV_HOME_URL}users/${metadata.authorId}`,
+          newAvatarLocalPath
+        );
         avatarLocalPath = newAvatarLocalPath;
       } catch (err) {
-        console.error("Failed to download avatar", err);
+        console.warn(`[pixiv-avatar] ${metadata.authorId}: ${errorMessage(err)}`);
       }
     } else {
       avatarLocalPath = newAvatarLocalPath;
@@ -1053,8 +1111,38 @@ async function downloadPixivArtwork(
   }
   return {
     downloadedPages: localPages.filter((item) => !item.existed).length,
-    skippedPages: localPages.filter((item) => item.existed).length
+    skippedPages: localPages.filter((item) => item.existed).length,
+    fastPathed: false
   };
+}
+
+function isCompleteIndexedPixivWork(artworks: readonly ArtworkRecord[]): boolean {
+  if (artworks.length === 0) return false;
+  const pageIndexes = artworks
+    .map((artwork) => artwork.source?.pageIndex)
+    .filter((pageIndex): pageIndex is number => Number.isSafeInteger(pageIndex));
+  if (pageIndexes.length !== artworks.length) return false;
+  if (!hasContiguousPixivPages(pageIndexes)) return false;
+  return artworks.every((artwork) => existsSync(artwork.path));
+}
+
+async function downloadPixivSessionImage(
+  targetSession: Session,
+  imageUrl: string,
+  referrer: string,
+  destination: string
+): Promise<void> {
+  await pixivDownloadNetworkGate.run(async () => {
+    const response = await targetSession.fetch(imageUrl, {
+      credentials: "include",
+      referrer,
+      headers: {
+        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
+      },
+      bypassCustomProtocolHandlers: true
+    });
+    await saveImageResponse(response, destination, "头像");
+  });
 }
 
 async function downloadPixivOriginalImage(
@@ -1072,42 +1160,50 @@ async function downloadPixivOriginalImage(
         Referer: referrer
       }
     });
-    if (!response.ok) throw new Error(`原图下载失败：HTTP ${response.status}`);
-    const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
-    if (!contentType.startsWith("image/")) {
-      throw new Error(`原图响应类型异常：${contentType || "unknown"}`);
-    }
-    const declaredSize = Number(response.headers.get("content-length") ?? "0");
-    if (Number.isFinite(declaredSize) && declaredSize > MAX_ORIGINAL_IMAGE_BYTES) {
-      throw new Error("原图超过 128 MB 下载上限");
-    }
-    if (!response.body) throw new Error("原图响应没有可读取的数据流");
-    const temporaryPath = `${destination}.${randomUUID()}.part`;
-    let receivedBytes = 0;
-    const sizeGuard = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        receivedBytes += chunk.length;
-        if (receivedBytes > MAX_ORIGINAL_IMAGE_BYTES) {
-          callback(new Error("原图超过 128 MB 下载上限"));
-          return;
-        }
-        callback(null, chunk);
+    await saveImageResponse(response, destination, "原图");
+  });
+}
+
+async function saveImageResponse(
+  response: Response,
+  destination: string,
+  label: string
+): Promise<void> {
+  if (!response.ok) throw new Error(`${label}下载失败：HTTP ${response.status}`);
+  const contentType = (response.headers.get("content-type") ?? "").toLowerCase();
+  if (!contentType.startsWith("image/")) {
+    throw new Error(`${label}响应类型异常：${contentType || "unknown"}`);
+  }
+  const declaredSize = Number(response.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredSize) && declaredSize > MAX_ORIGINAL_IMAGE_BYTES) {
+    throw new Error(`${label}超过 128 MB 下载上限`);
+  }
+  if (!response.body) throw new Error(`${label}响应没有可读取的数据流`);
+  const temporaryPath = `${destination}.${randomUUID()}.part`;
+  let receivedBytes = 0;
+  const sizeGuard = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      receivedBytes += chunk.length;
+      if (receivedBytes > MAX_ORIGINAL_IMAGE_BYTES) {
+        callback(new Error(`${label}超过 128 MB 下载上限`));
+        return;
       }
-    });
-    try {
-      await pipeline(
-        Readable.fromWeb(
-          response.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>
-        ),
-        sizeGuard,
-        createWriteStream(temporaryPath, { flags: "wx" })
-      );
-      if (receivedBytes === 0) throw new Error("原图响应为空");
-      await rename(temporaryPath, destination);
-    } finally {
-      await unlink(temporaryPath).catch(() => undefined);
+      callback(null, chunk);
     }
   });
+  try {
+    await pipeline(
+      Readable.fromWeb(
+        response.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>
+      ),
+      sizeGuard,
+      createWriteStream(temporaryPath, { flags: "wx" })
+    );
+    if (receivedBytes === 0) throw new Error(`${label}响应为空`);
+    await rename(temporaryPath, destination);
+  } finally {
+    await unlink(temporaryPath).catch(() => undefined);
+  }
 }
 
 async function installPixivDomAdapter(contents: Electron.WebContents): Promise<void> {
