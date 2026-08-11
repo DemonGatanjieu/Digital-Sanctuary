@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  ArtistRecord,
   ArtworkRecord,
   CollectionRecord,
   ElementFilterSetting
@@ -53,7 +54,9 @@ export interface SanctuaryApi {
   importImages(): Promise<ArtworkRecord[]>;
   listCollections(): Promise<CollectionRecord[]>;
   createCollection(name: string): Promise<CollectionRecord[]>;
+  updateCollectionCover(collectionId: string, artworkId: string | null): Promise<CollectionRecord[]>;
   addArtworkToCollection(artworkId: string, collectionId: string): Promise<ArtworkRecord[]>;
+  listArtists(): Promise<ArtistRecord[]>;
   listFilterSettings(): Promise<ElementFilterSetting[]>;
   updateFilterSetting(setting: ElementFilterSetting): Promise<ElementFilterSetting[]>;
   showExplore(bounds: ExploreBounds): Promise<ExploreState>;
@@ -79,12 +82,15 @@ const api: SanctuaryApi = {
   listCollections: () => ipcRenderer.invoke("collections:list") as Promise<CollectionRecord[]>,
   createCollection: (name) =>
     ipcRenderer.invoke("collections:create", name) as Promise<CollectionRecord[]>,
+  updateCollectionCover: (collectionId, artworkId) =>
+    ipcRenderer.invoke("collections:update-cover", collectionId, artworkId) as Promise<CollectionRecord[]>,
   addArtworkToCollection: (artworkId, collectionId) =>
     ipcRenderer.invoke(
       "collections:add-artwork",
       artworkId,
       collectionId
     ) as Promise<ArtworkRecord[]>,
+  listArtists: () => ipcRenderer.invoke("artists:list") as Promise<ArtistRecord[]>,
   listFilterSettings: () =>
     ipcRenderer.invoke("filters:list") as Promise<ElementFilterSetting[]>,
   updateFilterSetting: (setting) =>

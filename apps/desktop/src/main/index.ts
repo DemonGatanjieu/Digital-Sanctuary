@@ -210,6 +210,7 @@ function registerImageProtocol(): void {
 function registerIpc(): void {
   ipcMain.handle("library:list", () => database?.listArtworks() ?? []);
   ipcMain.handle("collections:list", () => database?.listCollections() ?? []);
+  ipcMain.handle("artists:list", () => database?.listArtists() ?? []);
 
   ipcMain.handle("library:import", async () => {
     if (!database || !vision) throw new Error("Application is not ready");
@@ -374,6 +375,14 @@ function registerIpc(): void {
   ipcMain.handle("collections:create", (_event, name: unknown) => {
     if (!database || typeof name !== "string") throw new Error("Invalid collection name");
     database.createCollection(name);
+    return database.listCollections();
+  });
+
+  ipcMain.handle("collections:update-cover", (_event, collectionId: unknown, artworkId: unknown) => {
+    if (!database || typeof collectionId !== "string" || (artworkId !== null && typeof artworkId !== "string")) {
+      throw new Error("Invalid collection cover assignment");
+    }
+    database.updateCollectionCover(collectionId, artworkId);
     return database.listCollections();
   });
 
@@ -652,6 +661,11 @@ function downloadCurrentPixivArtwork(): Promise<ExploreDownloadResult> {
   if (context.kind !== "artwork") {
     throw new Error("请先打开一个 Pixiv 作品详情页");
   }
+  
+  if (database?.listArtworks().some(a => a.source?.platform === "pixiv" && a.source?.workId === context.artworkId)) {
+    throw new Error("该作品已在本地画廊中，无需重复下载");
+  }
+
   return startExploreDownload("current", async () => {
     updateExploreDownloadState({
       phase: "discovering",
@@ -861,6 +875,14 @@ async function downloadPixivArtwork(
       ? pages.length
       : exploreDownloadState.totalPages + pages.length,
     message: `正在保存作品 ${artworkId}（共 ${pages.length} 页）`
+  });
+
+  database.importArtist({
+    id: metadata.authorId,
+    name: metadata.authorName,
+    avatarUrl: metadata.authorAvatarUrl,
+    avatarLocalPath: null,
+    updatedAt: new Date().toISOString()
   });
 
   const artworkDirectory = join(pixivGalleryDirectory(), artworkId);

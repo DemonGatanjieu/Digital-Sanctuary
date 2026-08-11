@@ -61,7 +61,8 @@ describe("Pixiv response validation", () => {
       artworkId: "123",
       title: "夜色",
       authorId: "456",
-      authorName: "画师"
+      authorName: "画师",
+      authorAvatarUrl: null
     });
   });
 });

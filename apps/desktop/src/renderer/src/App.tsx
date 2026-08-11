@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ELEMENT_BLACKLIST_GROUPS,
+  type ArtistRecord,
   type ArtworkRecord,
   type CollectionRecord,
   type ElementFilterSetting,
@@ -20,7 +21,7 @@ interface AppStatus {
 }
 
 type ActiveView = "gallery" | "explore" | "rules";
-type GalleryMode = "flat" | "author-work";
+type GalleryMode = "flat" | "author-work" | "collections";
 
 const actionText: Record<FilterAction, string> = {
   allow: "清晰",
@@ -32,6 +33,7 @@ export function App() {
   const [activeView, setActiveView] = useState<ActiveView>("gallery");
   const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
+  const [artists, setArtists] = useState<ArtistRecord[]>([]);
   const [filterSettings, setFilterSettings] = useState<ElementFilterSetting[]>([]);
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,13 +50,15 @@ export function App() {
       window.sanctuary.listArtworks(),
       window.sanctuary.listCollections(),
       window.sanctuary.listFilterSettings(),
-      window.sanctuary.status()
+      window.sanctuary.status(),
+      window.sanctuary.listArtists()
     ])
-      .then(([nextArtworks, nextCollections, nextFilterSettings, nextStatus]) => {
+      .then(([nextArtworks, nextCollections, nextFilterSettings, nextStatus, nextArtists]) => {
         setArtworks(nextArtworks);
         setCollections(nextCollections);
         setFilterSettings(nextFilterSettings);
         setStatus(nextStatus);
+        setArtists(nextArtists);
       })
       .catch(showError);
   }, []);
@@ -255,6 +259,7 @@ export function App() {
           <GalleryView
             artworks={artworks}
             collections={collections}
+            artists={artists}
             counts={counts}
             mode={galleryMode}
             busy={busy}
@@ -470,6 +475,7 @@ function ExploreView({
 function GalleryView({
   artworks,
   collections,
+  artists,
   counts,
   mode,
   busy,
@@ -481,6 +487,7 @@ function GalleryView({
 }: {
   artworks: ArtworkRecord[];
   collections: CollectionRecord[];
+  artists: ArtistRecord[];
   counts: { allow: number; guarded: number };
   mode: GalleryMode;
   busy: boolean;
@@ -490,7 +497,7 @@ function GalleryView({
   onAssignCollection: (artworkId: string, collectionId: string) => void;
   onModeChange: (mode: GalleryMode) => void;
 }) {
-  const authorGroups = useMemo(() => buildAuthorGroups(artworks), [artworks]);
+  const authorGroups = useMemo(() => buildAuthorGroups(artworks, artists), [artworks, artists]);
   const [selectedAuthorKey, setSelectedAuthorKey] = useState("");
   const [selectedArtworkId, setSelectedArtworkId] = useState("");
   const selectedAuthor = authorGroups.find((author) => author.key === selectedAuthorKey) ?? null;
@@ -519,6 +526,12 @@ function GalleryView({
               onClick={() => onModeChange("flat")}
             >
               平铺
+            </button>
+            <button
+              className={mode === "collections" ? "active" : ""}
+              onClick={() => onModeChange("collections")}
+            >
+              分类
             </button>
             <button
               className={mode === "author-work" ? "active" : ""}
@@ -550,6 +563,27 @@ function GalleryView({
           <h2>从一张真正喜欢的图片开始</h2>
           <p>图片保留在原位置；纯净领域只建立索引、审查结果和分类关系。</p>
           <button className="primary" onClick={onImport} disabled={busy}>选择本地图片</button>
+        </section>
+      ) : mode === "collections" ? (
+        <section className="collections-grid">
+          {collections.length === 0 && (
+            <div className="empty-state">
+              <p className="eyebrow">NO COLLECTIONS</p>
+              <h2>暂无分类</h2>
+              <p>点击上方“新建分类”来组织你的画廊</p>
+            </div>
+          )}
+          {collections.map(collection => (
+            <CollectionCard
+              key={collection.id}
+              collection={collection}
+              artworks={artworks}
+              onOpen={() => {
+                // In MVP, we might just switch to a flat view filtered by collection, 
+                // but for now let's just make it visually distinct.
+              }}
+            />
+          ))}
         </section>
       ) : mode === "flat" ? (
         <section className="gallery-grid">
@@ -609,6 +643,7 @@ interface AuthorGalleryGroup {
   id: string;
   name: string;
   pageCount: number;
+  artistRecord?: ArtistRecord;
   works: Array<{
     key: string;
     workId: string;
@@ -617,7 +652,7 @@ interface AuthorGalleryGroup {
   }>;
 }
 
-function buildAuthorGroups(artworks: readonly ArtworkRecord[]): AuthorGalleryGroup[] {
+function buildAuthorGroups(artworks: readonly ArtworkRecord[], artists: readonly ArtistRecord[]): AuthorGalleryGroup[] {
   const authors = new Map<string, AuthorGalleryGroup>();
   for (const artwork of artworks) {
     const inferred = inferPixivWorkFromFileName(artwork.fileName);
@@ -628,7 +663,9 @@ function buildAuthorGroups(artworks: readonly ArtworkRecord[]): AuthorGalleryGro
     const workKey = `${authorKey}:work:${workId}`;
     let author = authors.get(authorKey);
     if (!author) {
+      const artistRecord = artists.find(a => a.id === authorId);
       author = { key: authorKey, id: authorId, name: authorName, pageCount: 0, works: [] };
+      if (artistRecord) author.artistRecord = artistRecord;
       authors.set(authorKey, author);
     }
     let work = author.works.find((candidate) => candidate.key === workKey);
@@ -701,7 +738,11 @@ function AuthorBrowserCard({
         })}
       </span>
       <span className="author-card-body">
-        <span className="author-monogram">{author.name.slice(0, 1).toUpperCase()}</span>
+        {author.artistRecord?.avatarUrl ? (
+          <img className="author-monogram avatar" src={author.artistRecord.avatarUrl} alt="" loading="lazy" />
+        ) : (
+          <span className="author-monogram">{author.name.slice(0, 1).toUpperCase()}</span>
+        )}
         <span className="author-card-copy">
           <strong>{author.name}</strong>
           <small>{author.works.length} 个作品 · {author.pageCount} 页</small>
@@ -729,13 +770,21 @@ function AuthorDetailPage({
     <section className="author-detail-page">
       <button className="author-back" onClick={onBack}>← 全部作者</button>
       <header className="author-detail-hero">
-        <span className="author-monogram large">{author.name.slice(0, 1).toUpperCase()}</span>
+        {author.artistRecord?.avatarUrl ? (
+          <img className="author-monogram large avatar" src={author.artistRecord.avatarUrl} alt="" loading="lazy" />
+        ) : (
+          <span className="author-monogram large">{author.name.slice(0, 1).toUpperCase()}</span>
+        )}
         <div>
           <p className="eyebrow">CREATOR LIBRARY</p>
           <h2>{author.name}</h2>
           <span>{author.works.length} 个作品 · {author.pageCount} 页</span>
         </div>
-        {author.id && <code>pixiv/{author.id}</code>}
+        {author.id && (
+          <a href={`https://www.pixiv.net/users/${author.id}`} target="_blank" rel="noreferrer" className="pixiv-link">
+            <code>pixiv/{author.id}</code>
+          </a>
+        )}
       </header>
       <div className="author-works">
         {author.works.map((work) => (
@@ -1035,5 +1084,33 @@ function LazyArtworkImage({
       fetchPriority="low"
       data-lazy-state={shouldLoad ? "loaded" : "waiting"}
     />
+  );
+}
+
+function CollectionCard({
+  collection,
+  artworks,
+  onOpen
+}: {
+  collection: CollectionRecord;
+  artworks: ArtworkRecord[];
+  onOpen: () => void;
+}) {
+  const coverArtwork = artworks.find(a => a.id === collection.coverArtworkId) ?? 
+    artworks.find(a => a.collectionIds.includes(collection.id));
+  const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
+  const count = artworks.filter(a => a.collectionIds.includes(collection.id)).length;
+  
+  return (
+    <article className="collection-card" onClick={onOpen}>
+      <div className="collection-cover">
+        {coverUrl ? <img src={coverUrl} alt="" loading="lazy" /> : <div className="collection-cover-placeholder"><span>◇</span></div>}
+      </div>
+      <div className="collection-info">
+        <h3>{collection.name}</h3>
+        <small>{count} 个作品</small>
+        {collection.description && <p className="collection-desc">{collection.description}</p>}
+      </div>
+    </article>
   );
 }

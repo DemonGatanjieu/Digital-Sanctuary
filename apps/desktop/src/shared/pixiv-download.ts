@@ -21,6 +21,7 @@ export interface PixivArtworkMetadata {
   title: string;
   authorId: string;
   authorName: string;
+  authorAvatarUrl: string | null;
 }
 
 export type ExploreDownloadPhase =
@@ -153,7 +154,21 @@ export function parsePixivArtworkMetadata(
   const authorId = normalizeId(body.userId);
   const title = normalizeDisplayText(body.title, `作品 ${artworkId}`);
   const authorName = normalizeDisplayText(body.userName, `作者 ${authorId}`);
-  return { artworkId, title, authorId, authorName };
+
+  let authorAvatarUrl: string | null = null;
+  if (typeof body.userUrl === "string") {
+    authorAvatarUrl = body.userUrl;
+  } else {
+    // Sometimes it's nested or named differently, try common Pixiv patterns
+    const userDict = asRecord(body.user);
+    if (userDict && typeof userDict.imageBig === "string") authorAvatarUrl = userDict.imageBig;
+    else if (userDict && typeof userDict.image === "string") authorAvatarUrl = userDict.image;
+  }
+  if (authorAvatarUrl && authorAvatarUrl.includes("no_profile")) {
+    authorAvatarUrl = null;
+  }
+
+  return { artworkId, title, authorId, authorName, authorAvatarUrl };
 }
 
 export function safePixivImageExtension(imageUrl: string, contentType = ""): string {
