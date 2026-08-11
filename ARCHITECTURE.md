@@ -63,7 +63,7 @@ flowchart LR
 - `services/vision/python/`：WD SwinV2 Tagger v3 推理实现。
 - `packages/domain/`：元素组、阈值、标签映射和 `allow / blur / hide` 决策。
 - `packages/protocol/`：桌面端与视觉子进程之间的协议。
-- `packages/database/`：本地图库、分类、Pixiv 作者/作品来源、元素规则设置和远程审查缓存。
+- `packages/database/`：本地图库、自定义画廊分类（含封面绑定）、独立画师表（含头像快照）、Pixiv 作品来源、元素规则设置和远程审查缓存。
 - 开发环境检测到 `.venv-gpu` 时优先请求 CUDA，初始化失败回退 CPU。RTX 4050 基准中单图中位数约由 463 ms 降至 72 ms；provider 选择不改变模型版本和缓存语义。
 
 ## 3. 当前探索请求流
@@ -92,7 +92,7 @@ flowchart LR
 3. 原图请求绕开探索页内容拦截器，使用 Pixiv 作品页 `Referer`、流式临时文件和原子改名；全局网络并发上限为 4。
 4. 文件保存在用户“图片/Digital Sanctuary/Pixiv/作品 ID”中；已有文件跳过网络下载，但仍补齐数据库索引与来源元数据。
 5. 所有用户主动下载都调用 `trustArtwork`：清除旧模型结果并保存明确的 `allow` 决策，不自动运行 WD Tagger。
-6. SQLite 保存 `workId`、`pageIndex`、`authorId`、`authorName` 和标题；画廊据此聚合同一作品的多页和同一作者的作品。
+6. SQLite 保存 `workId`、`pageIndex`、`authorId`、`authorName` 和标题；分离画师实体独立入库（并保存头像快照）；画廊据此聚合同一作品的多页和同一作者的作品。
 7. 本地图片仅通过 `sanctuary-image` 自定义协议返回，并且只有数据库已索引、文件仍存在的路径可以读取。
 
 ## 4. 安全不变量
@@ -176,7 +176,8 @@ CREATE TABLE remote_image_reviews (
 1. **已完成**：元素黑名单、远程失败闭合、持久化审查缓存、占位层和一次性查看。
 2. **已完成**：作品全部页保存、公开/非公开收藏批量下载、四路限流、原子落盘、去重与来源元数据。
 3. **已完成**：主动下载信任边界、原图懒加载、平铺/作者两级浏览和沉浸式大图层。
-4. **冻结**：第一方广告美容过滤；宽泛 DOM 方案不得恢复。视口审查实验保持关闭，直到本地 fixture 能覆盖候选上报到图片重载的完整链路。
+4. **已完成**：MVP 画廊资产管理重构，引入独立 `ArtistRecord`（画师头像）并扩展 `CollectionRecord`（自定义封面）。
+5. **冻结**：第一方广告美容过滤；宽泛 DOM 方案不得恢复。视口审查实验保持关闭，直到本地 fixture 能覆盖候选上报到图片重载的完整链路。
 5. **下一阶段**：把“模型整理”设计为显式、可预览、可撤销的标签建议流程，并将分析结果与展示信任状态分表保存。
 6. **随后进行**：按上面的 `explore/`、`download/`、`library/` 边界拆分 `main/index.ts`，再评估审查字节复用和可选缩略图缓存。
 

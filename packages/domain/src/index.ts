@@ -45,6 +45,14 @@ export interface ArtworkRecord {
   source: ArtworkSource | null;
 }
 
+export interface ArtistRecord {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  avatarLocalPath: string | null;
+  updatedAt: string;
+}
+
 export interface ArtworkSource {
   platform: "pixiv";
   workId: string;
@@ -58,6 +66,7 @@ export interface CollectionRecord {
   id: string;
   name: string;
   description: string;
+  coverArtworkId?: string;
   createdAt: string;
 }
 

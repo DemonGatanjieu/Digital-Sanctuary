@@ -34,7 +34,16 @@ interface CollectionRow {
   id: string;
   name: string;
   description: string;
+  cover_artwork_id: string | null;
   created_at: string;
+}
+
+interface ArtistRow {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  avatar_local_path: string | null;
+  updated_at: string;
 }
 
 interface ElementFilterSettingRow {
@@ -215,14 +224,21 @@ export class LibraryDatabase {
     return collection;
   }
 
+  updateCollectionCover(collectionId: string, artworkId: string | null): void {
+    this.#database
+      .prepare("UPDATE collections SET cover_artwork_id = ? WHERE id = ?")
+      .run(artworkId, collectionId);
+  }
+
   listCollections(): CollectionRecord[] {
     const rows = this.#database
-      .prepare("SELECT id, name, description, created_at FROM collections ORDER BY created_at")
+      .prepare("SELECT id, name, description, cover_artwork_id, created_at FROM collections ORDER BY created_at")
       .all() as unknown as CollectionRow[];
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
       description: row.description,
+      ...(row.cover_artwork_id ? { coverArtworkId: row.cover_artwork_id } : {}),
       createdAt: row.created_at
     }));
   }
@@ -233,6 +249,39 @@ export class LibraryDatabase {
         "INSERT OR IGNORE INTO collection_artworks (collection_id, artwork_id) VALUES (?, ?)"
       )
       .run(collectionId, artworkId);
+  }
+
+  importArtist(artist: import("@sanctuary/domain").ArtistRecord): void {
+    this.#database
+      .prepare(
+        `INSERT INTO artists (id, name, avatar_url, avatar_local_path, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           avatar_url = excluded.avatar_url,
+           avatar_local_path = excluded.avatar_local_path,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        artist.id,
+        artist.name,
+        artist.avatarUrl,
+        artist.avatarLocalPath,
+        artist.updatedAt
+      );
+  }
+
+  listArtists(): import("@sanctuary/domain").ArtistRecord[] {
+    const rows = this.#database
+      .prepare("SELECT id, name, avatar_url, avatar_local_path, updated_at FROM artists ORDER BY updated_at DESC")
+      .all() as unknown as ArtistRow[];
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      avatarUrl: row.avatar_url,
+      avatarLocalPath: row.avatar_local_path,
+      updatedAt: row.updated_at
+    }));
   }
 
   listElementFilterSettings(): ElementFilterSetting[] {
@@ -386,7 +435,16 @@ export class LibraryDatabase {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT NOT NULL DEFAULT '',
+        cover_artwork_id TEXT REFERENCES artworks(id) ON DELETE SET NULL,
         created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS artists (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        avatar_url TEXT,
+        avatar_local_path TEXT,
+        updated_at TEXT NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS collection_artworks (
@@ -421,12 +479,23 @@ export class LibraryDatabase {
         ON remote_image_reviews(reviewed_at DESC);
     `);
     this.#ensureArtworkSourceColumns();
+    this.#ensureCollectionColumns();
     this.#database.exec(`
       CREATE INDEX IF NOT EXISTS idx_artworks_source_work
         ON artworks(source_platform, source_work_id, source_page_index);
       CREATE INDEX IF NOT EXISTS idx_artworks_author
         ON artworks(source_platform, author_id, source_work_id);
     `);
+  }
+
+  #ensureCollectionColumns(): void {
+    const columns = new Set(
+      (this.#database.prepare("PRAGMA table_info(collections)").all() as unknown as Array<{ name: string }>)
+        .map((column) => column.name)
+    );
+    if (!columns.has("cover_artwork_id")) {
+      this.#database.exec("ALTER TABLE collections ADD COLUMN cover_artwork_id TEXT REFERENCES artworks(id) ON DELETE SET NULL");
+    }
   }
 
   #ensureArtworkSourceColumns(): void {
