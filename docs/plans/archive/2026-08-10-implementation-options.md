@@ -1,6 +1,8 @@
 # 纯净领域（Digital Sanctuary）实施路线备选
 
-> 本文是 `Project_Vision.md` 与 `Implementation_Plan_Draft.md` 的下一层落地方案。它不替代愿景，也不急着把所有技术选择一次定死；重点是比较不同开工顺序、明确验收门槛，并避免一开始创建错误的目录边界。
+> **归档文档**：路线 A/B/C 的选择已经结束，首版采用 Electron + React + TypeScript、Python 视觉子进程和 SQLite。本文只保留当时的比较与止损依据；唯一现行路线见 [`../ACTIVE_ROADMAP.md`](../ACTIVE_ROADMAP.md)。
+
+> 本文原本是 `Project_Vision.md` 与 `Implementation_Plan_Draft.md` 的下一层落地方案；其中的“待选择”措辞均属于历史上下文。
 
 ## 0. 当前建议结论
 

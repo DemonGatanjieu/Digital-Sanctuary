@@ -65,10 +65,10 @@ Python 视觉单测也可以单独运行：
 ## 设计文档
 
 - `Project_Vision.md`：产品愿景。
-- `Implementation_Plan_Options.md`：三条实施路线及止损条件。
-- `Project_Structure_Plan.md`：目录与依赖边界。
+- `docs/plans/ACTIVE_ROADMAP.md`：唯一现行实施路线。
+- `docs/plans/archive/`：已结束的路线比较、启动草稿和建仓前目录设想，仅供追溯。
 - `docs/adr/`：已经确定的首版架构决策。
 - `docs/research/`：模型与安全浏览技术探针结论。
 - `docs/known-issues/`：已确认、暂不阻塞推进的问题与临时处理。
 - `ARCHITECTURE.md`：当前架构、安全不变量与目标模块拆分。
-- `docs/handoff/`：供后续开发者或代码模型继续实现的状态、计划和验收清单。
+- `docs/handoff/`：供后续开发者或代码模型继续实现的当前状态和验收清单。

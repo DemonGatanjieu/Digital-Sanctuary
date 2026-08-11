@@ -180,4 +180,4 @@ CREATE TABLE remote_image_reviews (
 5. **下一阶段**：把“模型整理”设计为显式、可预览、可撤销的标签建议流程，并将分析结果与展示信任状态分表保存。
 6. **随后进行**：按上面的 `explore/`、`download/`、`library/` 边界拆分 `main/index.ts`，再评估审查字节复用和可选缩略图缓存。
 
-详细任务、止损条件和验收步骤见 `docs/handoff/`。
+详细任务与止损条件见 `docs/plans/ACTIVE_ROADMAP.md`，验收步骤见 `docs/handoff/02_VERIFICATION_CHECKLIST.md`。

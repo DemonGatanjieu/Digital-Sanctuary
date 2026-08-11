@@ -1,5 +1,7 @@
 # 纯净领域（Digital Sanctuary）目录结构计划
 
+> **归档文档**：这是建仓前的目标目录设想，部分模块尚未建立，实际边界已经由 [`../../../ARCHITECTURE.md`](../../../ARCHITECTURE.md) 取代。不要按本文一次性创建空目录。
+
 > 当前仓库根目录 `E:\PIxiv` 就是项目根目录，不再额外套一层 `digital-sanctuary/`。本计划只定义边界；在技术探针完成前，不需要一次性创建全部目录。
 
 ## 1. 目标结构
@@ -157,4 +159,3 @@ site adapters ─> domain
 3. `0003-library-ownership.md`：首版只索引，还是由应用托管文件。
 4. `0004-vision-process-boundary.md`：为什么视觉服务使用子进程协议。
 5. `0005-database-choice.md`：为什么元数据使用 SQLite。
-

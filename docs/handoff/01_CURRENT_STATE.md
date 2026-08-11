@@ -15,8 +15,8 @@
 1. `Project_Vision.md`
 2. `AI_Filtering_Strategy.md`
 3. `ARCHITECTURE.md`
-4. `docs/handoff/02_NEXT_IMPLEMENTATION_PLAN.md`
-5. `docs/handoff/03_VERIFICATION_CHECKLIST.md`
+4. `docs/plans/ACTIVE_ROADMAP.md`
+5. `docs/handoff/02_VERIFICATION_CHECKLIST.md`
 6. `docs/known-issues/README.md`
 
 不要根据旧草稿恢复年龄分级过滤。项目过滤的是用户不欢迎的画面元素；正常 R18 不是默认拦截目标。
