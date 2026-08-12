@@ -4,6 +4,7 @@ import {
   hasContiguousPixivPages,
   parsePixivArtworkPages,
   parsePixivArtworkMetadata,
+  parsePixivArtistProfile,
   parsePixivBookmarkPage,
   parsePixivPageContext,
   reachedConsecutiveFailureLimit,
@@ -88,6 +89,37 @@ describe("Pixiv response validation", () => {
         userUrl: "https://i.pximg.net/user-profile/img/avatar.jpg"
       }
     }, "123").authorAvatarUrl).toBe("https://i.pximg.net/user-profile/img/avatar.jpg");
+  });
+
+  it("extracts the large avatar from the dedicated artist profile response", () => {
+    expect(parsePixivArtistProfile({
+      error: false,
+      body: {
+        userId: "456",
+        name: "画师",
+        image: "https://i.pximg.net/user-profile/img/avatar_50.png",
+        imageBig: "https://i.pximg.net/user-profile/img/avatar_170.png"
+      }
+    }, "456")).toEqual({
+      authorId: "456",
+      authorName: "画师",
+      avatarUrl: "https://i.pximg.net/user-profile/img/avatar_170.png"
+    });
+  });
+
+  it("rejects mismatched artists and non-Pixiv profile images", () => {
+    expect(() => parsePixivArtistProfile({
+      error: false,
+      body: { userId: "999", name: "错误作者" }
+    }, "456")).toThrow("作者 ID");
+    expect(parsePixivArtistProfile({
+      error: false,
+      body: {
+        userId: "456",
+        name: "画师",
+        imageBig: "https://evil.example/avatar.png"
+      }
+    }, "456").avatarUrl).toBeNull();
   });
 });
 

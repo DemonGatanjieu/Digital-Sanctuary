@@ -22,6 +22,7 @@ import {
   decideFilter,
   isElementFilterSetting,
   rulesFingerprint,
+  type ArtistRecord,
   type ArtworkRecord,
   type VisionAssessment
 } from "@sanctuary/domain";
@@ -54,12 +55,14 @@ import {
   completedDownloadPhase,
   hasContiguousPixivPages,
   IDLE_EXPLORE_DOWNLOAD_STATE,
+  parsePixivArtistProfile,
   parsePixivArtworkMetadata,
   parsePixivArtworkPages,
   parsePixivBookmarkPage,
   parsePixivPageContext,
   reachedConsecutiveFailureLimit,
   safePixivImageExtension,
+  type ArtistAvatarRepairResult,
   type BookmarkDownloadPreview,
   type ExploreDownloadResult,
   type ExploreDownloadState,
@@ -94,6 +97,7 @@ let exploreError = "";
 let exploreStateTimer: ReturnType<typeof setTimeout> | undefined;
 let exploreDownloadState: ExploreDownloadState = { ...IDLE_EXPLORE_DOWNLOAD_STATE };
 let activeExploreDownload: Promise<ExploreDownloadResult> | undefined;
+let activeArtistAvatarRepair: Promise<ArtistAvatarRepairResult> | undefined;
 interface RemoteReviewOutcome {
   allowed: boolean;
   reasons: string[];
@@ -217,6 +221,7 @@ function registerIpc(): void {
   ipcMain.handle("library:list", () => database?.listArtworks() ?? []);
   ipcMain.handle("collections:list", () => database?.listCollections() ?? []);
   ipcMain.handle("artists:list", () => database?.listArtists() ?? []);
+  ipcMain.handle("artists:repair-avatars", () => repairMissingArtistAvatars());
 
   ipcMain.handle("library:import", async () => {
     if (!database || !vision) throw new Error("Application is not ready");
@@ -735,6 +740,9 @@ function startExploreDownload(
   if (activeExploreDownload) {
     throw new Error("已有下载任务正在运行，请等待它完成");
   }
+  if (activeArtistAvatarRepair) {
+    throw new Error("作者头像正在补全，请等待完成后再下载作品");
+  }
   exploreDownloadState = {
     ...IDLE_EXPLORE_DOWNLOAD_STATE,
     phase: "discovering",
@@ -778,6 +786,58 @@ function requireExploreSession(): Session {
 
 function pixivGalleryDirectory(): string {
   return join(app.getPath("pictures"), "Digital Sanctuary", "Pixiv");
+}
+
+function repairMissingArtistAvatars(): Promise<ArtistAvatarRepairResult> {
+  if (!database) throw new Error("本地画廊尚未准备好");
+  if (activeExploreDownload) {
+    throw new Error("作品下载任务正在运行，请等待完成后再补全作者头像");
+  }
+  if (activeArtistAvatarRepair) return activeArtistAvatarRepair;
+
+  const running = runArtistAvatarRepair().finally(() => {
+    activeArtistAvatarRepair = undefined;
+  });
+  activeArtistAvatarRepair = running;
+  return running;
+}
+
+async function runArtistAvatarRepair(): Promise<ArtistAvatarRepairResult> {
+  if (!database) throw new Error("本地画廊尚未准备好");
+  const artists = database.listArtists();
+  const targetSession = ensureExploreView().webContents.session;
+  const result: ArtistAvatarRepairResult = {
+    totalArtists: artists.length,
+    repairedArtists: 0,
+    alreadyPresentArtists: 0,
+    unavailableArtists: 0,
+    failedArtists: 0,
+    lastFailure: ""
+  };
+
+  for (let index = 0; index < artists.length; index += 1) {
+    const artist = artists[index]!;
+    if (hasUsableArtistAvatar(artist)) {
+      result.alreadyPresentArtists += 1;
+      continue;
+    }
+    try {
+      const repaired = await fetchAndStorePixivArtist(targetSession, artist.id, artist.name);
+      if (repaired.avatarLocalPath) result.repairedArtists += 1;
+      else result.unavailableArtists += 1;
+    } catch (error) {
+      result.failedArtists += 1;
+      result.lastFailure = `${artist.name}（${artist.id}）：${errorMessage(error)}`;
+      console.warn(`[pixiv-avatar-repair] ${result.lastFailure}`, error);
+      if (error instanceof PixivBatchAbortError) {
+        result.failedArtists += artists
+          .slice(index + 1)
+          .filter((remaining) => !hasUsableArtistAvatar(remaining)).length;
+        break;
+      }
+    }
+  }
+  return result;
 }
 
 async function fetchPixivBookmarkTotal(
@@ -871,6 +931,23 @@ async function fetchPixivArtworkMetadata(
       `${PIXIV_HOME_URL}artworks/${artworkId}`
     ),
     artworkId
+  );
+}
+
+async function fetchPixivArtistProfile(
+  targetSession: Session,
+  authorId: string
+) {
+  const endpoint = new URL(`/ajax/user/${encodeURIComponent(authorId)}`, PIXIV_HOME_URL);
+  endpoint.searchParams.set("full", "1");
+  endpoint.searchParams.set("lang", "zh");
+  return parsePixivArtistProfile(
+    await fetchPixivJson(
+      targetSession,
+      endpoint.toString(),
+      `${PIXIV_HOME_URL}users/${authorId}`
+    ),
+    authorId
   );
 }
 
@@ -988,6 +1065,44 @@ async function fetchPixivJson(
   }
 }
 
+function hasUsableArtistAvatar(artist: ArtistRecord | undefined): boolean {
+  return !!artist?.avatarLocalPath && existsSync(artist.avatarLocalPath);
+}
+
+async function fetchAndStorePixivArtist(
+  targetSession: Session,
+  authorId: string,
+  fallbackName: string
+): Promise<ArtistRecord> {
+  if (!database) throw new Error("本地画廊尚未准备好");
+  const profile = await fetchPixivArtistProfile(targetSession, authorId);
+  let avatarLocalPath: string | null = null;
+  if (profile.avatarUrl) {
+    const extension = safePixivImageExtension(profile.avatarUrl);
+    const avatarDirectory = join(pixivGalleryDirectory(), "..", "avatars");
+    await mkdir(avatarDirectory, { recursive: true });
+    const destination = join(avatarDirectory, `${authorId}${extension}`);
+    if (!existsSync(destination)) {
+      await downloadPixivOriginalImage(
+        profile.avatarUrl,
+        `${PIXIV_HOME_URL}users/${authorId}`,
+        destination,
+        "头像"
+      );
+    }
+    avatarLocalPath = destination;
+  }
+  const artist: ArtistRecord = {
+    id: authorId,
+    name: profile.authorName || fallbackName,
+    avatarUrl: profile.avatarUrl,
+    avatarLocalPath,
+    updatedAt: new Date().toISOString()
+  };
+  database.importArtist(artist);
+  return artist;
+}
+
 async function downloadPixivArtwork(
   artworkId: string,
   resetPageTotal: boolean,
@@ -1000,7 +1115,7 @@ async function downloadPixivArtwork(
   const existingArtist = authorId
     ? database.listArtists().find((artist) => artist.id === authorId)
     : undefined;
-  if (existingArtist?.avatarLocalPath && isCompleteIndexedPixivWork(localArtworks)) {
+  if (hasUsableArtistAvatar(existingArtist) && isCompleteIndexedPixivWork(localArtworks)) {
     for (const local of localArtworks) {
       if (trustAsUserDownload) database.trustArtwork(local.id);
     }
@@ -1009,6 +1124,27 @@ async function downloadPixivArtwork(
 
   const targetSession = requireExploreSession();
   const metadata = await fetchPixivArtworkMetadata(targetSession, artworkId);
+  const existingArtistBefore = database.listArtists().find((artist) => artist.id === metadata.authorId);
+  if (existingArtistBefore && hasUsableArtistAvatar(existingArtistBefore)) {
+    database.importArtist({
+      ...existingArtistBefore,
+      name: metadata.authorName,
+      updatedAt: new Date().toISOString()
+    });
+  } else {
+    try {
+      await fetchAndStorePixivArtist(targetSession, metadata.authorId, metadata.authorName);
+    } catch (error) {
+      console.warn(`[pixiv-avatar] ${metadata.authorId}: ${errorMessage(error)}`);
+      database.importArtist({
+        id: metadata.authorId,
+        name: metadata.authorName,
+        avatarUrl: existingArtistBefore?.avatarUrl ?? metadata.authorAvatarUrl,
+        avatarLocalPath: null,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  }
   const pages = await fetchPixivArtworkPages(targetSession, artworkId);
   updateExploreDownloadState({
     phase: "downloading",
@@ -1016,41 +1152,6 @@ async function downloadPixivArtwork(
       ? pages.length
       : exploreDownloadState.totalPages + pages.length,
     message: `正在保存作品 ${artworkId}（共 ${pages.length} 页）`
-  });
-
-  let avatarLocalPath: string | null = null;
-  const existingArtistBefore = database.listArtists().find(a => a.id === metadata.authorId);
-  if (existingArtistBefore?.avatarLocalPath) {
-    avatarLocalPath = existingArtistBefore.avatarLocalPath;
-  }
-  
-  if (metadata.authorAvatarUrl && !avatarLocalPath) {
-    const extension = safePixivImageExtension(metadata.authorAvatarUrl);
-    const avatarDir = join(pixivGalleryDirectory(), "..", "avatars");
-    await mkdir(avatarDir, { recursive: true });
-    const newAvatarLocalPath = join(avatarDir, `${metadata.authorId}${extension}`);
-    if (!existsSync(newAvatarLocalPath)) {
-      try {
-        await downloadPixivOriginalImage(
-          metadata.authorAvatarUrl,
-          `${PIXIV_HOME_URL}users/${metadata.authorId}`,
-          newAvatarLocalPath
-        );
-        avatarLocalPath = newAvatarLocalPath;
-      } catch (err) {
-        console.warn(`[pixiv-avatar] ${metadata.authorId}: ${errorMessage(err)}`);
-      }
-    } else {
-      avatarLocalPath = newAvatarLocalPath;
-    }
-  }
-
-  database.importArtist({
-    id: metadata.authorId,
-    name: metadata.authorName,
-    avatarUrl: metadata.authorAvatarUrl,
-    avatarLocalPath,
-    updatedAt: new Date().toISOString()
   });
 
   const artworkDirectory = join(pixivGalleryDirectory(), artworkId);
@@ -1129,7 +1230,8 @@ function isCompleteIndexedPixivWork(artworks: readonly ArtworkRecord[]): boolean
 async function downloadPixivOriginalImage(
   imageUrl: string,
   referrer: string,
-  destination: string
+  destination: string,
+  label = "原图"
 ): Promise<void> {
   await pixivDownloadNetworkGate.run(async () => {
     // Pixiv requires a full Referer for original images. Chromium Fetch treats
@@ -1141,7 +1243,7 @@ async function downloadPixivOriginalImage(
         Referer: referrer
       }
     });
-    await saveImageResponse(response, destination, "原图");
+    await saveImageResponse(response, destination, label);
   });
 }
 

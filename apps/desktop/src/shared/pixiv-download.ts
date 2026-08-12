@@ -24,6 +24,21 @@ export interface PixivArtworkMetadata {
   authorAvatarUrl: string | null;
 }
 
+export interface PixivArtistProfile {
+  authorId: string;
+  authorName: string;
+  avatarUrl: string | null;
+}
+
+export interface ArtistAvatarRepairResult {
+  totalArtists: number;
+  repairedArtists: number;
+  alreadyPresentArtists: number;
+  unavailableArtists: number;
+  failedArtists: number;
+  lastFailure: string;
+}
+
 export type ExploreDownloadPhase =
   | "idle"
   | "discovering"
@@ -212,6 +227,30 @@ export function parsePixivArtworkMetadata(
   }
 
   return { artworkId, title, authorId, authorName, authorAvatarUrl };
+}
+
+export function parsePixivArtistProfile(
+  value: unknown,
+  expectedAuthorId: string
+): PixivArtistProfile {
+  const envelope = asRecord(value);
+  const body = asRecord(envelope?.body);
+  if (envelope?.error !== false || !body) {
+    throw new Error("Pixiv 返回了无法识别的作者资料");
+  }
+  const authorId = normalizeId(body.userId);
+  if (authorId !== expectedAuthorId) {
+    throw new Error("Pixiv 返回的作者 ID 与请求不一致");
+  }
+  const authorName = normalizeDisplayText(body.name, `作者 ${authorId}`);
+  const candidates = [body.imageBig, body.image];
+  const avatarUrl = candidates.find(
+    (candidate): candidate is string =>
+      typeof candidate === "string" &&
+      !candidate.includes("no_profile") &&
+      isPixivOriginalImageUrl(candidate)
+  ) ?? null;
+  return { authorId, authorName, avatarUrl };
 }
 
 export function safePixivImageExtension(imageUrl: string, contentType = ""): string {

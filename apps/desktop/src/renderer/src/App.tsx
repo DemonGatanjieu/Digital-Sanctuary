@@ -37,6 +37,8 @@ export function App() {
   const [filterSettings, setFilterSettings] = useState<ElementFilterSetting[]>([]);
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [repairingAvatars, setRepairingAvatars] = useState(false);
+  const [avatarRepairMessage, setAvatarRepairMessage] = useState("");
   const [savingGroupId, setSavingGroupId] = useState("");
   const [error, setError] = useState("");
   const [exploreState, setExploreState] = useState<ExploreState>(initialExploreState);
@@ -118,6 +120,26 @@ export function App() {
       setCollections(await window.sanctuary.updateCollectionCover(collectionId, artworkId));
     } catch (caught) {
       showError(caught);
+    }
+  }
+
+  async function repairArtistAvatars() {
+    setRepairingAvatars(true);
+    setAvatarRepairMessage("");
+    setError("");
+    try {
+      const result = await window.sanctuary.repairArtistAvatars();
+      await refreshLibrary();
+      const parts = [`补全 ${result.repairedArtists}`];
+      if (result.alreadyPresentArtists > 0) parts.push(`已有 ${result.alreadyPresentArtists}`);
+      if (result.unavailableArtists > 0) parts.push(`无自定义头像 ${result.unavailableArtists}`);
+      if (result.failedArtists > 0) parts.push(`失败 ${result.failedArtists}`);
+      setAvatarRepairMessage(parts.join(" · "));
+      if (result.lastFailure) setError(`头像补全未全部完成：${result.lastFailure}`);
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setRepairingAvatars(false);
     }
   }
 
@@ -283,11 +305,14 @@ export function App() {
             counts={counts}
             mode={galleryMode}
             busy={busy}
+            repairingAvatars={repairingAvatars}
+            avatarRepairMessage={avatarRepairMessage}
             error={error}
             onImport={importImages}
             onCreateCollection={createCollection}
             onAssignCollection={assignCollection}
             onUpdateCollectionCover={updateCollectionCover}
+            onRepairArtistAvatars={repairArtistAvatars}
             onModeChange={setGalleryMode}
           />
         ) : activeView === "rules" ? (
@@ -502,11 +527,14 @@ function GalleryView({
   counts,
   mode,
   busy,
+  repairingAvatars,
+  avatarRepairMessage,
   error,
   onImport,
   onCreateCollection,
   onAssignCollection,
   onUpdateCollectionCover,
+  onRepairArtistAvatars,
   onModeChange
 }: {
   artworks: ArtworkRecord[];
@@ -515,11 +543,14 @@ function GalleryView({
   counts: { allow: number; guarded: number };
   mode: GalleryMode;
   busy: boolean;
+  repairingAvatars: boolean;
+  avatarRepairMessage: string;
   error: string;
   onImport: () => void;
   onCreateCollection: () => void;
   onAssignCollection: (artworkId: string, collectionId: string) => void;
   onUpdateCollectionCover: (collectionId: string, artworkId: string | null) => void;
+  onRepairArtistAvatars: () => void;
   onModeChange: (mode: GalleryMode) => void;
 }) {
   const authorGroups = useMemo(() => buildAuthorGroups(artworks, artists), [artworks, artists]);
@@ -536,6 +567,7 @@ function GalleryView({
   const missingPixivMetadata = artworks.filter(
     (artwork) => !artwork.source && /^\d+_p\d+\./i.test(artwork.fileName)
   ).length;
+  const missingAvatarCount = artists.filter((artist) => !artist.avatarLocalPath).length;
   useEffect(() => {
     if (mode !== "author-work") setSelectedAuthorKey("");
     if (mode !== "collections") setSelectedCollectionId("");
@@ -568,6 +600,22 @@ function GalleryView({
               作者 · 作品
             </button>
           </div>
+          {mode === "author-work" && (
+            <div className="avatar-repair-control">
+              <button
+                className="secondary"
+                disabled={repairingAvatars || artists.length === 0}
+                onClick={onRepairArtistAvatars}
+              >
+                {repairingAvatars
+                  ? "正在补全头像…"
+                  : missingAvatarCount > 0
+                    ? `补全作者头像 (${missingAvatarCount})`
+                    : "重新检查头像"}
+              </button>
+              {avatarRepairMessage && <small>{avatarRepairMessage}</small>}
+            </div>
+          )}
           <button className="secondary" onClick={onCreateCollection}>新建分类</button>
           <button className="primary" onClick={onImport} disabled={busy}>
             {busy ? "正在审查…" : "导入图片"}

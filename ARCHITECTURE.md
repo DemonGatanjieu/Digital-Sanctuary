@@ -93,7 +93,7 @@ flowchart LR
 3. 原图请求绕开探索页内容拦截器，使用 Pixiv 作品页 `Referer`、流式临时文件和原子改名；全局网络并发上限为 4。
 4. 文件保存在用户“图片/Digital Sanctuary/Pixiv/作品 ID”中；已索引页码连续、文件存在且作者资料已经入库的作品触发本地快速跳过。所有 Pixiv JSON API 请求接入 800 ms 全局节流。
 5. 所有用户主动下载都调用 `trustArtwork`：清除旧模型结果并保存明确的 `allow` 决策，不自动运行 WD Tagger。
-6. SQLite 保存 `workId`、`pageIndex`、`authorId`、`authorName` 和标题；分离画师实体独立入库（并保存头像快照）；画廊据此聚合同一作品的多页和同一作者的作品。
+6. SQLite 保存 `workId`、`pageIndex`、`authorId`、`authorName` 和标题；分离画师实体独立入库。头像不再猜测作品 JSON，而是从 `/ajax/user/:authorId?full=1` 的 `imageBig` 获取并保存本地快照；画廊也提供不重下作品的显式补全入口。
 7. 本地图片仅通过 `sanctuary-image` 自定义协议返回，并且只有数据库已索引、文件仍存在的路径可以读取。
 
 ## 4. 安全不变量

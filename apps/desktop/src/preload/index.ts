@@ -6,6 +6,7 @@ import type {
   ElementFilterSetting
 } from "@sanctuary/domain";
 import type {
+  ArtistAvatarRepairResult,
   BookmarkDownloadPreview,
   ExploreDownloadResult,
   ExploreDownloadState,
@@ -57,6 +58,7 @@ export interface SanctuaryApi {
   updateCollectionCover(collectionId: string, artworkId: string | null): Promise<CollectionRecord[]>;
   addArtworkToCollection(artworkId: string, collectionId: string): Promise<ArtworkRecord[]>;
   listArtists(): Promise<ArtistRecord[]>;
+  repairArtistAvatars(): Promise<ArtistAvatarRepairResult>;
   listFilterSettings(): Promise<ElementFilterSetting[]>;
   updateFilterSetting(setting: ElementFilterSetting): Promise<ElementFilterSetting[]>;
   showExplore(bounds: ExploreBounds): Promise<ExploreState>;
@@ -91,6 +93,8 @@ const api: SanctuaryApi = {
       collectionId
     ) as Promise<ArtworkRecord[]>,
   listArtists: () => ipcRenderer.invoke("artists:list") as Promise<ArtistRecord[]>,
+  repairArtistAvatars: () =>
+    ipcRenderer.invoke("artists:repair-avatars") as Promise<ArtistAvatarRepairResult>,
   listFilterSettings: () =>
     ipcRenderer.invoke("filters:list") as Promise<ElementFilterSetting[]>,
   updateFilterSetting: (setting) =>
