@@ -274,7 +274,7 @@ export function App() {
         </p>
       </aside>
 
-      <main>
+      <main className="animate-fade-in">
         {activeView === "gallery" ? (
           <GalleryView
             artworks={artworks}
@@ -428,7 +428,7 @@ function ExploreView({
   }
 
   return (
-    <section className="explore-page">
+    <section className="explore-page animate-fade-in">
       <div className="browser-toolbar">
         <button
           title="后退"

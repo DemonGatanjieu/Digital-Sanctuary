@@ -39,11 +39,9 @@ flowchart LR
   VIEW -->|"广告、跟踪与站外 iframe"| ADBLOCK["网络级广告策略"]
 ```
 
-### 2.1 本地 UI
-
-- `apps/desktop/src/renderer/src/App.tsx`：画廊、规则和探索三种视图，以及下载进度、作者浏览和大图查看交互。
-- `apps/desktop/src/renderer/src/styles.css`：默认浅色设计，白色导航、浅灰内容区、Pixiv 蓝交互色。
-- 探索模式保留精简应用侧栏，远程 Pixiv 页面填满其余内容区；应用按钮和网页内下载按钮最终都只向主进程发送受限命令。
+### 2.1 前端 UI
+- 基于 React 18，没有任何厚重的 UI 库依赖，保持极速响应。
+- `apps/desktop/src/renderer/src/styles.css`：全局采用高端定制化 CSS。使用了玻璃拟态 (Glassmorphism)、带大面积弥散光晕 (Mesh Gradients) 的全局背景、细腻的鼠标悬浮微动效，以及高级英文字体库 (Outfit, Plus Jakarta Sans)，带给用户类似于苹果级别的现代化画廊体验。头像展示已得到重点强化。探索模式保留精简应用侧栏，远程 Pixiv 页面填满其余内容区；应用按钮和网页内下载按钮最终都只向主进程发送受限命令。
 - 画廊直接使用原图并进行视口懒加载，不生成降质缩略图。它支持平铺和“作者封面墙 → 作者作品页”两级浏览；点击图片进入可翻页、可按 `Esc` 关闭的大图层。
 
 ### 2.2 Electron 主进程
