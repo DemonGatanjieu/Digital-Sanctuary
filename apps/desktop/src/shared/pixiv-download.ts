@@ -191,6 +191,20 @@ export function parsePixivArtworkMetadata(
       authorAvatarUrl = userDict.imageBig;
     } else if (userDict && typeof userDict.image === "string" && isPixivOriginalImageUrl(userDict.image)) {
       authorAvatarUrl = userDict.image;
+    } else {
+      const userIllusts = asRecord(body.userIllusts);
+      if (userIllusts) {
+        const firstIllust = Object.values(userIllusts)[0] as any;
+        if (firstIllust && typeof firstIllust.profileImageUrl === "string" && isPixivOriginalImageUrl(firstIllust.profileImageUrl)) {
+          authorAvatarUrl = firstIllust.profileImageUrl;
+        }
+      }
+      if (!authorAvatarUrl) {
+        const zengo = (asRecord(body.noLoginData)?.zengoIdWorks as any)?.[0];
+        if (zengo && typeof zengo.profileImageUrl === "string" && isPixivOriginalImageUrl(zengo.profileImageUrl)) {
+          authorAvatarUrl = zengo.profileImageUrl;
+        }
+      }
     }
   }
   if (authorAvatarUrl && authorAvatarUrl.includes("no_profile")) {
