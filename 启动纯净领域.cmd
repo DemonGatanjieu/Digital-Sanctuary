@@ -15,7 +15,7 @@ if not exist "%SANCTUARY_ELECTRON%" (
   exit /b 1
 )
 
-powershell.exe -NoProfile -Command "$root=[IO.Path]::GetFullPath('%~dp0'); $running=Get-CimInstance Win32_Process -Filter 'Name = ''electron.exe''' -ErrorAction SilentlyContinue ^| Where-Object { $_.CommandLine -like ('*' + $root + '*') -and $_.CommandLine -notmatch '--type=' }; if ($running) { exit 2 }"
+powershell.exe -NoProfile -Command "$root=[IO.Path]::GetFullPath('%~dp0'); $running=Get-CimInstance Win32_Process -Filter 'Name = ''electron.exe''' -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like ('*' + $root + '*') -and $_.CommandLine -notmatch '--type=' }; if ($running) { exit 2 }"
 if "%errorlevel%"=="2" (
   echo [ERROR] Digital Sanctuary is already running.
   echo Close the existing window before launching an updated build.

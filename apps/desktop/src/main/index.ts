@@ -1031,8 +1031,7 @@ async function downloadPixivArtwork(
     const newAvatarLocalPath = join(avatarDir, `${metadata.authorId}${extension}`);
     if (!existsSync(newAvatarLocalPath)) {
       try {
-        await downloadPixivSessionImage(
-          targetSession,
+        await downloadPixivOriginalImage(
           metadata.authorAvatarUrl,
           `${PIXIV_HOME_URL}users/${metadata.authorId}`,
           newAvatarLocalPath
@@ -1126,24 +1125,6 @@ function isCompleteIndexedPixivWork(artworks: readonly ArtworkRecord[]): boolean
   return artworks.every((artwork) => existsSync(artwork.path));
 }
 
-async function downloadPixivSessionImage(
-  targetSession: Session,
-  imageUrl: string,
-  referrer: string,
-  destination: string
-): Promise<void> {
-  await pixivDownloadNetworkGate.run(async () => {
-    const response = await targetSession.fetch(imageUrl, {
-      credentials: "include",
-      referrer,
-      headers: {
-        Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8"
-      },
-      bypassCustomProtocolHandlers: true
-    });
-    await saveImageResponse(response, destination, "头像");
-  });
-}
 
 async function downloadPixivOriginalImage(
   imageUrl: string,
