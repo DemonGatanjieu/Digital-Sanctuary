@@ -1000,7 +1000,7 @@ async function downloadPixivArtwork(
   const existingArtist = authorId
     ? database.listArtists().find((artist) => artist.id === authorId)
     : undefined;
-  if (existingArtist && isCompleteIndexedPixivWork(localArtworks)) {
+  if (existingArtist?.avatarLocalPath && isCompleteIndexedPixivWork(localArtworks)) {
     for (const local of localArtworks) {
       if (trustAsUserDownload) database.trustArtwork(local.id);
     }
