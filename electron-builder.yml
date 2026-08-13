@@ -1,0 +1,38 @@
+appId: moe.silverloli.digital-sanctuary
+productName: 纯净领域
+asar: true
+npmRebuild: false
+
+directories:
+  output: release
+
+files:
+  - apps/desktop/out/**/*
+  - package.json
+
+extraResources:
+  - from: build/vision/sanctuary-vision
+    to: vision-runtime
+    filter:
+      - "**/*"
+  - from: models/wd-swinv2-tagger-v3
+    to: models/wd-swinv2-tagger-v3
+    filter:
+      - model.onnx
+      - selected_tags.csv
+
+win:
+  executableName: DigitalSanctuary
+  artifactName: Digital-Sanctuary-Setup-${version}.${ext}
+  icon: build/icon.svg
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 纯净领域

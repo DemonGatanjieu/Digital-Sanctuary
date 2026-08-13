@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#087fc8"/>
+      <stop offset="0.52" stop-color="#2aa8df"/>
+      <stop offset="1" stop-color="#8bd9f4"/>
+    </linearGradient>
+    <radialGradient id="light" cx="0.28" cy="0.18" r="0.85">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="28" y="28" width="968" height="968" rx="238" fill="url(#sky)"/>
+  <rect x="28" y="28" width="968" height="968" rx="238" fill="url(#light)"/>
+  <rect x="112" y="112" width="800" height="800" rx="190" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.3" stroke-width="10"/>
+  <path d="M316 306V718H470C640 718 735 640 735 512C735 384 640 306 470 306H316ZM414 392H474C572 392 631 435 631 512C631 589 572 632 474 632H414V392Z" fill="#ffffff"/>
+  <path d="M704 332C661 301 609 284 552 284C450 284 383 333 383 408C383 481 438 513 535 535C601 550 624 564 624 590C624 619 596 637 550 637C499 637 450 618 408 584L359 659C407 704 475 730 548 730C661 730 733 677 733 592C733 516 682 483 577 458C513 443 491 431 491 407C491 383 516 368 555 368C596 368 633 381 668 405L704 332Z" fill="#dff5ff" fill-opacity="0.96"/>
+</svg>
