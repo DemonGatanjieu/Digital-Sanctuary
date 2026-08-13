@@ -18,6 +18,8 @@ import type {
 } from "../../preload/index";
 import { WorkLibrary } from "./WorkLibrary";
 import { CollectionEditor, type CollectionDraft } from "./CollectionEditor";
+import { BookmarkDownloadDialog } from "./BookmarkDownloadDialog";
+import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
 
 interface AppStatus {
   visionEngine: string;
@@ -26,7 +28,7 @@ interface AppStatus {
   modelBacked: boolean;
 }
 
-type ActiveView = "gallery" | "explore" | "rules";
+type ActiveView = "gallery" | "explore" | "settings";
 type GalleryMode = "flat" | "author-work" | "collections";
 
 const actionText: Record<FilterAction, string> = {
@@ -64,6 +66,8 @@ export function App() {
   const [collectionEditor, setCollectionEditor] = useState<CollectionRecord | "new" | null>(null);
   const [collectionSaving, setCollectionSaving] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreferences>(DEFAULT_APPEARANCE);
+  const [bookmarkPreview, setBookmarkPreview] = useState<BookmarkDownloadPreview | null>(null);
+  const [startingBookmarkDownload, setStartingBookmarkDownload] = useState(false);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [artists, setArtists] = useState<ArtistRecord[]>([]);
   const [filterSettings, setFilterSettings] = useState<ElementFilterSetting[]>([]);
@@ -283,24 +287,31 @@ export function App() {
     }
   }
 
-  async function downloadAllBookmarks() {
+  async function previewAllBookmarks() {
     setError("");
     try {
       const preview = await window.sanctuary.previewBookmarkDownload();
       if (preview.total === 0) {
-        window.alert("这个收藏页中没有可下载的作品。");
+        setError("这个收藏页中没有可下载的作品。");
         return;
       }
-      const confirmed = window.confirm(
-        `即将把 ${preview.total} 个收藏作品下载到本地画廊。\n\n` +
-        "多页作品会完整保存；已经下载过的文件会跳过。" +
-        "收藏内容视为你已确认，不再执行 AI 审查。是否继续？"
-      );
-      if (!confirmed) return;
+      setBookmarkPreview(preview);
+    } catch (caught) {
+      showError(caught);
+    }
+  }
+
+  async function confirmBookmarkDownload() {
+    setStartingBookmarkDownload(true);
+    setError("");
+    try {
       await window.sanctuary.downloadAllBookmarks();
+      setBookmarkPreview(null);
       await refreshLibrary();
     } catch (caught) {
       showError(caught);
+    } finally {
+      setStartingBookmarkDownload(false);
     }
   }
 
@@ -345,10 +356,10 @@ export function App() {
             探索
           </button>
           <button
-            className={`nav-item ${activeView === "rules" ? "active" : ""}`}
-            onClick={() => setActiveView("rules")}
+            className={`nav-item ${activeView === "settings" ? "active" : ""}`}
+            onClick={() => setActiveView("settings")}
           >
-            规则
+            设置
           </button>
         </nav>
 
@@ -370,7 +381,7 @@ export function App() {
             <button
               className="explore-action"
               disabled={exploreState.pageKind !== "bookmarks" || downloadBusy}
-              onClick={() => void downloadAllBookmarks()}
+              onClick={() => void previewAllBookmarks()}
             >
               <strong>下载全部收藏</strong>
               <small>
@@ -458,13 +469,15 @@ export function App() {
             onWorkLibraryChanged={() => refreshWorks()}
             onError={showError}
           />
-        ) : activeView === "rules" ? (
-          <RulesView
+        ) : activeView === "settings" ? (
+          <SettingsView
             settings={filterSettings}
+            appearance={appearance}
             savingGroupId={savingGroupId}
             error={error}
             onEdit={editFilterSetting}
             onSave={saveFilterSetting}
+            onAppearanceChange={updateAppearance}
           />
         ) : (
           <ExploreView
@@ -482,6 +495,14 @@ export function App() {
           onSave={saveCollection}
           onDelete={collectionEditor === "new" ? null : deleteEditedCollection}
           onClose={() => !collectionSaving && setCollectionEditor(null)}
+        />
+      )}
+      {bookmarkPreview && (
+        <BookmarkDownloadDialog
+          preview={bookmarkPreview}
+          busy={startingBookmarkDownload}
+          onConfirm={confirmBookmarkDownload}
+          onClose={() => !startingBookmarkDownload && setBookmarkPreview(null)}
         />
       )}
     </div>
@@ -1242,32 +1263,57 @@ function ArtworkLightbox({
   );
 }
 
-function RulesView({
+function SettingsView({
   settings,
+  appearance,
   savingGroupId,
   error,
   onEdit,
-  onSave
+  onSave,
+  onAppearanceChange
 }: {
   settings: ElementFilterSetting[];
+  appearance: AppearancePreferences;
   savingGroupId: string;
   error: string;
   onEdit: (setting: ElementFilterSetting) => void;
   onSave: (setting: ElementFilterSetting) => void;
+  onAppearanceChange: (preferences: AppearancePreferences) => Promise<void>;
 }) {
   return (
     <>
       <header className="topbar rules-heading">
         <div>
-          <p className="eyebrow">ELEMENT BLACKLIST</p>
-          <h1>元素拦截规则</h1>
+          <p className="eyebrow">PREFERENCES</p>
+          <h1>设置</h1>
           <p className="page-description">
-            这里只控制不受欢迎的画面元素。R18、裸体和露骨程度不参与拦截。
+            调整画廊呈现、性能成本和探索空间的元素拦截。
           </p>
         </div>
       </header>
 
       {error && <div className="error-banner">{error}</div>}
+
+      <section className="appearance-settings-card">
+        <header><div><p className="eyebrow">APPEARANCE</p><h2>外观与性能</h2></div><span>布局与功能位置不会随档位改变</span></header>
+        <div className="appearance-profile-options">
+          {([
+            ["quality", "精致", "环境作品、完整过渡与更丰富层次"],
+            ["balanced", "均衡", "日常推荐，保留静态氛围并减少合成"],
+            ["efficient", "省电", "不加载环境作品，减少动画与阴影"]
+          ] as const).map(([profile, label, detail]) => (
+            <button key={profile} type="button" className={appearance.displayProfile === profile ? "active" : ""} onClick={() => void onAppearanceChange({ ...appearance, displayProfile: profile })}>
+              <span>{appearance.displayProfile === profile ? "✓" : ""}</span><strong>{label}</strong><small>{detail}</small>
+            </button>
+          ))}
+        </div>
+        <div className="appearance-toggle-row">
+          <label><span><strong>作品环境展示</strong><small>使用最近作品修饰画廊顶部；省电档始终关闭。</small></span><input type="checkbox" checked={appearance.ambientArtwork} onChange={(event) => void onAppearanceChange({ ...appearance, ambientArtwork: event.target.checked })} /></label>
+          <label><span><strong>减少动态效果</strong><small>关闭位移、缩放和非必要动画。</small></span><input type="checkbox" checked={appearance.reducedMotion} onChange={(event) => void onAppearanceChange({ ...appearance, reducedMotion: event.target.checked })} /></label>
+        </div>
+      </section>
+
+      <div className="settings-section-heading"><p className="eyebrow">ELEMENT BLACKLIST</p><h2>元素拦截规则</h2><span>只控制不受欢迎的画面元素；R18、裸体和露骨程度不参与拦截。</span></div>
 
       <section className="rules-grid">
         {ELEMENT_BLACKLIST_GROUPS.map((group) => {

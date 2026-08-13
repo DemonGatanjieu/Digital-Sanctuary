@@ -373,7 +373,28 @@ button:disabled { opacity: .5; cursor: wait; }
 /* Settings & Rules */
 .rules-heading { align-items: start; }
 .page-description { max-width: 720px; margin: 16px 0 0; color: #6d7682; line-height: 1.8; font-size: 15px; }
-.rules-grid { display: grid; grid-template-columns: repeat(2, minmax(300px, 1fr)); gap: 24px; margin-top: 36px; }
+.appearance-settings-card { padding: 26px; border: 1px solid #e2e7ed; border-radius: 24px; background: rgba(255,255,255,.92); box-shadow: 0 12px 34px rgba(39,52,67,.06); }
+.appearance-settings-card > header { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
+.appearance-settings-card > header h2 { margin: 5px 0 0; color: #202831; font-size: 23px; }
+.appearance-settings-card > header > span { color: #8b949e; font-size: 10px; }
+.appearance-profile-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+.appearance-profile-options button { display: grid; grid-template-columns: 22px 1fr; grid-template-rows: auto auto; gap: 3px 7px; min-height: 92px; padding: 15px; border: 1px solid #e1e6eb; border-radius: 16px; color: #3f4853; background: #fafbfc; cursor: pointer; text-align: left; transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, transform .18s ease; }
+.appearance-profile-options button:hover { border-color: #bcd8e9; background: #fff; transform: translateY(-1px); }
+.appearance-profile-options button.active { border-color: #7bbfe7; background: #f2faff; box-shadow: 0 7px 18px rgba(40,145,205,.10); }
+.appearance-profile-options button > span { grid-row: 1 / 3; display: grid; width: 22px; height: 22px; place-items: center; border: 1px solid #d9e0e7; border-radius: 50%; color: #fff; background: #fff; font-size: 11px; }
+.appearance-profile-options button.active > span { border-color: #168ed1; background: #168ed1; }
+.appearance-profile-options strong { font-size: 13px; }
+.appearance-profile-options small { color: #858f9a; font-size: 9px; line-height: 1.55; }
+.appearance-toggle-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 13px; }
+.appearance-toggle-row > label { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 72px; padding: 14px 16px; border: 1px solid #e7eaee; border-radius: 15px; background: #fff; cursor: pointer; }
+.appearance-toggle-row label > span { display: grid; gap: 4px; }
+.appearance-toggle-row strong { color: #3e4751; font-size: 11px; }
+.appearance-toggle-row small { color: #8b949e; font-size: 9px; line-height: 1.45; }
+.appearance-toggle-row input { width: 18px; height: 18px; flex: 0 0 auto; accent-color: #138ed3; }
+.settings-section-heading { display: grid; gap: 5px; margin-top: 38px; }
+.settings-section-heading h2 { margin: 0; color: #242c35; font-size: 22px; }
+.settings-section-heading > span { color: #7c8691; font-size: 11px; line-height: 1.7; }
+.rules-grid { display: grid; grid-template-columns: repeat(2, minmax(300px, 1fr)); gap: 24px; margin-top: 18px; }
 .rule-card { display: flex; min-height: 330px; flex-direction: column; padding: 28px; border: 1px solid var(--glass-border); border-radius: 24px; background: var(--glass-bg); backdrop-filter: blur(20px); box-shadow: var(--glass-shadow); transition: all .25s ease; }
 .rule-card.enabled { border-color: rgba(255,255,255,0.9); box-shadow: 0 12px 36px rgba(0,122,255,0.06); }
 .rule-card.disabled { opacity: .7; }
@@ -433,6 +454,16 @@ button:disabled { opacity: .5; cursor: wait; }
 .collection-delete-trigger { min-height: 38px; padding: 0 12px; border: 1px solid #efc9cf; border-radius: 10px; color: #b34152; background: #fff8f9; cursor: pointer; }
 .collection-delete-confirm { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding: 12px; border: 1px solid #efc9cf; border-radius: 11px; color: #93414e; background: #fff7f8; font-size: 10px; }
 .collection-delete-confirm button { flex: 0 0 auto; min-height: 32px; padding: 0 11px; border: 0; border-radius: 8px; color: #fff; background: #bf4657; cursor: pointer; }
+
+.bookmark-dialog-overlay { position: fixed; z-index: 1120; inset: 0; display: grid; place-items: center; padding: 26px; background: rgba(25,31,39,.46); backdrop-filter: blur(5px); }
+.bookmark-dialog { width: min(560px, 92vw); padding: 28px; border: 1px solid #e1e6ec; border-radius: 22px; color: #28303a; background: #fff; box-shadow: 0 30px 80px rgba(17,25,35,.25); }
+.bookmark-dialog h2 { margin: 4px 0 20px; font-size: 24px; }
+.bookmark-dialog-summary { display: grid; grid-template-columns: auto 1fr; align-items: end; gap: 2px 10px; padding: 16px; border: 1px solid #d9eaf5; border-radius: 14px; background: #f1f8fc; }
+.bookmark-dialog-summary strong { grid-row: 1 / 3; color: #087fc3; font-size: 34px; line-height: 1; }
+.bookmark-dialog-summary span { color: #435461; font-size: 12px; font-weight: 600; }
+.bookmark-dialog-summary small { color: #8a96a1; font-size: 9px; }
+.bookmark-dialog ul { display: grid; gap: 9px; margin: 20px 0; padding-left: 22px; color: #5e6975; font-size: 11px; line-height: 1.6; }
+.bookmark-dialog footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
 
 /* Work-level library (v2 data model) */
 .work-ambient-hero { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 210px; min-height: 154px; margin: 0 0 18px; overflow: hidden; border: 1px solid #e0e5ec; border-radius: 20px; background: #fff; box-shadow: 0 10px 30px rgba(37,49,65,.06); isolation: isolate; }
@@ -554,6 +585,8 @@ button:disabled { opacity: .5; cursor: wait; }
   main { padding-inline: 32px; }
   .summary-row { grid-template-columns: repeat(2, 1fr); gap: 20px; }
   .rules-grid { grid-template-columns: 1fr; }
+  .appearance-profile-options { grid-template-columns: 1fr; }
+  .appearance-toggle-row { grid-template-columns: 1fr; }
   .work-library-controls { grid-template-columns: minmax(220px, 1fr) auto auto; }
   .work-sort-direction, .work-select-toggle { grid-column: auto; }
   .work-ambient-hero { grid-template-columns: minmax(0, 1fr) 160px; }

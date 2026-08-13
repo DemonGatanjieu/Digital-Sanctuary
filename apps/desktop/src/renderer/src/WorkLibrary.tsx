@@ -42,6 +42,7 @@ export function WorkLibrary({
   const [notice, setNotice] = useState<{ message: string; undo?: () => Promise<void> } | null>(null);
   const activeCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
   const featuredWork = result.items[0] ?? null;
+  const lastSelectedWorkId = useRef<string | null>(null);
 
   async function openWork(item: WorkListItem) {
     setOpeningWorkId(item.id);
@@ -56,10 +57,21 @@ export function WorkLibrary({
     }
   }
 
-  function toggleSelection(workId: string) {
+  function toggleSelection(workId: string, shiftKey = false) {
     setSelectedIds((current) => {
       const next = new Set(current);
-      next.has(workId) ? next.delete(workId) : next.add(workId);
+      const anchorId = lastSelectedWorkId.current;
+      const anchorIndex = anchorId ? result.items.findIndex((work) => work.id === anchorId) : -1;
+      const targetIndex = result.items.findIndex((work) => work.id === workId);
+      if (shiftKey && anchorIndex >= 0 && targetIndex >= 0) {
+        for (let index = Math.min(anchorIndex, targetIndex); index <= Math.max(anchorIndex, targetIndex); index += 1) {
+          const id = result.items[index]?.id;
+          if (id) next.add(id);
+        }
+      } else {
+        next.has(workId) ? next.delete(workId) : next.add(workId);
+      }
+      lastSelectedWorkId.current = workId;
       return next;
     });
   }
@@ -81,6 +93,7 @@ export function WorkLibrary({
       setDeletionPreview(null);
       setSelectedIds(new Set());
       setSelecting(false);
+      lastSelectedWorkId.current = null;
       await onLibraryChanged();
       setNotice({ message: result.failures.length > 0
         ? `已处理 ${result.completedWorkIds.length} 个作品，${result.failures.length} 个失败。`
@@ -171,6 +184,7 @@ export function WorkLibrary({
           onClick={() => {
             setSelecting((value) => !value);
             setSelectedIds(new Set());
+            lastSelectedWorkId.current = null;
           }}
         >
           {selecting ? "退出选择" : "选择"}
@@ -208,8 +222,8 @@ export function WorkLibrary({
               opening={openingWorkId === work.id}
               selecting={selecting}
               selected={selectedIds.has(work.id)}
-              onOpen={() => selecting ? toggleSelection(work.id) : void openWork(work)}
-              onToggleSelection={() => toggleSelection(work.id)}
+              onOpen={(shiftKey) => selecting ? toggleSelection(work.id, shiftKey) : void openWork(work)}
+              onToggleSelection={(shiftKey) => toggleSelection(work.id, shiftKey)}
               onAssign={async (collectionId) => {
                 await onAssignCollection(work.id, collectionId);
                 const collectionName = collections.find((item) => item.id === collectionId)?.name ?? "分类";
@@ -370,8 +384,8 @@ function WorkCard({
   opening: boolean;
   selecting: boolean;
   selected: boolean;
-  onOpen: () => void;
-  onToggleSelection: () => void;
+  onOpen: (shiftKey: boolean) => void;
+  onToggleSelection: (shiftKey: boolean) => void;
   onFavorite: () => Promise<void>;
   onRemoveFromCollection: (() => Promise<void>) | null;
   onAssign: (collectionId: string) => Promise<void>;
@@ -381,11 +395,11 @@ function WorkCard({
   return (
     <article className={`work-library-card ${selected ? "selected" : ""}`}>
       {selecting && (
-        <button type="button" className="work-card-check" aria-label={selected ? `取消选择 ${work.title}` : `选择 ${work.title}`} onClick={onToggleSelection}>
+        <button type="button" className="work-card-check" aria-label={selected ? `取消选择 ${work.title}` : `选择 ${work.title}`} onClick={(event) => onToggleSelection(event.shiftKey)}>
           {selected ? "✓" : ""}
         </button>
       )}
-      <button className="work-cover-button" type="button" disabled={opening} onClick={onOpen}>
+      <button className="work-cover-button" type="button" disabled={opening} onClick={(event) => onOpen(event.shiftKey)}>
         {coverPath ? (
           <LazyWorkImage path={coverPath} />
         ) : (
