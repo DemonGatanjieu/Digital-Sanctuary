@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  AppearancePreferences,
   ArtistRecord,
   ArtworkRecord,
   CollectionRecord,
@@ -71,6 +72,8 @@ export interface SanctuaryApi {
   addWorkToCollection(workId: string, collectionId: string): Promise<WorkRecord | null>;
   removeWorkFromCollection(workId: string, collectionId: string): Promise<WorkRecord | null>;
   updateWorkFavorite(workIds: string[], favorite: boolean): Promise<boolean>;
+  getAppearancePreferences(): Promise<AppearancePreferences>;
+  updateAppearancePreferences(preferences: AppearancePreferences): Promise<AppearancePreferences>;
   listArtists(): Promise<ArtistRecord[]>;
   repairArtistAvatars(): Promise<ArtistAvatarRepairResult>;
   listFilterSettings(): Promise<ElementFilterSetting[]>;
@@ -132,6 +135,10 @@ const api: SanctuaryApi = {
     ) as Promise<WorkRecord | null>,
   updateWorkFavorite: (workIds, favorite) =>
     ipcRenderer.invoke("library:update-favorite", workIds, favorite) as Promise<boolean>,
+  getAppearancePreferences: () =>
+    ipcRenderer.invoke("preferences:appearance:get") as Promise<AppearancePreferences>,
+  updateAppearancePreferences: (preferences) =>
+    ipcRenderer.invoke("preferences:appearance:update", preferences) as Promise<AppearancePreferences>,
   listArtists: () => ipcRenderer.invoke("artists:list") as Promise<ArtistRecord[]>,
   repairArtistAvatars: () =>
     ipcRenderer.invoke("artists:repair-avatars") as Promise<ArtistAvatarRepairResult>,

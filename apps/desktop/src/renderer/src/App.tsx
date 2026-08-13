@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   ELEMENT_BLACKLIST_GROUPS,
+  type AppearancePreferences,
   type ArtistRecord,
   type ArtworkRecord,
   type CollectionRecord,
@@ -43,6 +44,12 @@ const EMPTY_WORK_RESULT: WorkQueryResult = {
   hasMore: false
 };
 
+const DEFAULT_APPEARANCE: AppearancePreferences = {
+  displayProfile: "balanced",
+  reducedMotion: false,
+  ambientArtwork: true
+};
+
 export function App() {
   const [activeView, setActiveView] = useState<ActiveView>("gallery");
   const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
@@ -56,6 +63,7 @@ export function App() {
   const [workLoading, setWorkLoading] = useState(false);
   const [collectionEditor, setCollectionEditor] = useState<CollectionRecord | "new" | null>(null);
   const [collectionSaving, setCollectionSaving] = useState(false);
+  const [appearance, setAppearance] = useState<AppearancePreferences>(DEFAULT_APPEARANCE);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [artists, setArtists] = useState<ArtistRecord[]>([]);
   const [filterSettings, setFilterSettings] = useState<ElementFilterSetting[]>([]);
@@ -93,13 +101,15 @@ export function App() {
       window.sanctuary.listCollections(),
       window.sanctuary.listFilterSettings(),
       window.sanctuary.status(),
-      window.sanctuary.listArtists()
+      window.sanctuary.listArtists(),
+      window.sanctuary.getAppearancePreferences()
     ])
-      .then(([nextCollections, nextFilterSettings, nextStatus, nextArtists]) => {
+      .then(([nextCollections, nextFilterSettings, nextStatus, nextArtists, nextAppearance]) => {
         setCollections(nextCollections);
         setFilterSettings(nextFilterSettings);
         setStatus(nextStatus);
         setArtists(nextArtists);
+        setAppearance(nextAppearance);
       })
       .catch(showError);
   }, []);
@@ -297,8 +307,23 @@ export function App() {
   const downloadBusy = exploreState.download.phase === "discovering" ||
     exploreState.download.phase === "downloading";
 
+  async function updateAppearance(next: AppearancePreferences) {
+    setAppearance(next);
+    try {
+      setAppearance(await window.sanctuary.updateAppearancePreferences(next));
+    } catch (caught) {
+      setAppearance(appearance);
+      showError(caught);
+    }
+  }
+
   return (
-    <div className={`app-shell ${activeView === "explore" ? "exploring" : ""}`}>
+    <div
+      className={`app-shell ${activeView === "explore" ? "exploring" : ""}`}
+      data-display-profile={appearance.displayProfile}
+      data-reduced-motion={appearance.reducedMotion ? "true" : "false"}
+      data-ambient-artwork={appearance.ambientArtwork ? "true" : "false"}
+    >
       <aside className="sidebar">
         <div className="brand-mark">DS</div>
         <div className="brand-copy">
@@ -374,6 +399,23 @@ export function App() {
         )}
 
         <div className="sidebar-spacer" />
+        <section className="display-profile-control" aria-label="显示性能档位">
+          <div><span>显示档位</span><small>{appearance.displayProfile === "quality" ? "完整氛围" : appearance.displayProfile === "balanced" ? "日常推荐" : "减少特效"}</small></div>
+          <div className="display-profile-segments">
+            {(["quality", "balanced", "efficient"] as const).map((profile) => (
+              <button
+                type="button"
+                key={profile}
+                className={appearance.displayProfile === profile ? "active" : ""}
+                aria-pressed={appearance.displayProfile === profile}
+                title={profile === "quality" ? "精致" : profile === "balanced" ? "均衡" : "省电"}
+                onClick={() => void updateAppearance({ ...appearance, displayProfile: profile })}
+              >
+                {profile === "quality" ? "精" : profile === "balanced" ? "衡" : "省"}
+              </button>
+            ))}
+          </div>
+        </section>
         <div className="engine-card">
           <span className={`status-dot ${status?.visionReady ? "online" : ""}`} />
           <div>
@@ -397,6 +439,7 @@ export function App() {
             workLoading={workLoading}
             collections={collections}
             artists={artists}
+            appearance={appearance}
             mode={galleryMode}
             busy={busy}
             repairingAvatars={repairingAvatars}
@@ -636,6 +679,7 @@ function GalleryView({
   workLoading,
   collections,
   artists,
+  appearance,
   mode,
   busy,
   repairingAvatars,
@@ -660,6 +704,7 @@ function GalleryView({
   workLoading: boolean;
   collections: CollectionRecord[];
   artists: ArtistRecord[];
+  appearance: AppearancePreferences;
   mode: GalleryMode;
   busy: boolean;
   repairingAvatars: boolean;
@@ -809,6 +854,7 @@ function GalleryView({
           result={workResult}
           query={workQuery}
           collections={collections}
+          appearance={appearance}
           loading={workLoading}
           onQueryChange={onWorkQueryChange}
           onLoadMore={onLoadMoreWorks}

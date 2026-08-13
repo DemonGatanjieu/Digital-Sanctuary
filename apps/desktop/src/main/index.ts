@@ -23,6 +23,7 @@ import {
   decideFilter,
   isElementFilterSetting,
   rulesFingerprint,
+  type AppearancePreferences,
   type ArtistRecord,
   type ArtworkRecord,
   type VisionAssessment,
@@ -297,6 +298,24 @@ function parseCollectionDraft(value: unknown): { name: string; description: stri
   const description = candidate.description.trim();
   if (!name || name.length > 80 || description.length > 500) return null;
   return { name, description };
+}
+
+function parseAppearancePreferences(value: unknown): AppearancePreferences | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<AppearancePreferences>;
+  if (
+    candidate.displayProfile !== "quality" &&
+    candidate.displayProfile !== "balanced" &&
+    candidate.displayProfile !== "efficient"
+  ) return null;
+  if (typeof candidate.reducedMotion !== "boolean" || typeof candidate.ambientArtwork !== "boolean") {
+    return null;
+  }
+  return {
+    displayProfile: candidate.displayProfile,
+    reducedMotion: candidate.reducedMotion,
+    ambientArtwork: candidate.ambientArtwork
+  };
 }
 
 async function deleteConfirmedWorks(workIds: readonly string[]): Promise<WorkDeletionResult> {
@@ -686,6 +705,19 @@ function registerIpc(): void {
     }
     database.updateWorkFavorite(workIds, favorite);
     return true;
+  });
+  ipcMain.handle("preferences:appearance:get", (): AppearancePreferences =>
+    database?.getPreference<AppearancePreferences>("appearance") ?? {
+      displayProfile: "balanced",
+      reducedMotion: false,
+      ambientArtwork: true
+    }
+  );
+  ipcMain.handle("preferences:appearance:update", (_event, value: unknown): AppearancePreferences => {
+    const preferences = parseAppearancePreferences(value);
+    if (!database || !preferences) throw new Error("Invalid appearance preferences");
+    database.setPreference("appearance", preferences);
+    return preferences;
   });
 
   ipcMain.handle("app:status", () => ({

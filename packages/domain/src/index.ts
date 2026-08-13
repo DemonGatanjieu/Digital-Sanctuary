@@ -48,6 +48,13 @@ export interface ArtworkRecord {
 export type WorkType = "illustration" | "manga" | "ugoira" | "local" | "unknown";
 export type WorkOwnership = "managed" | "external";
 export type AssetFileState = "available" | "missing" | "trashed" | "error";
+export type DisplayProfile = "quality" | "balanced" | "efficient";
+
+export interface AppearancePreferences {
+  displayProfile: DisplayProfile;
+  reducedMotion: boolean;
+  ambientArtwork: boolean;
+}
 
 /**
  * A user-visible work. Multi-page Pixiv works have one WorkRecord and many

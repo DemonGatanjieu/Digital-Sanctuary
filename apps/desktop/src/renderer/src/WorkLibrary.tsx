@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
+  AppearancePreferences,
   CollectionRecord,
   WorkListItem,
   WorkDeletionPreview,
@@ -13,6 +14,7 @@ export function WorkLibrary({
   result,
   query,
   collections,
+  appearance,
   loading,
   onQueryChange,
   onLoadMore,
@@ -23,6 +25,7 @@ export function WorkLibrary({
   result: WorkQueryResult;
   query: WorkQuery;
   collections: CollectionRecord[];
+  appearance: AppearancePreferences;
   loading: boolean;
   onQueryChange: (query: WorkQuery) => void;
   onLoadMore: () => void;
@@ -38,6 +41,7 @@ export function WorkLibrary({
   const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState<{ message: string; undo?: () => Promise<void> } | null>(null);
   const activeCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
+  const featuredWork = result.items[0] ?? null;
 
   async function openWork(item: WorkListItem) {
     setOpeningWorkId(item.id);
@@ -90,6 +94,18 @@ export function WorkLibrary({
 
   return (
     <>
+      {featuredWork?.coverAsset && !query.search && appearance.ambientArtwork && appearance.displayProfile !== "efficient" && (
+        <section className="work-ambient-hero">
+          <img className="work-ambient-backdrop" src={workImageUrl(featuredWork.coverAsset.thumbnailPath ?? featuredWork.coverAsset.path)} alt="" aria-hidden="true" />
+          <div className="work-ambient-copy">
+            <span>{activeCollection ? "分类精选" : "最近保存"}</span>
+            <strong>{featuredWork.title}</strong>
+            <small>{featuredWork.artistName ?? "本地作品"} · {featuredWork.pageCount} 页</small>
+            <button type="button" onClick={() => void openWork(featuredWork)}>继续欣赏</button>
+          </div>
+          <img className="work-ambient-cover" src={workImageUrl(featuredWork.coverAsset.thumbnailPath ?? featuredWork.coverAsset.path)} alt="" />
+        </section>
+      )}
       <section className="work-library-controls" aria-label="画廊搜索与排序">
         <label className="work-search">
           <span>⌕</span>
