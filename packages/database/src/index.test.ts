@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decideFilter, DEFAULT_FILTER_RULES, type VisionAssessment } from "../../domain/dist/index.js";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -145,6 +145,82 @@ describe("LibraryDatabase", () => {
       authorName: "画师",
       title: "三页作品"
     });
+    expect(database.listWorks()).toMatchObject([
+      {
+        id: "pixiv:123",
+        sourcePlatform: "pixiv",
+        sourceWorkId: "123",
+        artistId: "456",
+        artistName: "画师",
+        title: "三页作品",
+        ownership: "managed",
+        pageCount: 1,
+        assets: [{ legacyArtworkId: artwork.id, pageIndex: 2 }]
+      }
+    ]);
+    database.close();
+  });
+
+  it("dual-writes local imports and merges Pixiv pages into one work", () => {
+    const database = new LibraryDatabase(":memory:");
+    const first = database.importArtwork("E:\\gallery\\500_p0.jpg");
+    expect(database.listWorks()[0]).toMatchObject({
+      id: `local:${first.id}`,
+      workType: "local",
+      ownership: "external",
+      pageCount: 1
+    });
+
+    database.saveArtworkSource(first.id, {
+      platform: "pixiv",
+      workId: "500",
+      pageIndex: 0,
+      authorId: "42",
+      authorName: "作者",
+      title: "双页作品"
+    });
+    const second = database.importArtwork("E:\\gallery\\500_p1.png");
+    database.saveArtworkSource(second.id, {
+      platform: "pixiv",
+      workId: "500",
+      pageIndex: 1,
+      authorId: "42",
+      authorName: "作者",
+      title: "双页作品"
+    });
+
+    const works = database.listWorks();
+    expect(works).toHaveLength(1);
+    expect(works[0]).toMatchObject({
+      id: "pixiv:500",
+      title: "双页作品",
+      pageCount: 2,
+      ownership: "managed"
+    });
+    expect(works[0]?.assets.map((asset) => asset.pageIndex)).toEqual([0, 1]);
+    expect(works[0]?.coverAssetId).toBe(works[0]?.assets[0]?.id);
+    database.close();
+  });
+
+  it("keeps collection membership when a local page is promoted to a Pixiv work", () => {
+    const database = new LibraryDatabase(":memory:");
+    const artwork = database.importArtwork("E:\\gallery\\promoted.jpg");
+    const collection = database.createCollection("稍后阅读");
+    database.addArtworkToCollection(artwork.id, collection.id);
+    expect(database.listWorks()[0]?.collectionIds).toEqual([collection.id]);
+
+    database.saveArtworkSource(artwork.id, {
+      platform: "pixiv",
+      workId: "888",
+      pageIndex: 0,
+      authorId: "9",
+      authorName: "作者九",
+      title: "迁入作品"
+    });
+
+    expect(database.listWorks()).toMatchObject([
+      { id: "pixiv:888", collectionIds: [collection.id] }
+    ]);
     database.close();
   });
 
@@ -203,6 +279,67 @@ describe("LibraryDatabase", () => {
       });
       expect(database.listArtworks()[0]?.source?.authorName).toBe("旧库画师");
       database.close();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("migrates legacy pages idempotently and creates a pre-v2 backup", () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-v2-migration-"));
+    const path = join(directory, "library.db");
+    try {
+      const legacy = new DatabaseSync(path);
+      legacy.exec(`
+        PRAGMA foreign_keys = ON;
+        CREATE TABLE artworks (
+          id TEXT PRIMARY KEY,
+          path TEXT NOT NULL COLLATE NOCASE UNIQUE,
+          file_name TEXT NOT NULL,
+          imported_at TEXT NOT NULL,
+          assessment_json TEXT,
+          decision_json TEXT,
+          source_platform TEXT,
+          source_work_id TEXT,
+          source_page_index INTEGER,
+          author_id TEXT,
+          author_name TEXT,
+          work_title TEXT
+        );
+        CREATE TABLE collections (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          cover_artwork_id TEXT REFERENCES artworks(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE collection_artworks (
+          collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+          artwork_id TEXT NOT NULL REFERENCES artworks(id) ON DELETE CASCADE,
+          PRIMARY KEY (collection_id, artwork_id)
+        );
+        INSERT INTO artworks VALUES
+          ('a0', 'E:\\gallery\\900_p0.jpg', '900_p0.jpg', '2026-01-01T00:00:00.000Z', NULL, NULL, 'pixiv', '900', 0, '77', '迁移作者', '迁移双页作品'),
+          ('a1', 'E:\\gallery\\900_p1.jpg', '900_p1.jpg', '2026-01-01T00:00:01.000Z', NULL, NULL, 'pixiv', '900', 1, '77', '迁移作者', '迁移双页作品'),
+          ('local', 'E:\\gallery\\local.png', 'local.png', '2026-01-02T00:00:00.000Z', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+        INSERT INTO collections VALUES ('c1', '收藏', '', 'a1', '2026-01-03T00:00:00.000Z');
+        INSERT INTO collection_artworks VALUES ('c1', 'a0'), ('c1', 'a1');
+      `);
+      legacy.close();
+
+      const firstOpen = new LibraryDatabase(path);
+      const firstSnapshot = firstOpen.listWorks();
+      expect(firstSnapshot).toHaveLength(2);
+      expect(firstSnapshot.find((work) => work.id === "pixiv:900")).toMatchObject({
+        pageCount: 2,
+        collectionIds: ["c1"],
+        assets: [{ pageIndex: 0 }, { pageIndex: 1 }]
+      });
+      firstOpen.close();
+
+      expect(existsSync(`${path}.pre-v2.bak`)).toBe(true);
+      const secondOpen = new LibraryDatabase(path);
+      expect(secondOpen.listWorks()).toEqual(firstSnapshot);
+      secondOpen.close();
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

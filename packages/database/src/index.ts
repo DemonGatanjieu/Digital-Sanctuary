@@ -1,13 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { basename } from "node:path";
+import { existsSync } from "node:fs";
+import { basename, extname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   ArtworkRecord,
+  AssetFileState,
   CollectionRecord,
   ElementFilterSetting,
   FilterDecision,
   ArtworkSource,
-  VisionAssessment
+  VisionAssessment,
+  WorkAssetRecord,
+  WorkOwnership,
+  WorkRecord,
+  WorkType
 } from "@sanctuary/domain";
 import {
   DEFAULT_ELEMENT_FILTER_SETTINGS,
@@ -52,6 +58,46 @@ interface ElementFilterSettingRow {
   minimum_confidence: number;
 }
 
+interface WorkRow {
+  id: string;
+  source_platform: string | null;
+  source_work_id: string | null;
+  artist_id: string | null;
+  artist_name: string | null;
+  title: string;
+  work_type: string;
+  published_at: string | null;
+  bookmarked_at: string | null;
+  saved_at: string;
+  last_viewed_at: string | null;
+  favorite: number;
+  page_count: number;
+  cover_asset_id: string | null;
+  ownership: string;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  collection_id: string | null;
+}
+
+interface WorkAssetRow {
+  id: string;
+  work_id: string;
+  legacy_artwork_id: string | null;
+  page_index: number;
+  path: string;
+  media_type: string;
+  extension: string | null;
+  width: number | null;
+  height: number | null;
+  byte_length: number | null;
+  content_hash: string | null;
+  thumbnail_path: string | null;
+  file_state: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface RemoteImageReviewKey {
   normalizedUrl: string;
   engine: string;
@@ -81,10 +127,13 @@ interface RemoteImageReviewRow {
 
 export class LibraryDatabase {
   readonly #database: DatabaseSync;
+  readonly #databasePath: string;
 
   constructor(databasePath: string) {
+    this.#databasePath = databasePath;
     this.#database = new DatabaseSync(databasePath);
     this.#database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+    this.#backupBeforeWorkMigration();
     this.#migrate();
   }
 
@@ -104,6 +153,11 @@ export class LibraryDatabase {
         )
         .run(randomUUID(), path, basename(path), new Date().toISOString());
     }
+
+    const artworkId = existing?.id ?? (this.#database
+      .prepare("SELECT id FROM artworks WHERE path = ?")
+      .get(path) as { id: string }).id;
+    this.#syncLegacyArtworkToWork(artworkId);
 
     const artwork = this.listArtworks().find((item) => item.path === path);
     if (!artwork) throw new Error(`Failed to import artwork: ${path}`);
@@ -152,6 +206,7 @@ export class LibraryDatabase {
         source.title,
         artworkId
       );
+    this.#syncLegacyArtworkToWork(artworkId);
   }
 
   invalidateAssessmentsExcept(engine: string): number {
@@ -201,6 +256,70 @@ export class LibraryDatabase {
     return [...byId.values()];
   }
 
+  listWorks(): WorkRecord[] {
+    const rows = this.#database
+      .prepare(
+        `SELECT w.id, w.source_platform, w.source_work_id, w.artist_id,
+                ar.name AS artist_name, w.title, w.work_type, w.published_at,
+                w.bookmarked_at, w.saved_at, w.last_viewed_at, w.favorite,
+                w.page_count, w.cover_asset_id, w.ownership, w.deleted_at,
+                w.created_at, w.updated_at, cw.collection_id
+           FROM works w
+           LEFT JOIN artists ar ON ar.id = w.artist_id
+           LEFT JOIN collection_works cw ON cw.work_id = w.id
+          ORDER BY w.saved_at DESC, w.id`
+      )
+      .all() as unknown as WorkRow[];
+
+    const assets = this.#database
+      .prepare(
+        `SELECT id, work_id, legacy_artwork_id, page_index, path, media_type,
+                extension, width, height, byte_length, content_hash,
+                thumbnail_path, file_state, created_at, updated_at
+           FROM assets
+          ORDER BY work_id, page_index, id`
+      )
+      .all() as unknown as WorkAssetRow[];
+    const assetsByWork = new Map<string, WorkAssetRecord[]>();
+    for (const row of assets) {
+      const workAssets = assetsByWork.get(row.work_id) ?? [];
+      workAssets.push(mapWorkAsset(row));
+      assetsByWork.set(row.work_id, workAssets);
+    }
+
+    const byId = new Map<string, WorkRecord>();
+    for (const row of rows) {
+      const current = byId.get(row.id);
+      if (current) {
+        if (row.collection_id) current.collectionIds.push(row.collection_id);
+        continue;
+      }
+      byId.set(row.id, {
+        id: row.id,
+        sourcePlatform: row.source_platform === "pixiv" ? "pixiv" : null,
+        sourceWorkId: row.source_work_id,
+        artistId: row.artist_id,
+        artistName: row.artist_name,
+        title: row.title,
+        workType: asWorkType(row.work_type),
+        publishedAt: row.published_at,
+        bookmarkedAt: row.bookmarked_at,
+        savedAt: row.saved_at,
+        lastViewedAt: row.last_viewed_at,
+        favorite: row.favorite === 1,
+        pageCount: row.page_count,
+        coverAssetId: row.cover_asset_id,
+        ownership: asWorkOwnership(row.ownership),
+        deletedAt: row.deleted_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        collectionIds: row.collection_id ? [row.collection_id] : [],
+        assets: assetsByWork.get(row.id) ?? []
+      });
+    }
+    return [...byId.values()];
+  }
+
   hasArtworkPath(path: string): boolean {
     return Boolean(
       this.#database.prepare("SELECT 1 AS found FROM artworks WHERE path = ?").get(path)
@@ -234,6 +353,14 @@ export class LibraryDatabase {
     this.#database
       .prepare("UPDATE collections SET cover_artwork_id = ? WHERE id = ?")
       .run(artworkId, collectionId);
+    const work = artworkId
+      ? this.#database
+          .prepare("SELECT work_id FROM assets WHERE legacy_artwork_id = ?")
+          .get(artworkId) as { work_id: string } | undefined
+      : undefined;
+    this.#database
+      .prepare("UPDATE collections SET cover_work_id = ? WHERE id = ?")
+      .run(work?.work_id ?? null, collectionId);
   }
 
   listCollections(): CollectionRecord[] {
@@ -255,6 +382,12 @@ export class LibraryDatabase {
         "INSERT OR IGNORE INTO collection_artworks (collection_id, artwork_id) VALUES (?, ?)"
       )
       .run(collectionId, artworkId);
+    this.#database
+      .prepare(
+        `INSERT OR IGNORE INTO collection_works (collection_id, work_id, added_at)
+         SELECT ?, work_id, ? FROM assets WHERE legacy_artwork_id = ?`
+      )
+      .run(collectionId, new Date().toISOString(), artworkId);
   }
 
   importArtist(artist: import("@sanctuary/domain").ArtistRecord): void {
@@ -492,6 +625,8 @@ export class LibraryDatabase {
       CREATE INDEX IF NOT EXISTS idx_artworks_author
         ON artworks(source_platform, author_id, source_work_id);
     `);
+    this.#ensureWorkSchema();
+    this.#migrateLegacyArtworksToWorks();
   }
 
   #ensureCollectionColumns(): void {
@@ -501,6 +636,9 @@ export class LibraryDatabase {
     );
     if (!columns.has("cover_artwork_id")) {
       this.#database.exec("ALTER TABLE collections ADD COLUMN cover_artwork_id TEXT REFERENCES artworks(id) ON DELETE SET NULL");
+    }
+    if (!columns.has("cover_work_id")) {
+      this.#database.exec("ALTER TABLE collections ADD COLUMN cover_work_id TEXT");
     }
   }
 
@@ -520,6 +658,285 @@ export class LibraryDatabase {
     for (const [name, type] of additions) {
       if (!columns.has(name)) this.#database.exec(`ALTER TABLE artworks ADD COLUMN ${name} ${type}`);
     }
+  }
+
+  #backupBeforeWorkMigration(): void {
+    if (this.#databasePath === ":memory:" || this.#databasePath.startsWith("file:")) return;
+    const hasLegacyArtworks = Boolean(
+      this.#database
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'artworks'")
+        .get()
+    );
+    const hasWorks = Boolean(
+      this.#database
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'works'")
+        .get()
+    );
+    if (!hasLegacyArtworks || hasWorks) return;
+
+    const backupPath = `${this.#databasePath}.pre-v2.bak`;
+    if (existsSync(backupPath)) return;
+    this.#database.exec(`VACUUM INTO '${backupPath.replaceAll("'", "''")}'`);
+  }
+
+  #ensureWorkSchema(): void {
+    this.#database.exec(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        version INTEGER PRIMARY KEY,
+        applied_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS works (
+        id TEXT PRIMARY KEY,
+        source_platform TEXT,
+        source_work_id TEXT,
+        artist_id TEXT REFERENCES artists(id) ON DELETE SET NULL,
+        title TEXT NOT NULL,
+        work_type TEXT NOT NULL CHECK (work_type IN ('illustration', 'manga', 'ugoira', 'local', 'unknown')),
+        published_at TEXT,
+        bookmarked_at TEXT,
+        saved_at TEXT NOT NULL,
+        last_viewed_at TEXT,
+        favorite INTEGER NOT NULL DEFAULT 0 CHECK (favorite IN (0, 1)),
+        page_count INTEGER NOT NULL DEFAULT 0 CHECK (page_count >= 0),
+        cover_asset_id TEXT,
+        ownership TEXT NOT NULL CHECK (ownership IN ('managed', 'external')),
+        deleted_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS assets (
+        id TEXT PRIMARY KEY,
+        work_id TEXT NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+        legacy_artwork_id TEXT UNIQUE REFERENCES artworks(id) ON DELETE SET NULL,
+        page_index INTEGER NOT NULL CHECK (page_index >= 0),
+        path TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        media_type TEXT NOT NULL CHECK (media_type IN ('image', 'ugoira', 'unknown')),
+        extension TEXT,
+        width INTEGER,
+        height INTEGER,
+        byte_length INTEGER,
+        content_hash TEXT,
+        thumbnail_path TEXT,
+        file_state TEXT NOT NULL CHECK (file_state IN ('available', 'missing', 'trashed', 'error')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (work_id, page_index)
+      );
+
+      CREATE TABLE IF NOT EXISTS collection_works (
+        collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+        work_id TEXT NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+        added_at TEXT NOT NULL,
+        PRIMARY KEY (collection_id, work_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS user_preferences (
+        key TEXT PRIMARY KEY,
+        value_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS migration_conflicts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        migration_version INTEGER NOT NULL,
+        entity_type TEXT NOT NULL,
+        legacy_id TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        resolution TEXT NOT NULL,
+        recorded_at TEXT NOT NULL,
+        UNIQUE (migration_version, entity_type, legacy_id, reason)
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_works_source
+        ON works(source_platform, source_work_id)
+        WHERE source_platform IS NOT NULL AND source_work_id IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_works_saved_at ON works(saved_at DESC, id);
+      CREATE INDEX IF NOT EXISTS idx_works_artist ON works(artist_id, saved_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_assets_work ON assets(work_id, page_index);
+      CREATE INDEX IF NOT EXISTS idx_collection_works_work ON collection_works(work_id);
+    `);
+  }
+
+  #migrateLegacyArtworksToWorks(): void {
+    const applied = this.#database
+      .prepare("SELECT 1 FROM schema_migrations WHERE version = 1")
+      .get();
+    if (applied) return;
+
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const artworkIds = this.#database
+        .prepare("SELECT id FROM artworks ORDER BY imported_at, id")
+        .all() as unknown as Array<{ id: string }>;
+      for (const { id } of artworkIds) this.#syncLegacyArtworkToWork(id);
+
+      this.#database.prepare(
+        `INSERT OR IGNORE INTO collection_works (collection_id, work_id, added_at)
+         SELECT DISTINCT ca.collection_id, a.work_id, c.created_at
+           FROM collection_artworks ca
+           JOIN assets a ON a.legacy_artwork_id = ca.artwork_id
+           JOIN collections c ON c.id = ca.collection_id`
+      ).run();
+      this.#database.prepare(
+        `UPDATE collections
+            SET cover_work_id = (
+              SELECT a.work_id FROM assets a
+               WHERE a.legacy_artwork_id = collections.cover_artwork_id
+            )
+          WHERE cover_artwork_id IS NOT NULL`
+      ).run();
+      this.#database
+        .prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)")
+        .run(new Date().toISOString());
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  #syncLegacyArtworkToWork(artworkId: string): void {
+    const row = this.#database
+      .prepare(
+        `SELECT id, path, file_name, imported_at, assessment_json, decision_json,
+                NULL AS collection_id, source_platform, source_work_id,
+                source_page_index, author_id, author_name, work_title
+           FROM artworks WHERE id = ?`
+      )
+      .get(artworkId) as ArtworkRow | undefined;
+    if (!row) throw new Error(`Legacy artwork not found: ${artworkId}`);
+
+    const isPixiv = row.source_platform === "pixiv" && Boolean(row.source_work_id);
+    const workId = isPixiv ? `pixiv:${row.source_work_id}` : `local:${row.id}`;
+    const now = new Date().toISOString();
+    const oldAsset = this.#database
+      .prepare("SELECT id, work_id FROM assets WHERE legacy_artwork_id = ?")
+      .get(row.id) as { id: string; work_id: string } | undefined;
+
+    if (isPixiv && row.author_id && row.author_name) {
+      this.#database
+        .prepare(
+          `INSERT INTO artists (id, name, avatar_url, avatar_local_path, updated_at)
+           VALUES (?, ?, NULL, NULL, ?)
+           ON CONFLICT(id) DO UPDATE SET name = excluded.name`
+        )
+        .run(row.author_id, row.author_name, now);
+    }
+
+    this.#database
+      .prepare(
+        `INSERT INTO works
+           (id, source_platform, source_work_id, artist_id, title, work_type,
+            saved_at, favorite, page_count, ownership, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           artist_id = COALESCE(excluded.artist_id, works.artist_id),
+           title = CASE WHEN excluded.source_platform = 'pixiv' THEN excluded.title ELSE works.title END,
+           source_platform = COALESCE(excluded.source_platform, works.source_platform),
+           source_work_id = COALESCE(excluded.source_work_id, works.source_work_id),
+           ownership = CASE WHEN excluded.source_platform = 'pixiv' THEN 'managed' ELSE works.ownership END,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        workId,
+        isPixiv ? "pixiv" : null,
+        isPixiv ? row.source_work_id : null,
+        isPixiv ? row.author_id : null,
+        row.work_title || row.file_name,
+        isPixiv ? "unknown" : "local",
+        row.imported_at,
+        isPixiv ? "managed" : "external",
+        row.imported_at,
+        now
+      );
+
+    let pageIndex = isPixiv && row.source_page_index !== null ? row.source_page_index : 0;
+    const pageCollision = this.#database
+      .prepare(
+        `SELECT id FROM assets
+          WHERE work_id = ? AND page_index = ? AND legacy_artwork_id <> ?`
+      )
+      .get(workId, pageIndex, row.id) as { id: string } | undefined;
+    if (pageCollision) {
+      const maximum = this.#database
+        .prepare("SELECT COALESCE(MAX(page_index), -1) AS maximum FROM assets WHERE work_id = ?")
+        .get(workId) as { maximum: number };
+      pageIndex = maximum.maximum + 1;
+      this.#database
+        .prepare(
+          `INSERT OR IGNORE INTO migration_conflicts
+             (migration_version, entity_type, legacy_id, reason, resolution, recorded_at)
+           VALUES (1, 'asset', ?, 'duplicate-page-index', ?, ?)`
+        )
+        .run(row.id, `assigned-page-index:${pageIndex}`, now);
+    }
+
+    this.#database
+      .prepare(
+        `INSERT INTO assets
+           (id, work_id, legacy_artwork_id, page_index, path, media_type,
+            extension, file_state, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'image', ?, 'available', ?, ?)
+         ON CONFLICT(legacy_artwork_id) DO UPDATE SET
+           work_id = excluded.work_id,
+           page_index = excluded.page_index,
+           path = excluded.path,
+           extension = excluded.extension,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        oldAsset?.id ?? `asset:${row.id}`,
+        workId,
+        row.id,
+        pageIndex,
+        row.path,
+        extname(row.path).slice(1).toLowerCase() || null,
+        row.imported_at,
+        now
+      );
+
+    this.#database
+      .prepare(
+        `INSERT OR IGNORE INTO collection_works (collection_id, work_id, added_at)
+         SELECT ca.collection_id, ?, c.created_at
+           FROM collection_artworks ca
+           JOIN collections c ON c.id = ca.collection_id
+          WHERE ca.artwork_id = ?`
+      )
+      .run(workId, row.id);
+    this.#database
+      .prepare("UPDATE collections SET cover_work_id = ? WHERE cover_artwork_id = ?")
+      .run(workId, row.id);
+
+    this.#refreshWorkAggregate(workId, now);
+    if (oldAsset && oldAsset.work_id !== workId) {
+      this.#refreshWorkAggregate(oldAsset.work_id, now);
+      this.#database
+        .prepare("DELETE FROM works WHERE id = ? AND NOT EXISTS (SELECT 1 FROM assets WHERE work_id = ?)")
+        .run(oldAsset.work_id, oldAsset.work_id);
+    }
+  }
+
+  #refreshWorkAggregate(workId: string, now: string): void {
+    this.#database
+      .prepare(
+        `UPDATE works
+            SET page_count = (SELECT COUNT(*) FROM assets WHERE work_id = ?),
+                cover_asset_id = (
+                  SELECT id FROM assets WHERE work_id = ?
+                   ORDER BY page_index, id LIMIT 1
+                ),
+                saved_at = COALESCE((
+                  SELECT MIN(aw.imported_at)
+                    FROM assets a JOIN artworks aw ON aw.id = a.legacy_artwork_id
+                   WHERE a.work_id = ?
+                ), saved_at),
+                updated_at = ?
+          WHERE id = ?`
+      )
+      .run(workId, workId, workId, now, workId);
   }
 }
 
@@ -547,4 +964,43 @@ function parseArtworkSource(row: ArtworkRow): ArtworkSource | null {
     authorName: row.author_name,
     title: row.work_title
   };
+}
+
+function mapWorkAsset(row: WorkAssetRow): WorkAssetRecord {
+  return {
+    id: row.id,
+    workId: row.work_id,
+    legacyArtworkId: row.legacy_artwork_id,
+    pageIndex: row.page_index,
+    path: row.path,
+    mediaType: row.media_type === "image" || row.media_type === "ugoira"
+      ? row.media_type
+      : "unknown",
+    extension: row.extension,
+    width: row.width,
+    height: row.height,
+    byteLength: row.byte_length,
+    contentHash: row.content_hash,
+    thumbnailPath: row.thumbnail_path,
+    fileState: asAssetFileState(row.file_state),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function asWorkType(value: string): WorkType {
+  return value === "illustration" || value === "manga" || value === "ugoira" ||
+      value === "local"
+    ? value
+    : "unknown";
+}
+
+function asWorkOwnership(value: string): WorkOwnership {
+  return value === "managed" ? "managed" : "external";
+}
+
+function asAssetFileState(value: string): AssetFileState {
+  return value === "missing" || value === "trashed" || value === "error"
+    ? value
+    : "available";
 }

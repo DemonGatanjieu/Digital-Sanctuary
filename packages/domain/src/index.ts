@@ -45,6 +45,55 @@ export interface ArtworkRecord {
   source: ArtworkSource | null;
 }
 
+export type WorkType = "illustration" | "manga" | "ugoira" | "local" | "unknown";
+export type WorkOwnership = "managed" | "external";
+export type AssetFileState = "available" | "missing" | "trashed" | "error";
+
+/**
+ * A user-visible work. Multi-page Pixiv works have one WorkRecord and many
+ * WorkAssetRecords; ArtworkRecord remains the page-level compatibility model.
+ */
+export interface WorkRecord {
+  id: string;
+  sourcePlatform: "pixiv" | null;
+  sourceWorkId: string | null;
+  artistId: string | null;
+  artistName: string | null;
+  title: string;
+  workType: WorkType;
+  publishedAt: string | null;
+  bookmarkedAt: string | null;
+  savedAt: string;
+  lastViewedAt: string | null;
+  favorite: boolean;
+  pageCount: number;
+  coverAssetId: string | null;
+  ownership: WorkOwnership;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  collectionIds: string[];
+  assets: WorkAssetRecord[];
+}
+
+export interface WorkAssetRecord {
+  id: string;
+  workId: string;
+  legacyArtworkId: string | null;
+  pageIndex: number;
+  path: string;
+  mediaType: "image" | "ugoira" | "unknown";
+  extension: string | null;
+  width: number | null;
+  height: number | null;
+  byteLength: number | null;
+  contentHash: string | null;
+  thumbnailPath: string | null;
+  fileState: AssetFileState;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ArtistRecord {
   id: string;
   name: string;
