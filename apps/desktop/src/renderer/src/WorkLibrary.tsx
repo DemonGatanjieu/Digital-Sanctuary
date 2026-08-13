@@ -9,6 +9,7 @@ import type {
   WorkQueryResult,
   WorkRecord
 } from "@sanctuary/domain";
+import { DialogOverlay } from "./DialogOverlay";
 
 export function WorkLibrary({
   result,
@@ -338,9 +339,9 @@ export function WorkLibrary({
       {selectedWork && (
         <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} />
       )}
-      {deletionPreview && createPortal(
-        <div className="work-delete-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDeletionPreview(null)}>
-          <section className="work-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="work-delete-title">
+      {deletionPreview && (
+        <DialogOverlay busy={deleting} onClose={() => setDeletionPreview(null)}>
+          <section className="dialog-surface work-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="work-delete-title">
             <p className="eyebrow">DELETE PREVIEW</p>
             <h2 id="work-delete-title">确认处理 {deletionPreview.items.length} 个作品？</h2>
             <div className="work-delete-summary">
@@ -360,8 +361,7 @@ export function WorkLibrary({
               <button type="button" className="work-delete-confirm" disabled={deleting} onClick={() => void confirmDeletion()}>{deleting ? "正在处理…" : "确认处理"}</button>
             </footer>
           </section>
-        </div>,
-        document.body
+        </DialogOverlay>
       )}
     </>
   );

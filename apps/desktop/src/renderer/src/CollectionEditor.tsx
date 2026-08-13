@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import type { CollectionRecord } from "@sanctuary/domain";
+import { DialogOverlay } from "./DialogOverlay";
 
 export interface CollectionDraft {
   name: string;
@@ -27,17 +27,12 @@ export function CollectionEditor({
 
   useEffect(() => {
     nameRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !saving) onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, saving]);
+  }, []);
 
-  return createPortal(
-    <div className="collection-editor-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !saving && onClose()}>
+  return (
+    <DialogOverlay busy={saving} onClose={onClose}>
       <form
-        className="collection-editor-dialog"
+        className="dialog-surface collection-editor-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="collection-editor-title"
@@ -75,7 +70,6 @@ export function CollectionEditor({
           </div>
         </footer>
       </form>
-    </div>,
-    document.body
+    </DialogOverlay>
   );
 }

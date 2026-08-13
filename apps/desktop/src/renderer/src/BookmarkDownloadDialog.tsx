@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
+import { DialogOverlay } from "./DialogOverlay";
 
 export function BookmarkDownloadDialog({
   preview,
@@ -16,16 +16,11 @@ export function BookmarkDownloadDialog({
   const confirmRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     confirmRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busy) onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [busy, onClose]);
+  }, []);
 
-  return createPortal(
-    <div className="bookmark-dialog-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}>
-      <section className="bookmark-dialog" role="dialog" aria-modal="true" aria-labelledby="bookmark-dialog-title">
+  return (
+    <DialogOverlay busy={busy} onClose={onClose}>
+      <section className="dialog-surface bookmark-dialog" role="dialog" aria-modal="true" aria-labelledby="bookmark-dialog-title">
         <p className="eyebrow">BOOKMARK DOWNLOAD</p>
         <h2 id="bookmark-dialog-title">下载收藏中的 {preview.total} 个作品？</h2>
         <div className="bookmark-dialog-summary">
@@ -44,7 +39,6 @@ export function BookmarkDownloadDialog({
           <button ref={confirmRef} type="button" className="primary" disabled={busy} onClick={() => void onConfirm()}>{busy ? "正在开始…" : "开始下载"}</button>
         </footer>
       </section>
-    </div>,
-    document.body
+    </DialogOverlay>
   );
 }
