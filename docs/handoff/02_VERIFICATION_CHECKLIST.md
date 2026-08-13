@@ -56,7 +56,7 @@ npm.cmd run build
 - 下载完成或从探索切回画廊后，作者本地头像与新增作者无需重启即可刷新。
 - “作者 · 作品”中的“补全作者头像”只请求作者资料与头像；完成后本地 `avatars` 目录、数据库路径和作者卡片同步更新，不重新下载作品或触发 AI。
 
-## 显式模型整理专项（实现 P0/P1 后启用）
+## 显式模型整理专项
 
 - 应用启动、打开画廊、滚动和下载都不会自动创建整理任务。
 - 开始前明确显示范围和图片数量；用户取消确认后没有后台推理。
@@ -87,3 +87,10 @@ npm.cmd run build
 - 检查 `git status --short` 和 `git diff --check`。
 - 确认没有 `node_modules/`、`.venv*`、`models/`、`.tmp/`、`apps/desktop/out/`、数据库、日志或账号 session。
 - 提交信息说明行为变化；功能阶段和文档同步尽量分成可回滚的独立提交。
+
+## Windows 发布
+
+- `npm.cmd run pack:win` 生成的解包版可启动，状态页显示 `wd-swinv2-tagger-v3` 而不是开发探针。
+- `npm.cmd run dist:win` 生成 NSIS 安装包，模型、标签表和自包含视觉运行时均在 `resources` 中。
+- `npm.cmd run smoke:installer` 完成隔离安装、启动、模型整理页检查、卸载和临时目录清理。
+- 在“设置 → 画廊与存储”创建 SQLite 备份；按 `docs/operations/BACKUP_AND_RECOVERY.md` 做一次离线恢复演练。

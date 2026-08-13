@@ -11,3 +11,4 @@
 | [KI-0005](./KI-0005-download-blocked-by-explore-filter.md) | 已修复 / 实机闭环通过 | “保存当前作品”的原图请求曾被探索过滤器以 `ERR_BLOCKED_BY_CLIENT` 取消 |
 | [KI-0006](./KI-0006-author-avatar-download-failure.md) | 已修复 / 接口与 CDN 已实测 / 待 UI 点击验收 | 作品接口不含可靠头像字段，旧实现从未进入下载步骤 |
 | [KI-0007](./KI-0007-stale-build-and-bulk-download-failure-cascade.md) | 已修复 / 待真实收藏任务复核 | 旧构建掩盖更新，批量下载把全局故障级联为数百个作品失败 |
+| [KI-0008](./KI-0008-unsigned-large-installer.md) | 已确认 / 发布前处理 | 离线安装包内含完整模型且尚未配置商业代码签名，体积较大并可能触发未知发布者提示 |

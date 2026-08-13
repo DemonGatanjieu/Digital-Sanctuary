@@ -24,9 +24,9 @@
 - RTX 4050 开发环境可优先使用 CUDA，初始化失败自动回退 CPU；固定基准中单图推理中位数约从 463 ms 降至 72 ms。
 - 桌面外壳默认使用接近 Pixiv 阅读体验的浅色设计：白色导航、浅灰内容区和低饱和蓝色交互。
 
-## 下一步
+## 当前产品化阶段
 
-下一阶段进入 2.0 产品化重构：先把页面级图库升级为“作品 → 多页资产”模型，完成搜索、排序、多选、安全删除、分类管理、窗口偏好和缩略图管线，再实现显式模型整理。产品设计见 `docs/design/`，施工顺序见 `docs/plans/ACTIVE_ROADMAP.md`。
+2.0 路线中的作品级图库、搜索排序、多选、安全删除、分类管理、窗口与显示偏好、版本化缩略图、10,000 作品基准、自定义元素组和显式模型整理均已落地。当前发布收尾与后续维护以 `docs/plans/ACTIVE_ROADMAP.md` 为准。
 
 ## 本地运行
 
@@ -62,6 +62,23 @@ Python 视觉单测也可以单独运行：
 
 构建输出位于 `apps\desktop\out`，它是可重新生成的开发产物，不进入版本控制。
 
+## Windows 安装包
+
+安装视觉构建依赖一次：
+
+```powershell
+& '.\.venv\Scripts\python.exe' -m pip install -r '.\services\vision\python\requirements-build.txt'
+```
+
+生成带 CPU WD Tagger、自包含 Python 运行时和模型文件的 NSIS 安装包：
+
+```powershell
+npm.cmd run dist:win
+npm.cmd run smoke:installer
+```
+
+产物位于 `release\Digital-Sanctuary-Setup-0.1.0.exe`。安装、启动、模型资源、模型整理页、卸载和临时目录清理均由 `smoke:installer` 在隔离目录验证。当前未配置商业代码签名证书；首次分发时 Windows 可能显示未知发布者提示。
+
 ## 设计文档
 
 - `Project_Vision.md`：产品愿景。
@@ -70,5 +87,6 @@ Python 视觉单测也可以单独运行：
 - `docs/adr/`：已经确定的首版架构决策。
 - `docs/research/`：模型与安全浏览技术探针结论。
 - `docs/known-issues/`：已确认、暂不阻塞推进的问题与临时处理。
+- `docs/operations/`：数据库备份、恢复与发布操作。
 - `ARCHITECTURE.md`：当前架构、安全不变量与目标模块拆分。
 - `docs/handoff/`：供后续开发者或代码模型继续实现的当前状态和验收清单。

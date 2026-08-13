@@ -119,7 +119,18 @@ flowchart LR
 
 第一方广告与普通作品共用 Pixiv 域名和图片 CDN，不能封禁整个 `pixiv.net`/`pximg.net`，也不能把广告插画当作不欢迎元素送入 WD Tagger。
 
-## 6. 目标模块拆分
+## 6. 主进程模块边界
+
+发布收尾已经抽出并测试以下稳定边界：
+
+- `window-state.ts`：多显示器窗口状态校验与安全收敛；
+- `library-ipc.ts`：作品查询、详情读取和缩略图批任务 IPC；
+- `analysis-ipc.ts` / `analysis-job-runner.ts`：显式分析 API 与严格串行、可取消的执行器；
+- `explore-policy.ts`、`explore-review-queue.ts`、`pixiv-dom-adapter.ts`：导航/广告策略、审查队列和远程 DOM 适配；
+- `shared/pixiv-download.ts` / `shared/bounded-concurrency.ts`：Pixiv 响应解析、下载状态和并发原语；
+- `thumbnail-service.ts`、`vision-client.ts`：缩略图缓存和模型子进程协议。
+
+`index.ts` 仍负责 Electron 生命周期和需要共享 Pixiv session 的下载/探索协调。继续迁移时沿用下面的控制器目标，不在发布收尾阶段重写已经通过回归的远程请求链路。
 
 在继续扩大功能前，将 `apps/desktop/src/main/index.ts` 中的探索逻辑逐步迁移为：
 
