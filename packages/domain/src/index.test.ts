@@ -5,6 +5,7 @@ import {
   buildElementFilterRules,
   decideFilter,
   isCustomElementGroup,
+  isAnalysisScope,
   isLibraryPreferences,
   rulesFingerprint,
   type VisionAssessment
@@ -105,5 +106,12 @@ describe("decideFilter", () => {
       downloadDirectory: "E:\\Pictures"
     })).toBe(true);
     expect(isLibraryPreferences({ defaultView: "flat" })).toBe(false);
+  });
+
+  it("accepts only bounded explicit analysis scopes", () => {
+    expect(isAnalysisScope({ type: "all" })).toBe(true);
+    expect(isAnalysisScope({ type: "selected", workIds: ["work-1"] })).toBe(true);
+    expect(isAnalysisScope({ type: "artist", artistId: "" })).toBe(false);
+    expect(isAnalysisScope({ type: "selected", workIds: [42] })).toBe(false);
   });
 });

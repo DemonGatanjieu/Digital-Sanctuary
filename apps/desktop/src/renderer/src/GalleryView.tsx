@@ -42,6 +42,7 @@ export function GalleryView({
   onWorkQueryChange,
   onLoadMoreWorks,
   onWorkLibraryChanged,
+  onAnalyzeWorks,
   onError
 }: {
   artworks: ArtworkRecord[];
@@ -67,6 +68,7 @@ export function GalleryView({
   onWorkQueryChange: (query: WorkQuery) => void;
   onLoadMoreWorks: () => void;
   onWorkLibraryChanged: () => Promise<void>;
+  onAnalyzeWorks: (workIds: string[]) => void;
   onError: (error: unknown) => void;
 }) {
   const authorGroups = useMemo(() => buildAuthorGroups(artworks, artists), [artworks, artists]);
@@ -188,6 +190,7 @@ export function GalleryView({
           onLoadMore={onLoadMoreWorks}
           onAssignCollection={onAssignWorkCollection}
           onLibraryChanged={onWorkLibraryChanged}
+          onAnalyzeWorks={onAnalyzeWorks}
           onError={onError}
         />
       ) : (

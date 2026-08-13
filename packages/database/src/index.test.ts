@@ -7,6 +7,45 @@ import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
+  it("persists explicit analysis jobs, reusable results, and suggestions", () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-analysis-"));
+    const imagePath = join(directory, "sample.png");
+    writeFileSync(imagePath, "image-placeholder");
+    const database = new LibraryDatabase(":memory:");
+    try {
+      database.importArtwork(imagePath);
+      const [work] = database.listWorks();
+      const scope = { type: "selected" as const, workIds: [work!.id] };
+      expect(database.previewAnalysisScope(scope, "test-engine")).toMatchObject({ workCount: 1, assetCount: 1, cachedAssetCount: 0 });
+      const job = database.createAnalysisJob(scope, "test-engine");
+      expect(job).toMatchObject({ status: "queued", totalItems: 1, processedItems: 0 });
+      expect(database.startAnalysisJob(job.id)).toBe(true);
+      const item = database.claimNextAnalysisItem(job.id)!;
+      const result: VisionAssessment = { status: "complete", engine: "test-engine", engineVersion: "1", labels: { blue_hair: 0.8, general: 0.99 }, elapsedMs: 2 };
+      database.completeAnalysisItem(item, result, false);
+      database.finishAnalysisJob(job.id, "completed");
+      expect(database.getAnalysisJob(job.id)).toMatchObject({
+        status: "completed",
+        processedItems: 1,
+        failedItems: 0,
+        suggestions: [{ id: "label:blue_hair", workIds: [work!.id] }]
+      });
+      expect(database.previewAnalysisScope(scope, "test-engine").cachedAssetCount).toBe(1);
+
+      const cancelled = database.createAnalysisJob(scope, "test-engine");
+      expect(database.requestAnalysisCancellation(cancelled.id)).toBe(true);
+      expect(database.getAnalysisJob(cancelled.id)?.status).toBe("cancelled");
+
+      const interrupted = database.createAnalysisJob(scope, "test-engine");
+      database.startAnalysisJob(interrupted.id);
+      expect(database.recoverInterruptedAnalysisJobs()).toBe(1);
+      expect(database.getAnalysisJob(interrupted.id)?.status).toBe("failed");
+    } finally {
+      database.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("seeds an isolated metadata-only renderer benchmark", () => {
     const database = new LibraryDatabase(":memory:");
     database.seedBenchmarkWorks(10_000);

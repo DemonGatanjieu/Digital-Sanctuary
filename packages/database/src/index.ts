@@ -4,6 +4,10 @@ import { basename, extname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   ArtworkRecord,
+  AnalysisJob,
+  AnalysisJobStatus,
+  AnalysisScope,
+  AnalysisScopePreview,
   AssetFileState,
   CollectionRecord,
   ElementFilterSetting,
@@ -158,6 +162,31 @@ interface RemoteImageReviewRow {
   decision_json: string;
   byte_length: number;
   reviewed_at: string;
+}
+
+interface AnalysisJobRow {
+  id: string;
+  scope_json: string;
+  status: string;
+  engine: string;
+  work_count: number;
+  total_items: number;
+  processed_items: number;
+  cache_hits: number;
+  error: string | null;
+  cancel_requested: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface AnalysisQueueItem {
+  id: string;
+  jobId: string;
+  workId: string;
+  assetId: string;
+  path: string;
+  assetUpdatedAt: string;
 }
 
 export class LibraryDatabase {
@@ -945,6 +974,238 @@ export class LibraryDatabase {
     return Number(this.#database.prepare("DELETE FROM remote_image_reviews").run().changes);
   }
 
+  previewAnalysisScope(scope: AnalysisScope, engine: string): AnalysisScopePreview {
+    const workIds = this.#workIdsForAnalysisScope(scope);
+    if (workIds.length === 0) return { scope, workCount: 0, assetCount: 0, cachedAssetCount: 0 };
+    const placeholders = workIds.map(() => "?").join(",");
+    const row = this.#database.prepare(
+      `SELECT COUNT(*) AS asset_count,
+              COALESCE(SUM(CASE WHEN ar.asset_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS cached_count
+         FROM assets a
+         LEFT JOIN analysis_asset_results ar
+           ON ar.asset_id = a.id AND ar.engine = ? AND ar.asset_updated_at = a.updated_at
+        WHERE a.work_id IN (${placeholders})
+          AND a.media_type = 'image' AND a.file_state = 'available'`
+    ).get(engine, ...workIds) as { asset_count: number; cached_count: number };
+    return {
+      scope,
+      workCount: workIds.length,
+      assetCount: Number(row.asset_count),
+      cachedAssetCount: Number(row.cached_count)
+    };
+  }
+
+  createAnalysisJob(scope: AnalysisScope, engine: string): AnalysisJob {
+    const workIds = this.#workIdsForAnalysisScope(scope);
+    const jobId = randomUUID();
+    const now = new Date().toISOString();
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      this.#database.prepare(
+        `INSERT INTO analysis_jobs
+           (id, scope_json, status, engine, work_count, total_items, processed_items,
+            cache_hits, error, cancel_requested, created_at)
+         VALUES (?, ?, 'queued', ?, ?, 0, 0, 0, NULL, 0, ?)`
+      ).run(jobId, JSON.stringify(scope), engine, workIds.length, now);
+      const insertItem = this.#database.prepare(
+        `INSERT INTO analysis_job_items
+           (id, job_id, work_id, asset_id, status, assessment_json, error, cached, created_at, updated_at)
+         SELECT ?, ?, work_id, id, 'queued', NULL, NULL, 0, ?, ?
+           FROM assets
+          WHERE id = ? AND media_type = 'image' AND file_state = 'available'`
+      );
+      if (workIds.length > 0) {
+        const placeholders = workIds.map(() => "?").join(",");
+        const assets = this.#database.prepare(
+          `SELECT id FROM assets WHERE work_id IN (${placeholders}) AND media_type = 'image' AND file_state = 'available' ORDER BY work_id, page_index`
+        ).all(...workIds) as unknown as Array<{ id: string }>;
+        for (const asset of assets) insertItem.run(randomUUID(), jobId, now, now, asset.id);
+      }
+      this.#database.prepare(
+        "UPDATE analysis_jobs SET total_items = (SELECT COUNT(*) FROM analysis_job_items WHERE job_id = ?) WHERE id = ?"
+      ).run(jobId, jobId);
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+    return this.getAnalysisJob(jobId)!;
+  }
+
+  listAnalysisJobs(): AnalysisJob[] {
+    const rows = this.#database.prepare("SELECT * FROM analysis_jobs ORDER BY created_at DESC LIMIT 50").all() as unknown as AnalysisJobRow[];
+    return rows.map((row) => this.#mapAnalysisJob(row));
+  }
+
+  recoverInterruptedAnalysisJobs(): number {
+    const now = new Date().toISOString();
+    return Number(this.#database.prepare(
+      `UPDATE analysis_jobs
+          SET status = 'failed', error = '应用在任务完成前关闭；请新建任务后重试。', completed_at = ?
+        WHERE status = 'running'`
+    ).run(now).changes);
+  }
+
+  getAnalysisJob(jobId: string): AnalysisJob | null {
+    const row = this.#database.prepare("SELECT * FROM analysis_jobs WHERE id = ?").get(jobId) as AnalysisJobRow | undefined;
+    return row ? this.#mapAnalysisJob(row) : null;
+  }
+
+  startAnalysisJob(jobId: string): boolean {
+    return Number(this.#database.prepare(
+      "UPDATE analysis_jobs SET status = 'running', started_at = COALESCE(started_at, ?) WHERE id = ? AND status = 'queued'"
+    ).run(new Date().toISOString(), jobId).changes) > 0;
+  }
+
+  requestAnalysisCancellation(jobId: string): boolean {
+    const now = new Date().toISOString();
+    const queued = this.#database.prepare(
+      "UPDATE analysis_jobs SET status = 'cancelled', cancel_requested = 1, completed_at = ? WHERE id = ? AND status = 'queued'"
+    ).run(now, jobId);
+    if (queued.changes > 0) return true;
+    return Number(this.#database.prepare(
+      "UPDATE analysis_jobs SET cancel_requested = 1 WHERE id = ? AND status = 'running'"
+    ).run(jobId).changes) > 0;
+  }
+
+  isAnalysisCancellationRequested(jobId: string): boolean {
+    const row = this.#database.prepare("SELECT cancel_requested FROM analysis_jobs WHERE id = ?").get(jobId) as { cancel_requested: number } | undefined;
+    return row?.cancel_requested === 1;
+  }
+
+  claimNextAnalysisItem(jobId: string): AnalysisQueueItem | null {
+    const row = this.#database.prepare(
+      `SELECT ji.id, ji.job_id, ji.work_id, ji.asset_id, a.path, a.updated_at
+         FROM analysis_job_items ji JOIN assets a ON a.id = ji.asset_id
+        WHERE ji.job_id = ? AND ji.status = 'queued'
+        ORDER BY ji.created_at, ji.id LIMIT 1`
+    ).get(jobId) as { id: string; job_id: string; work_id: string; asset_id: string; path: string; updated_at: string } | undefined;
+    if (!row) return null;
+    this.#database.prepare("UPDATE analysis_job_items SET status = 'running', updated_at = ? WHERE id = ?").run(new Date().toISOString(), row.id);
+    return { id: row.id, jobId: row.job_id, workId: row.work_id, assetId: row.asset_id, path: row.path, assetUpdatedAt: row.updated_at };
+  }
+
+  getCachedAssetAnalysis(assetId: string, assetUpdatedAt: string, engine: string): VisionAssessment | null {
+    const row = this.#database.prepare(
+      "SELECT assessment_json FROM analysis_asset_results WHERE asset_id = ? AND asset_updated_at = ? AND engine = ?"
+    ).get(assetId, assetUpdatedAt, engine) as { assessment_json: string } | undefined;
+    return row ? parseJson<VisionAssessment>(row.assessment_json) : null;
+  }
+
+  completeAnalysisItem(item: AnalysisQueueItem, assessment: VisionAssessment, cached: boolean): void {
+    const now = new Date().toISOString();
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      this.#database.prepare(
+        "UPDATE analysis_job_items SET status = 'complete', assessment_json = ?, error = NULL, cached = ?, updated_at = ? WHERE id = ?"
+      ).run(JSON.stringify(assessment), cached ? 1 : 0, now, item.id);
+      if (!cached && assessment.status === "complete") {
+        this.#database.prepare(
+          `INSERT INTO analysis_asset_results
+             (asset_id, asset_updated_at, engine, engine_version, assessment_json, analyzed_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(asset_id, engine) DO UPDATE SET
+             asset_updated_at = excluded.asset_updated_at,
+             engine_version = excluded.engine_version,
+             assessment_json = excluded.assessment_json,
+             analyzed_at = excluded.analyzed_at`
+        ).run(item.assetId, item.assetUpdatedAt, assessment.engine, assessment.engineVersion, JSON.stringify(assessment), now);
+      }
+      this.#database.prepare(
+        "UPDATE analysis_jobs SET processed_items = processed_items + 1, cache_hits = cache_hits + ? WHERE id = ?"
+      ).run(cached ? 1 : 0, item.jobId);
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  failAnalysisItem(item: AnalysisQueueItem, error: string): void {
+    const now = new Date().toISOString();
+    this.#database.prepare(
+      "UPDATE analysis_job_items SET status = 'error', error = ?, updated_at = ? WHERE id = ?"
+    ).run(error.slice(0, 500), now, item.id);
+    this.#database.prepare("UPDATE analysis_jobs SET processed_items = processed_items + 1 WHERE id = ?").run(item.jobId);
+  }
+
+  finishAnalysisJob(jobId: string, status: Extract<AnalysisJobStatus, "completed" | "cancelled" | "failed">, error: string | null = null): void {
+    this.#database.prepare(
+      "UPDATE analysis_jobs SET status = ?, error = ?, completed_at = ? WHERE id = ?"
+    ).run(status, error?.slice(0, 500) ?? null, new Date().toISOString(), jobId);
+  }
+
+  #workIdsForAnalysisScope(scope: AnalysisScope): string[] {
+    if (scope.type === "all") {
+      return (this.#database.prepare("SELECT id FROM works WHERE deleted_at IS NULL ORDER BY saved_at DESC").all() as unknown as Array<{ id: string }>).map((row) => row.id);
+    }
+    if (scope.type === "artist") {
+      return (this.#database.prepare("SELECT id FROM works WHERE artist_id = ? AND deleted_at IS NULL ORDER BY saved_at DESC").all(scope.artistId) as unknown as Array<{ id: string }>).map((row) => row.id);
+    }
+    if (scope.type === "collection") {
+      return (this.#database.prepare(
+        `SELECT w.id FROM works w JOIN collection_works cw ON cw.work_id = w.id
+          WHERE cw.collection_id = ? AND w.deleted_at IS NULL ORDER BY w.saved_at DESC`
+      ).all(scope.collectionId) as unknown as Array<{ id: string }>).map((row) => row.id);
+    }
+    const uniqueIds = [...new Set(scope.workIds)];
+    if (uniqueIds.length === 0) return [];
+    const placeholders = uniqueIds.map(() => "?").join(",");
+    return (this.#database.prepare(
+      `SELECT id FROM works WHERE deleted_at IS NULL AND id IN (${placeholders})`
+    ).all(...uniqueIds) as unknown as Array<{ id: string }>).map((row) => row.id);
+  }
+
+  #mapAnalysisJob(row: AnalysisJobRow): AnalysisJob {
+    const labelWorks = new Map<string, Map<string, number>>();
+    const ignored = new Set(["general", "sensitive", "questionable", "explicit", "safe", "rating:safe", "rating:questionable", "rating:explicit"]);
+    const items = this.#database.prepare(
+      "SELECT work_id, assessment_json FROM analysis_job_items WHERE job_id = ? AND status = 'complete' AND assessment_json IS NOT NULL"
+    ).all(row.id) as unknown as Array<{ work_id: string; assessment_json: string }>;
+    const failedRow = this.#database.prepare(
+      "SELECT COUNT(*) AS count FROM analysis_job_items WHERE job_id = ? AND status = 'error'"
+    ).get(row.id) as { count: number };
+    for (const item of items) {
+      const assessment = parseJson<VisionAssessment>(item.assessment_json);
+      if (!assessment || assessment.status !== "complete") continue;
+      const topLabels = Object.entries(assessment.labels)
+        .filter(([label, confidence]) => !ignored.has(label) && confidence >= 0.55)
+        .sort((left, right) => right[1] - left[1])
+        .slice(0, 3);
+      for (const [label, confidence] of topLabels) {
+        const workScores = labelWorks.get(label) ?? new Map<string, number>();
+        workScores.set(item.work_id, Math.max(workScores.get(item.work_id) ?? 0, confidence));
+        labelWorks.set(label, workScores);
+      }
+    }
+    const suggestions = [...labelWorks.entries()]
+      .map(([label, workScores]) => ({
+        id: `label:${label}`,
+        label,
+        averageConfidence: [...workScores.values()].reduce((sum, value) => sum + value, 0) / workScores.size,
+        workIds: [...workScores.keys()]
+      }))
+      .sort((left, right) => right.workIds.length - left.workIds.length || right.averageConfidence - left.averageConfidence)
+      .slice(0, 12);
+    return {
+      id: row.id,
+      scope: parseJson<AnalysisScope>(row.scope_json) ?? { type: "all" },
+      status: row.status as AnalysisJobStatus,
+      engine: row.engine,
+      workCount: Number(row.work_count),
+      totalItems: Number(row.total_items),
+      processedItems: Number(row.processed_items),
+      failedItems: Number(failedRow.count),
+      cacheHits: Number(row.cache_hits),
+      error: row.error,
+      cancelRequested: row.cancel_requested === 1,
+      createdAt: row.created_at,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+      suggestions
+    };
+  }
+
   #migrate(): void {
     this.#database.exec(`
       CREATE TABLE IF NOT EXISTS artworks (
@@ -1129,6 +1390,49 @@ export class LibraryDatabase {
         value_json TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS analysis_jobs (
+        id TEXT PRIMARY KEY,
+        scope_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'cancelled', 'failed')),
+        engine TEXT NOT NULL,
+        work_count INTEGER NOT NULL,
+        total_items INTEGER NOT NULL,
+        processed_items INTEGER NOT NULL,
+        cache_hits INTEGER NOT NULL,
+        error TEXT,
+        cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK (cancel_requested IN (0, 1)),
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        completed_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS analysis_asset_results (
+        asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        asset_updated_at TEXT NOT NULL,
+        engine TEXT NOT NULL,
+        engine_version TEXT NOT NULL,
+        assessment_json TEXT NOT NULL,
+        analyzed_at TEXT NOT NULL,
+        PRIMARY KEY (asset_id, engine)
+      );
+
+      CREATE TABLE IF NOT EXISTS analysis_job_items (
+        id TEXT PRIMARY KEY,
+        job_id TEXT NOT NULL REFERENCES analysis_jobs(id) ON DELETE CASCADE,
+        work_id TEXT NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+        asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'complete', 'error')),
+        assessment_json TEXT,
+        error TEXT,
+        cached INTEGER NOT NULL DEFAULT 0 CHECK (cached IN (0, 1)),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE (job_id, asset_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_analysis_job_items_queue
+        ON analysis_job_items(job_id, status, created_at);
 
       CREATE TABLE IF NOT EXISTS migration_conflicts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

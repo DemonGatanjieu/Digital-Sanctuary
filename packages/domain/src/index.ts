@@ -249,6 +249,51 @@ export interface RuleSandboxResult {
   decision: FilterDecision;
 }
 
+export type AnalysisScope =
+  | { type: "selected"; workIds: string[] }
+  | { type: "artist"; artistId: string }
+  | { type: "collection"; collectionId: string }
+  | { type: "all" };
+
+export interface AnalysisScopePreview {
+  scope: AnalysisScope;
+  workCount: number;
+  assetCount: number;
+  cachedAssetCount: number;
+}
+
+export type AnalysisJobStatus = "queued" | "running" | "completed" | "cancelled" | "failed";
+
+export interface AnalysisSuggestion {
+  id: string;
+  label: string;
+  averageConfidence: number;
+  workIds: string[];
+}
+
+export interface AnalysisJob {
+  id: string;
+  scope: AnalysisScope;
+  status: AnalysisJobStatus;
+  engine: string;
+  workCount: number;
+  totalItems: number;
+  processedItems: number;
+  failedItems: number;
+  cacheHits: number;
+  error: string | null;
+  cancelRequested: boolean;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  suggestions: AnalysisSuggestion[];
+}
+
+export interface AnalysisApplyResult {
+  collectionIds: string[];
+  affectedWorkCount: number;
+}
+
 export const ELEMENT_BLACKLIST_GROUPS: ElementBlacklistGroup[] = [
   {
     id: "guro",
@@ -388,6 +433,15 @@ export function isCustomElementGroup(value: unknown): value is CustomElementGrou
     typeof candidate.defaultThreshold === "number" && candidate.defaultThreshold >= 0.05 && candidate.defaultThreshold <= 0.95 &&
     (candidate.action === "blur" || candidate.action === "hide")
   );
+}
+
+export function isAnalysisScope(value: unknown): value is AnalysisScope {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<AnalysisScope> & Record<string, unknown>;
+  if (candidate.type === "all") return true;
+  if (candidate.type === "artist") return typeof candidate.artistId === "string" && candidate.artistId.length > 0 && candidate.artistId.length <= 200;
+  if (candidate.type === "collection") return typeof candidate.collectionId === "string" && candidate.collectionId.length > 0 && candidate.collectionId.length <= 200;
+  return candidate.type === "selected" && Array.isArray(candidate.workIds) && candidate.workIds.length <= 10_000 && candidate.workIds.every((id) => typeof id === "string" && id.length > 0 && id.length <= 200);
 }
 
 export const DEFAULT_FILTER_RULES: FilterRule[] = buildElementFilterRules();

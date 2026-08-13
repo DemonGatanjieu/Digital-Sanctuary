@@ -15,6 +15,7 @@ import type { ExploreState } from "../../preload/index";
 import { CollectionEditor, type CollectionDraft } from "./CollectionEditor";
 import { BookmarkDownloadDialog } from "./BookmarkDownloadDialog";
 import { SettingsView } from "./SettingsView";
+import { AnalysisView } from "./AnalysisView";
 import { ExploreView, initialExploreState } from "./ExploreView";
 import { AppSidebar, type ActiveView, type AppStatus } from "./AppSidebar";
 import { GalleryView, type GalleryMode } from "./GalleryView";
@@ -64,6 +65,7 @@ export function App() {
   const [error, setError] = useState("");
   const [exploreState, setExploreState] = useState<ExploreState>(initialExploreState);
   const [galleryMode, setGalleryMode] = useState<GalleryMode>("flat");
+  const [analysisWorkIds, setAnalysisWorkIds] = useState<string[]>([]);
   const showError = useCallback((caught: unknown) => {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
@@ -399,6 +401,20 @@ export function App() {
             onWorkQueryChange={setWorkQuery}
             onLoadMoreWorks={() => void loadMoreWorks()}
             onWorkLibraryChanged={() => refreshWorks()}
+            onAnalyzeWorks={(workIds) => {
+              setAnalysisWorkIds(workIds);
+              setActiveView("organize");
+            }}
+            onError={showError}
+          />
+        ) : activeView === "organize" ? (
+          <AnalysisView
+            collections={collections}
+            artists={artists}
+            selectedWorkIds={analysisWorkIds}
+            status={status}
+            error={error}
+            onApplied={refreshLibrary}
             onError={showError}
           />
         ) : activeView === "settings" ? (

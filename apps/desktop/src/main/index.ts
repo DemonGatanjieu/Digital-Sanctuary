@@ -24,10 +24,15 @@ import {
   decideFilter,
   DEFAULT_LIBRARY_PREFERENCES,
   isCustomElementGroup,
+  isAnalysisScope,
   isElementFilterSetting,
   isLibraryPreferences,
   rulesFingerprint,
   type AppearancePreferences,
+  type AnalysisApplyResult,
+  type AnalysisJob,
+  type AnalysisScope,
+  type AnalysisScopePreview,
   type ArtistRecord,
   type ArtworkRecord,
   type CustomElementGroup,
@@ -112,6 +117,8 @@ let exploreDownloadState: ExploreDownloadState = { ...IDLE_EXPLORE_DOWNLOAD_STAT
 let activeExploreDownload: Promise<ExploreDownloadResult> | undefined;
 let activeArtistAvatarRepair: Promise<ArtistAvatarRepairResult> | undefined;
 let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
+const scheduledAnalysisJobIds = new Set<string>();
+let analysisRunner: Promise<void> = Promise.resolve();
 interface RemoteReviewOutcome {
   allowed: boolean;
   reasons: string[];
@@ -170,6 +177,7 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(() => {
     database = new LibraryDatabase(join(app.getPath("userData"), "library.db"));
+    database.recoverInterruptedAnalysisJobs();
     if (process.env.SANCTUARY_BENCHMARK_LIBRARY === "1") {
       database.seedBenchmarkWorks(Number(process.env.SANCTUARY_BENCHMARK_WORKS ?? 10_000));
     }
@@ -396,6 +404,57 @@ function registerImageProtocol(): void {
   });
 }
 
+function scheduleAnalysisJob(jobId: string): void {
+  if (scheduledAnalysisJobIds.has(jobId)) return;
+  scheduledAnalysisJobIds.add(jobId);
+  analysisRunner = analysisRunner
+    .catch(() => undefined)
+    .then(() => runAnalysisJob(jobId))
+    .finally(() => scheduledAnalysisJobIds.delete(jobId));
+}
+
+async function runAnalysisJob(jobId: string): Promise<void> {
+  const target = database;
+  const client = vision;
+  if (!target || !client) return;
+  try {
+    if (target.isAnalysisCancellationRequested(jobId)) {
+      target.finishAnalysisJob(jobId, "cancelled");
+      return;
+    }
+    if (!target.startAnalysisJob(jobId)) return;
+    while (true) {
+      if (target.isAnalysisCancellationRequested(jobId)) {
+        target.finishAnalysisJob(jobId, "cancelled");
+        return;
+      }
+      const item = target.claimNextAnalysisItem(jobId);
+      if (!item) {
+        target.finishAnalysisJob(jobId, "completed");
+        return;
+      }
+      if (!existsSync(item.path)) {
+        target.failAnalysisItem(item, "图片文件不存在");
+        continue;
+      }
+      const cached = target.getCachedAssetAnalysis(item.assetId, item.assetUpdatedAt, client.engine);
+      if (cached) {
+        target.completeAnalysisItem(item, cached, true);
+        continue;
+      }
+      try {
+        const assessment = await client.classify(item.path, 30_000);
+        if (assessment.status === "error") target.failAnalysisItem(item, assessment.error ?? "模型分析失败");
+        else target.completeAnalysisItem(item, assessment, false);
+      } catch (error) {
+        target.failAnalysisItem(item, errorMessage(error));
+      }
+    }
+  } catch (error) {
+    target.finishAnalysisJob(jobId, "failed", errorMessage(error));
+  }
+}
+
 function registerIpc(): void {
   ipcMain.handle("library:list", () => database?.listArtworks() ?? []);
   ipcMain.handle("library:query-works", (_event, query: unknown) =>
@@ -528,6 +587,54 @@ function registerIpc(): void {
       buildElementFilterRules(database.listElementFilterSettings(), customElementGroups())
     );
     return { fileName: basename(path), assessment, decision };
+  });
+
+  ipcMain.handle("analysis:preview", (_event, value: unknown): AnalysisScopePreview => {
+    if (!database || !vision || !isAnalysisScope(value)) throw new Error("Invalid analysis scope");
+    return database.previewAnalysisScope(value, vision.engine);
+  });
+  ipcMain.handle("analysis:create", (_event, value: unknown): AnalysisJob => {
+    if (!database || !vision || !isAnalysisScope(value)) throw new Error("Invalid analysis scope");
+    return database.createAnalysisJob(value, vision.engine);
+  });
+  ipcMain.handle("analysis:list", (): AnalysisJob[] => database?.listAnalysisJobs() ?? []);
+  ipcMain.handle("analysis:start", (_event, value: unknown): AnalysisJob => {
+    if (!database || typeof value !== "string" || value.length > 100) throw new Error("Invalid analysis job");
+    const job = database.getAnalysisJob(value);
+    if (!job || job.status !== "queued") throw new Error("Analysis job is not queued");
+    scheduleAnalysisJob(job.id);
+    return job;
+  });
+  ipcMain.handle("analysis:cancel", (_event, value: unknown): AnalysisJob => {
+    if (!database || typeof value !== "string" || value.length > 100) throw new Error("Invalid analysis job");
+    if (!database.requestAnalysisCancellation(value)) throw new Error("Analysis job cannot be cancelled");
+    return database.getAnalysisJob(value)!;
+  });
+  ipcMain.handle("analysis:apply-suggestions", (_event, value: unknown): AnalysisApplyResult => {
+    if (!database || !value || typeof value !== "object") throw new Error("Invalid suggestion request");
+    const candidate = value as { jobId?: unknown; suggestionIds?: unknown };
+    if (typeof candidate.jobId !== "string" || candidate.jobId.length > 100 ||
+        !Array.isArray(candidate.suggestionIds) || candidate.suggestionIds.length > 12 ||
+        !candidate.suggestionIds.every((id) => typeof id === "string" && id.length <= 200)) {
+      throw new Error("Invalid suggestion request");
+    }
+    const suggestionIds = candidate.suggestionIds as string[];
+    const job = database.getAnalysisJob(candidate.jobId);
+    if (!job || job.status !== "completed") throw new Error("Analysis job is not complete");
+    const selected = job.suggestions.filter((suggestion) => suggestionIds.includes(suggestion.id));
+    const affected = new Set<string>();
+    const collectionIds: string[] = [];
+    for (const suggestion of selected) {
+      const name = `AI · ${suggestion.label.replaceAll("_", " ")}`.slice(0, 80);
+      const collection = database.listCollections().find((item) => item.name === name) ??
+        database.createCollection(name, `由 ${job.engine} 建议；需由用户明确确认后加入。`);
+      collectionIds.push(collection.id);
+      for (const workId of suggestion.workIds) {
+        database.addWorkToCollection(workId, collection.id);
+        affected.add(workId);
+      }
+    }
+    return { collectionIds, affectedWorkCount: affected.size };
   });
 
   ipcMain.handle("explore:show", (_event, bounds: unknown) => {

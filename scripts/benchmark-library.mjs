@@ -49,7 +49,7 @@ try {
       await new Promise((resolve) => setTimeout(resolve, 500));
       frameDeltas.sort((a, b) => a - b);
       const memory = performance.memory ?? {};
-      return {
+      const metrics = {
         fixtureWorks: ${fixtureSize},
         firstPageMs: Math.round(firstPageMs),
         loadedCardsAfterScroll: document.querySelectorAll(".work-library-card").length,
@@ -58,6 +58,11 @@ try {
         maxFrameMs: Math.round(Math.max(...frameDeltas) * 10) / 10,
         jsHeapMb: memory.usedJSHeapSize ? Math.round(memory.usedJSHeapSize / 1024 / 1024) : null
       };
+      const organizeButton = Array.from(document.querySelectorAll("nav button"))
+        .find((button) => button.textContent.trim() === "模型整理");
+      organizeButton?.click();
+      await waitUntil(() => Boolean(document.querySelector(".analysis-scope-card")), 3000);
+      return { ...metrics, analysisViewReady: Boolean(document.querySelector(".analysis-scope-card")) };
     })()`);
     const failures = [];
     if (result.firstPageMs > 5_000) failures.push("first page exceeded 5s");
@@ -65,6 +70,7 @@ try {
     if (result.renderedImages !== 0) failures.push("metadata fixture unexpectedly decoded images");
     if (result.p95FrameMs > 80) failures.push("scroll P95 exceeded 80ms");
     if (result.jsHeapMb !== null && result.jsHeapMb > 512) failures.push("renderer heap exceeded 512MB");
+    if (!result.analysisViewReady) failures.push("explicit analysis center did not render");
     console.log(JSON.stringify({ ...result, status: failures.length ? "failed" : "passed", failures }, null, 2));
     if (failures.length) process.exitCode = 1;
   } finally {

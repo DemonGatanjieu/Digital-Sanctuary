@@ -10,7 +10,7 @@ export interface AppStatus {
   modelBacked: boolean;
 }
 
-export type ActiveView = "gallery" | "explore" | "settings";
+export type ActiveView = "gallery" | "organize" | "explore" | "settings";
 
 export function AppSidebar({
   activeView,
@@ -45,6 +45,7 @@ export function AppSidebar({
 
       <nav>
         <button className={`nav-item ${activeView === "gallery" ? "active" : ""}`} onClick={() => void onOpenGallery()}>画廊</button>
+        <button className={`nav-item ${activeView === "organize" ? "active" : ""}`} onClick={() => onViewChange("organize")}>模型整理</button>
         <button className={`nav-item ${activeView === "explore" ? "active" : ""}`} onClick={() => onViewChange("explore")}>探索</button>
         <button className={`nav-item ${activeView === "settings" ? "active" : ""}`} onClick={() => onViewChange("settings")}>设置</button>
       </nav>

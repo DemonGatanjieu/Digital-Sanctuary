@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   AppearancePreferences,
+  AnalysisApplyResult,
+  AnalysisJob,
+  AnalysisScope,
+  AnalysisScopePreview,
   ArtistRecord,
   ArtworkRecord,
   CollectionRecord,
@@ -89,6 +93,12 @@ export interface SanctuaryApi {
   updateLibraryPreferences(preferences: LibraryPreferences): Promise<LibraryPreferences>;
   chooseDownloadDirectory(): Promise<LibraryPreferences>;
   testFilterImage(): Promise<RuleSandboxResult | null>;
+  previewAnalysis(scope: AnalysisScope): Promise<AnalysisScopePreview>;
+  createAnalysisJob(scope: AnalysisScope): Promise<AnalysisJob>;
+  listAnalysisJobs(): Promise<AnalysisJob[]>;
+  startAnalysisJob(jobId: string): Promise<AnalysisJob>;
+  cancelAnalysisJob(jobId: string): Promise<AnalysisJob>;
+  applyAnalysisSuggestions(jobId: string, suggestionIds: string[]): Promise<AnalysisApplyResult>;
   showExplore(bounds: ExploreBounds): Promise<ExploreState>;
   setExploreBounds(bounds: ExploreBounds): Promise<boolean>;
   hideExplore(): Promise<void>;
@@ -171,6 +181,18 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("preferences:library:choose-download-directory") as Promise<LibraryPreferences>,
   testFilterImage: () =>
     ipcRenderer.invoke("filters:test-image") as Promise<RuleSandboxResult | null>,
+  previewAnalysis: (scope) =>
+    ipcRenderer.invoke("analysis:preview", scope) as Promise<AnalysisScopePreview>,
+  createAnalysisJob: (scope) =>
+    ipcRenderer.invoke("analysis:create", scope) as Promise<AnalysisJob>,
+  listAnalysisJobs: () =>
+    ipcRenderer.invoke("analysis:list") as Promise<AnalysisJob[]>,
+  startAnalysisJob: (jobId) =>
+    ipcRenderer.invoke("analysis:start", jobId) as Promise<AnalysisJob>,
+  cancelAnalysisJob: (jobId) =>
+    ipcRenderer.invoke("analysis:cancel", jobId) as Promise<AnalysisJob>,
+  applyAnalysisSuggestions: (jobId, suggestionIds) =>
+    ipcRenderer.invoke("analysis:apply-suggestions", { jobId, suggestionIds }) as Promise<AnalysisApplyResult>,
   showExplore: (bounds) =>
     ipcRenderer.invoke("explore:show", bounds) as Promise<ExploreState>,
   setExploreBounds: (bounds) =>

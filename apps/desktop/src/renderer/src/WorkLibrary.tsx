@@ -23,6 +23,7 @@ export function WorkLibrary({
   onLoadMore,
   onAssignCollection,
   onLibraryChanged,
+  onAnalyzeWorks,
   onError
 }: {
   result: WorkQueryResult;
@@ -34,6 +35,7 @@ export function WorkLibrary({
   onLoadMore: () => void;
   onAssignCollection: (workId: string, collectionId: string) => Promise<void>;
   onLibraryChanged: () => Promise<void>;
+  onAnalyzeWorks: (workIds: string[]) => void;
   onError: (error: unknown) => void;
 }) {
   const [selectedWork, setSelectedWork] = useState<WorkRecord | null>(null);
@@ -347,6 +349,9 @@ export function WorkLibrary({
             }}
           >
             ♡ 喜欢
+          </button>
+          <button type="button" className="work-analyze-selected" disabled={selectedIds.size === 0} onClick={() => onAnalyzeWorks([...selectedIds])}>
+            模型整理…
           </button>
           <button type="button" className="work-delete-button" disabled={selectedIds.size === 0} onClick={() => void previewDeletion()}>
             移出画廊…
