@@ -16,6 +16,9 @@ import { CollectionEditor, type CollectionDraft } from "./CollectionEditor";
 import { BookmarkDownloadDialog } from "./BookmarkDownloadDialog";
 import { SettingsView } from "./SettingsView";
 import { ExploreView, downloadPhaseLabel, initialExploreState } from "./ExploreView";
+import { AppNotice } from "./AppNotice";
+import { Button } from "./Button";
+import { SegmentedControl } from "./SegmentedControl";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
 
 interface AppStatus {
@@ -409,20 +412,17 @@ export function App() {
         <div className="sidebar-spacer" />
         <section className="display-profile-control" aria-label="显示性能档位">
           <div><span>显示档位</span><small>{appearance.displayProfile === "quality" ? "完整氛围" : appearance.displayProfile === "balanced" ? "日常推荐" : "减少特效"}</small></div>
-          <div className="display-profile-segments">
-            {(["quality", "balanced", "efficient"] as const).map((profile) => (
-              <button
-                type="button"
-                key={profile}
-                className={appearance.displayProfile === profile ? "active" : ""}
-                aria-pressed={appearance.displayProfile === profile}
-                title={profile === "quality" ? "精致" : profile === "balanced" ? "均衡" : "省电"}
-                onClick={() => void updateAppearance({ ...appearance, displayProfile: profile })}
-              >
-                {profile === "quality" ? "精" : profile === "balanced" ? "衡" : "省"}
-              </button>
-            ))}
-          </div>
+          <SegmentedControl
+            compact
+            label="显示性能档位"
+            value={appearance.displayProfile}
+            options={[
+              { value: "quality", label: "精", title: "精致" },
+              { value: "balanced", label: "衡", title: "均衡" },
+              { value: "efficient", label: "省", title: "省电" }
+            ]}
+            onChange={(profile) => void updateAppearance({ ...appearance, displayProfile: profile })}
+          />
         </section>
         <div className="engine-card">
           <span className={`status-dot ${status?.visionReady ? "online" : ""}`} />
@@ -589,50 +589,37 @@ function GalleryView({
           <h1>你的数字庇护所</h1>
         </div>
         <div className="header-actions">
-          <div className="gallery-mode-switch" aria-label="画廊布局">
-            <button
-              className={mode === "flat" ? "active" : ""}
-              onClick={showAllWorks}
-            >
-              平铺
-            </button>
-            <button
-              className={mode === "collections" ? "active" : ""}
-              onClick={() => onModeChange("collections")}
-            >
-              分类
-            </button>
-            <button
-              className={mode === "author-work" ? "active" : ""}
-              onClick={() => onModeChange("author-work")}
-            >
-              作者 · 作品
-            </button>
-          </div>
+          <SegmentedControl
+            label="画廊布局"
+            value={mode}
+            options={[
+              { value: "flat", label: "平铺" },
+              { value: "collections", label: "分类" },
+              { value: "author-work", label: "作者 · 作品" }
+            ]}
+            onChange={(nextMode) => nextMode === "flat" ? showAllWorks() : onModeChange(nextMode)}
+          />
           {mode === "author-work" && (
             <div className="avatar-repair-control">
-              <button
-                className="secondary"
-                disabled={repairingAvatars || artists.length === 0}
+              <Button
+                busy={repairingAvatars}
+                busyLabel="正在补全头像…"
+                disabled={artists.length === 0}
                 onClick={onRepairArtistAvatars}
               >
-                {repairingAvatars
-                  ? "正在补全头像…"
-                  : missingAvatarCount > 0
-                    ? `补全作者头像 (${missingAvatarCount})`
-                    : "重新检查头像"}
-              </button>
+                {missingAvatarCount > 0
+                  ? `补全作者头像 (${missingAvatarCount})`
+                  : "重新检查头像"}
+              </Button>
               {avatarRepairMessage && <small>{avatarRepairMessage}</small>}
             </div>
           )}
-          <button className="secondary" onClick={onCreateCollection}>新建分类</button>
-          <button className="primary" onClick={onImport} disabled={busy}>
-            {busy ? "正在审查…" : "导入图片"}
-          </button>
+          <Button onClick={onCreateCollection}>新建分类</Button>
+          <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在审查…">导入图片</Button>
         </div>
       </header>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <AppNotice tone="error">{error}</AppNotice>}
 
       <section className="summary-row">
         <article><span>作品</span><strong>{workResult.total}</strong></article>
@@ -647,7 +634,7 @@ function GalleryView({
           <p className="eyebrow">FIRST VERTICAL SLICE</p>
           <h2>从一张真正喜欢的图片开始</h2>
           <p>图片保留在原位置；纯净领域只建立索引、审查结果和分类关系。</p>
-          <button className="primary" onClick={onImport} disabled={busy}>选择本地图片</button>
+          <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在审查…">选择本地图片</Button>
         </section>
       ) : mode === "collections" ? (
         selectedCollection ? (

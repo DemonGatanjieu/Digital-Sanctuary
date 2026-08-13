@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
 import { DialogOverlay } from "./DialogOverlay";
+import { Button } from "./Button";
 
 export function BookmarkDownloadDialog({
   preview,
@@ -35,8 +36,8 @@ export function BookmarkDownloadDialog({
           <li>下载在任务中心持续显示，界面不会被阻断。</li>
         </ul>
         <footer>
-          <button type="button" className="secondary" disabled={busy} onClick={onClose}>取消</button>
-          <button ref={confirmRef} type="button" className="primary" disabled={busy} onClick={() => void onConfirm()}>{busy ? "正在开始…" : "开始下载"}</button>
+          <Button disabled={busy} onClick={onClose}>取消</Button>
+          <Button ref={confirmRef} variant="primary" busy={busy} busyLabel="正在开始…" onClick={() => void onConfirm()}>开始下载</Button>
         </footer>
       </section>
     </DialogOverlay>

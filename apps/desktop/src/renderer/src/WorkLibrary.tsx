@@ -10,6 +10,8 @@ import type {
   WorkRecord
 } from "@sanctuary/domain";
 import { DialogOverlay } from "./DialogOverlay";
+import { AppNotice } from "./AppNotice";
+import { Button } from "./Button";
 
 export function WorkLibrary({
   result,
@@ -266,9 +268,9 @@ export function WorkLibrary({
 
       {result.hasMore && (
         <div className="work-load-more">
-          <button className="secondary" type="button" disabled={loading} onClick={onLoadMore}>
-            {loading ? "正在读取…" : `继续加载（已显示 ${result.items.length} / ${result.total}）`}
-          </button>
+          <Button busy={loading} busyLabel="正在读取…" onClick={onLoadMore}>
+            继续加载（已显示 {result.items.length} / {result.total}）
+          </Button>
         </div>
       )}
 
@@ -334,7 +336,24 @@ export function WorkLibrary({
         </section>
       )}
 
-      {notice && <div className="work-operation-notice" role="status"><span>{notice.message}</span><div>{notice.undo && <button type="button" className="work-undo-button" onClick={async () => { try { await notice.undo?.(); setNotice(null); } catch (error) { onError(error); } }}>撤销</button>}<button type="button" aria-label="关闭消息" onClick={() => setNotice(null)}>×</button></div></div>}
+      {notice && (
+        <AppNotice
+          tone="success"
+          className="work-operation-notice"
+          actionLabel={notice.undo ? "撤销" : undefined}
+          onAction={notice.undo ? async () => {
+            try {
+              await notice.undo?.();
+              setNotice(null);
+            } catch (error) {
+              onError(error);
+            }
+          } : undefined}
+          onDismiss={() => setNotice(null)}
+        >
+          {notice.message}
+        </AppNotice>
+      )}
 
       {selectedWork && (
         <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} />
@@ -357,8 +376,8 @@ export function WorkLibrary({
             </div>
             <p className="work-delete-warning">不会永久删除托管文件；需要恢复时可前往 Windows 回收站。</p>
             <footer>
-              <button type="button" className="secondary" disabled={deleting} onClick={() => setDeletionPreview(null)}>取消</button>
-              <button type="button" className="work-delete-confirm" disabled={deleting} onClick={() => void confirmDeletion()}>{deleting ? "正在处理…" : "确认处理"}</button>
+              <Button disabled={deleting} onClick={() => setDeletionPreview(null)}>取消</Button>
+              <Button variant="danger" busy={deleting} busyLabel="正在处理…" onClick={() => void confirmDeletion()}>确认处理</Button>
             </footer>
           </section>
         </DialogOverlay>

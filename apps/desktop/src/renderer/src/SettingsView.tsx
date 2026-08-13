@@ -3,6 +3,8 @@ import {
   type AppearancePreferences,
   type ElementFilterSetting
 } from "@sanctuary/domain";
+import { AppNotice } from "./AppNotice";
+import { Button } from "./Button";
 
 export function SettingsView({
   settings,
@@ -33,7 +35,7 @@ export function SettingsView({
         </div>
       </header>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <AppNotice tone="error">{error}</AppNotice>}
 
       <section className="appearance-settings-card">
         <header>
@@ -145,13 +147,14 @@ export function SettingsView({
                 <small>越低越敏感，误拦截也会更多。</small>
               </div>
 
-              <button
-                className="secondary save-rule"
-                disabled={saving}
+              <Button
+                className="save-rule"
+                busy={saving}
+                busyLabel="保存中…"
                 onClick={() => onSave(setting)}
               >
-                {saving ? "保存中…" : "保存此组"}
-              </button>
+                保存此组
+              </Button>
             </article>
           );
         })}

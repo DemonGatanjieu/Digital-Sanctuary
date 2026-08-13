@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ExploreBounds, ExploreCommand, ExploreState } from "../../preload/index";
+import { AppNotice } from "./AppNotice";
 
 export const initialExploreState: ExploreState = {
   url: "https://www.pixiv.net/",
@@ -142,7 +143,7 @@ export function ExploreView({ state, error, onStateChange, onError }: {
             : "如果账号只绑定了 Google，请先点“浏览器设置密码”；完成后回到这里使用邮箱登录。"}
         </div>
       )}
-      {(state.error || error) && <div className="error-banner explore-error">{state.error || error}</div>}
+      {(state.error || error) && <AppNotice tone="error" className="explore-error">{state.error || error}</AppNotice>}
       <div className="explore-surface" ref={surfaceRef}>
         <div className="explore-placeholder">
           <span>◇</span>

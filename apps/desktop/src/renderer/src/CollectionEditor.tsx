@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CollectionRecord } from "@sanctuary/domain";
 import { DialogOverlay } from "./DialogOverlay";
+import { Button } from "./Button";
 
 export interface CollectionDraft {
   name: string;
@@ -57,16 +58,16 @@ export function CollectionEditor({
         {confirmDelete && (
           <div className="collection-delete-confirm">
             <span>确认删除“{collection?.name}”分类？其中作品会保留在画廊。</span>
-            <button type="button" disabled={saving} onClick={() => onDelete && void onDelete()}>确认删除</button>
+            <Button variant="danger" size="small" disabled={saving} onClick={() => onDelete && void onDelete()}>确认删除</Button>
           </div>
         )}
         <footer>
           <div>
-            {onDelete && !confirmDelete && <button type="button" className="collection-delete-trigger" disabled={saving} onClick={() => setConfirmDelete(true)}>删除分类</button>}
+            {onDelete && !confirmDelete && <Button variant="danger-soft" disabled={saving} onClick={() => setConfirmDelete(true)}>删除分类</Button>}
           </div>
           <div>
-            <button type="button" className="secondary" disabled={saving} onClick={onClose}>取消</button>
-            <button type="submit" className="primary" disabled={saving || !name.trim()}>{saving ? "正在保存…" : "保存"}</button>
+            <Button disabled={saving} onClick={onClose}>取消</Button>
+            <Button type="submit" variant="primary" busy={saving} busyLabel="正在保存…" disabled={!name.trim()}>保存</Button>
           </div>
         </footer>
       </form>
