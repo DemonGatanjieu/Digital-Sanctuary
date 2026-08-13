@@ -170,6 +170,9 @@ if (!hasSingleInstanceLock) {
 
   app.whenReady().then(() => {
     database = new LibraryDatabase(join(app.getPath("userData"), "library.db"));
+    if (process.env.SANCTUARY_BENCHMARK_LIBRARY === "1") {
+      database.seedBenchmarkWorks(Number(process.env.SANCTUARY_BENCHMARK_WORKS ?? 10_000));
+    }
     vision = new VisionClient(resolveVisionProcess());
     database.invalidateAssessmentsExcept(vision.engine);
     database.pruneRemoteImageReviews();

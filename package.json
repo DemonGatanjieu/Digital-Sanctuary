@@ -15,6 +15,7 @@
     "test:python": ".venv\\Scripts\\python.exe -m unittest discover -s services\\vision\\python -p \"test_*.py\"",
     "dev": "npm run build:core && electron-vite dev --config apps/desktop/electron.vite.config.ts",
     "build": "npm run build:core && electron-vite build --config apps/desktop/electron.vite.config.ts",
+    "benchmark:library": "npm run build && node scripts/benchmark-library.mjs",
     "typecheck": "npm run build:core && tsc -p apps/desktop/tsconfig.json --noEmit",
     "test": "npm run build:core && vitest run && npm run test:python"
   },

@@ -7,6 +7,16 @@ import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
+  it("seeds an isolated metadata-only renderer benchmark", () => {
+    const database = new LibraryDatabase(":memory:");
+    database.seedBenchmarkWorks(10_000);
+    const firstPage = database.queryWorks({ limit: 60 });
+    expect(firstPage.total).toBe(10_000);
+    expect(firstPage.items).toHaveLength(60);
+    expect(firstPage.items[0]?.coverAsset).toBeNull();
+    database.close();
+  });
+
   it("queues available image assets for persistent thumbnail generation", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-thumbnails-"));
     const imagePath = join(directory, "cover.png");

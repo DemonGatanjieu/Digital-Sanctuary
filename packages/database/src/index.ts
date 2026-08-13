@@ -176,6 +176,47 @@ export class LibraryDatabase {
     this.#database.close();
   }
 
+  /** Creates metadata-only works for an isolated renderer benchmark database. */
+  seedBenchmarkWorks(count: number): void {
+    const total = clampInteger(count, 0, 0, 50_000);
+    if (total === 0) return;
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const insertArtist = this.#database.prepare(
+      `INSERT OR IGNORE INTO artists (id, name, avatar_url, avatar_local_path, updated_at)
+       VALUES (?, ?, NULL, NULL, ?)`
+    );
+    const insertWork = this.#database.prepare(
+      `INSERT OR IGNORE INTO works
+         (id, source_platform, source_work_id, artist_id, title, work_type,
+          published_at, saved_at, favorite, page_count, ownership, created_at, updated_at)
+       VALUES (?, 'pixiv', ?, ?, ?, 'illustration', ?, ?, ?, 1, 'managed', ?, ?)`
+    );
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      for (let index = 0; index < total; index += 1) {
+        const artistIndex = index % 250;
+        const artistId = `benchmark-artist-${artistIndex}`;
+        const timestamp = new Date(now.getTime() + index * 60_000).toISOString();
+        insertArtist.run(artistId, `Benchmark Artist ${artistIndex}`, timestamp);
+        insertWork.run(
+          `benchmark-work-${index}`,
+          `benchmark-${index}`,
+          artistId,
+          `Benchmark Artwork ${String(index).padStart(5, "0")}`,
+          timestamp,
+          timestamp,
+          index % 11 === 0 ? 1 : 0,
+          timestamp,
+          timestamp
+        );
+      }
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   importArtwork(path: string): ArtworkRecord {
     const existing = this.#database
       .prepare("SELECT id FROM artworks WHERE path = ?")
