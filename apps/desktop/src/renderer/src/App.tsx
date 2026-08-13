@@ -390,6 +390,7 @@ export function App() {
             onModeChange={(nextMode) => void changeGalleryMode(nextMode)}
             onWorkQueryChange={setWorkQuery}
             onLoadMoreWorks={() => void loadMoreWorks()}
+            onWorkLibraryChanged={() => refreshWorks()}
             onError={showError}
           />
         ) : activeView === "rules" ? (
@@ -618,6 +619,7 @@ function GalleryView({
   onModeChange,
   onWorkQueryChange,
   onLoadMoreWorks,
+  onWorkLibraryChanged,
   onError
 }: {
   artworks: ArtworkRecord[];
@@ -640,6 +642,7 @@ function GalleryView({
   onModeChange: (mode: GalleryMode) => void;
   onWorkQueryChange: (query: WorkQuery) => void;
   onLoadMoreWorks: () => void;
+  onWorkLibraryChanged: () => Promise<void>;
   onError: (error: unknown) => void;
 }) {
   const authorGroups = useMemo(() => buildAuthorGroups(artworks, artists), [artworks, artists]);
@@ -768,6 +771,7 @@ function GalleryView({
           onQueryChange={onWorkQueryChange}
           onLoadMore={onLoadMoreWorks}
           onAssignCollection={onAssignWorkCollection}
+          onLibraryChanged={onWorkLibraryChanged}
           onError={onError}
         />
       ) : (

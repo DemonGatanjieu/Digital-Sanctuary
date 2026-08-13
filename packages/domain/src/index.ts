@@ -141,6 +141,38 @@ export interface WorkQueryResult {
   hasMore: boolean;
 }
 
+export interface WorkDeletionPreviewItem {
+  id: string;
+  title: string;
+  ownership: WorkOwnership;
+  pageCount: number;
+  fileCount: number;
+  byteLength: number;
+}
+
+export interface WorkDeletionPreview {
+  token: string;
+  expiresAt: string;
+  items: WorkDeletionPreviewItem[];
+  managedWorkCount: number;
+  externalWorkCount: number;
+  fileCount: number;
+  byteLength: number;
+}
+
+export interface WorkDeletionFailure {
+  workId: string;
+  title: string;
+  message: string;
+}
+
+export interface WorkDeletionResult {
+  completedWorkIds: string[];
+  failures: WorkDeletionFailure[];
+  trashedFileCount: number;
+  removedExternalWorkCount: number;
+}
+
 export interface ArtistRecord {
   id: string;
   name: string;

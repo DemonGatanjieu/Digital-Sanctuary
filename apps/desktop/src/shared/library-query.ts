@@ -50,6 +50,13 @@ export function parseWorkId(value: unknown): string | null {
     : null;
 }
 
+export function parseWorkIds(value: unknown, maximum = 500): string[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > maximum) return null;
+  const ids = value.map(parseWorkId);
+  if (ids.some((id) => id === null)) return null;
+  return [...new Set(ids as string[])];
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

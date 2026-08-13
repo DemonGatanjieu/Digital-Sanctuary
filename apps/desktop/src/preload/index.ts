@@ -6,7 +6,9 @@ import type {
   ElementFilterSetting,
   WorkQuery,
   WorkQueryResult,
-  WorkRecord
+  WorkRecord,
+  WorkDeletionPreview,
+  WorkDeletionResult
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -57,6 +59,8 @@ export interface SanctuaryApi {
   listArtworks(): Promise<ArtworkRecord[]>;
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
   getWork(workId: string): Promise<WorkRecord | null>;
+  previewWorkDeletion(workIds: string[]): Promise<WorkDeletionPreview>;
+  confirmWorkDeletion(token: string): Promise<WorkDeletionResult>;
   importImages(): Promise<ArtworkRecord[]>;
   listCollections(): Promise<CollectionRecord[]>;
   createCollection(name: string): Promise<CollectionRecord[]>;
@@ -90,6 +94,10 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:query-works", query) as Promise<WorkQueryResult>,
   getWork: (workId) =>
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
+  previewWorkDeletion: (workIds) =>
+    ipcRenderer.invoke("library:delete-preview", workIds) as Promise<WorkDeletionPreview>,
+  confirmWorkDeletion: (token) =>
+    ipcRenderer.invoke("library:delete-confirmed", token) as Promise<WorkDeletionResult>,
   importImages: () => ipcRenderer.invoke("library:import") as Promise<ArtworkRecord[]>,
   listCollections: () => ipcRenderer.invoke("collections:list") as Promise<CollectionRecord[]>,
   createCollection: (name) =>

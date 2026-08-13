@@ -25,7 +25,9 @@ import {
   rulesFingerprint,
   type ArtistRecord,
   type ArtworkRecord,
-  type VisionAssessment
+  type VisionAssessment,
+  type WorkDeletionPreview,
+  type WorkDeletionResult
 } from "@sanctuary/domain";
 import { VisionClient } from "./vision-client.js";
 import type { VisionProcessOptions } from "./vision-client.js";
@@ -74,7 +76,7 @@ import {
   AsyncTaskGate,
   mapWithConcurrency
 } from "../shared/bounded-concurrency.js";
-import { parseWorkId, parseWorkQuery } from "../shared/library-query.js";
+import { parseWorkId, parseWorkIds, parseWorkQuery } from "../shared/library-query.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -109,6 +111,7 @@ interface RemoteReviewOutcome {
 
 const remoteReviewCache = new Map<string, RemoteReviewOutcome>();
 const remoteReviewPending = new Map<string, Promise<RemoteReviewOutcome>>();
+const pendingDeletionPreviews = new Map<string, { workIds: string[]; expiresAt: number }>();
 const exploreReviewQueue = new ExploreReviewQueue();
 const pixivRevealToken = randomUUID();
 const remoteOneShotAllows = new Set<string>();
@@ -286,6 +289,51 @@ function saveWindowState(): void {
   } satisfies PersistedWindowState);
 }
 
+async function deleteConfirmedWorks(workIds: readonly string[]): Promise<WorkDeletionResult> {
+  const target = database;
+  if (!target) throw new Error("Application is not ready");
+  const result: WorkDeletionResult = {
+    completedWorkIds: [],
+    failures: [],
+    trashedFileCount: 0,
+    removedExternalWorkCount: 0
+  };
+  for (const workId of workIds) {
+    const work = target.getWork(workId);
+    if (!work) continue;
+    if (work.ownership === "external") {
+      if (target.removeWorkFromIndex(work.id)) {
+        result.completedWorkIds.push(work.id);
+        result.removedExternalWorkCount += 1;
+      }
+      continue;
+    }
+
+    let failure = "";
+    for (const asset of work.assets) {
+      if (!existsSync(asset.path)) {
+        target.updateAssetFileState(asset.id, "missing");
+        continue;
+      }
+      try {
+        await shell.trashItem(asset.path);
+        target.updateAssetFileState(asset.id, "trashed");
+        result.trashedFileCount += 1;
+      } catch (error) {
+        target.updateAssetFileState(asset.id, "error");
+        failure = error instanceof Error ? error.message : "Unable to move file to recycle bin";
+        break;
+      }
+    }
+    if (failure) {
+      result.failures.push({ workId: work.id, title: work.title, message: failure });
+      continue;
+    }
+    if (target.removeWorkFromIndex(work.id)) result.completedWorkIds.push(work.id);
+  }
+  return result;
+}
+
 function registerImageProtocol(): void {
   protocol.handle("sanctuary-image", (request) => {
     const imagePath = decodeURIComponent(new URL(request.url).pathname.slice(1));
@@ -309,6 +357,48 @@ function registerIpc(): void {
     const workId = parseWorkId(value);
     if (!database || !workId) throw new Error("Invalid work id");
     return database.getWork(workId);
+  });
+  ipcMain.handle("library:delete-preview", (_event, value: unknown): WorkDeletionPreview => {
+    if (!database) throw new Error("Application is not ready");
+    const workIds = parseWorkIds(value);
+    if (!workIds) throw new Error("Invalid work selection");
+    const items = workIds.flatMap((workId) => {
+      const work = database?.getWork(workId);
+      if (!work) return [];
+      return [{
+        id: work.id,
+        title: work.title,
+        ownership: work.ownership,
+        pageCount: work.pageCount,
+        fileCount: work.assets.length,
+        byteLength: work.assets.reduce((total, asset) => total + (asset.byteLength ?? 0), 0)
+      }];
+    });
+    if (items.length === 0) throw new Error("Selected works no longer exist");
+    const token = randomUUID();
+    const expiresAt = Date.now() + 5 * 60 * 1_000;
+    pendingDeletionPreviews.set(token, { workIds: items.map((item) => item.id), expiresAt });
+    for (const [staleToken, preview] of pendingDeletionPreviews) {
+      if (preview.expiresAt < Date.now()) pendingDeletionPreviews.delete(staleToken);
+    }
+    return {
+      token,
+      expiresAt: new Date(expiresAt).toISOString(),
+      items,
+      managedWorkCount: items.filter((item) => item.ownership === "managed").length,
+      externalWorkCount: items.filter((item) => item.ownership === "external").length,
+      fileCount: items.reduce((total, item) => total + item.fileCount, 0),
+      byteLength: items.reduce((total, item) => total + item.byteLength, 0)
+    };
+  });
+  ipcMain.handle("library:delete-confirmed", async (_event, value: unknown): Promise<WorkDeletionResult> => {
+    if (!database || typeof value !== "string" || value.length > 100) {
+      throw new Error("Invalid deletion confirmation");
+    }
+    const preview = pendingDeletionPreviews.get(value);
+    pendingDeletionPreviews.delete(value);
+    if (!preview || preview.expiresAt < Date.now()) throw new Error("Deletion preview expired");
+    return deleteConfirmedWorks(preview.workIds);
   });
   ipcMain.handle("collections:list", () => database?.listCollections() ?? []);
   ipcMain.handle("artists:list", () => database?.listArtists() ?? []);

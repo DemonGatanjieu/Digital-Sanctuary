@@ -262,6 +262,10 @@ describe("LibraryDatabase", () => {
       sortBy: "title",
       density: "comfortable"
     });
+    expect(database.removeWorkFromIndex("pixiv:101")).toBe(true);
+    expect(database.getWork("pixiv:101")).toBeNull();
+    expect(database.listArtworks().some((artwork) => artwork.source?.workId === "101")).toBe(false);
+    expect(database.queryWorks().total).toBe(2);
     database.close();
   });
 

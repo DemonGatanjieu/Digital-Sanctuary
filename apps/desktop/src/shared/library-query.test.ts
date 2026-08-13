@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseWorkId, parseWorkQuery } from "./library-query.js";
+import { parseWorkId, parseWorkIds, parseWorkQuery } from "./library-query.js";
 
 describe("parseWorkQuery", () => {
   it("keeps supported fields and bounds pagination", () => {
@@ -25,5 +25,7 @@ describe("parseWorkQuery", () => {
       .toEqual({ limit: 60, offset: 0 });
     expect(parseWorkId(42)).toBeNull();
     expect(parseWorkId("pixiv:42")).toBe("pixiv:42");
+    expect(parseWorkIds(["pixiv:42", "pixiv:42", "local:1"])).toEqual(["pixiv:42", "local:1"]);
+    expect(parseWorkIds([])).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { basename, extname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
@@ -500,6 +500,35 @@ export class LibraryDatabase {
           WHERE work_id = ? AND legacy_artwork_id IS NOT NULL`
       )
       .run(collectionId, workId);
+  }
+
+  updateAssetFileState(assetId: string, state: AssetFileState): void {
+    this.#database
+      .prepare("UPDATE assets SET file_state = ?, updated_at = ? WHERE id = ?")
+      .run(state, new Date().toISOString(), assetId);
+  }
+
+  removeWorkFromIndex(workId: string): boolean {
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      this.#database
+        .prepare("UPDATE collections SET cover_work_id = NULL WHERE cover_work_id = ?")
+        .run(workId);
+      this.#database
+        .prepare(
+          `DELETE FROM artworks WHERE id IN (
+             SELECT legacy_artwork_id FROM assets
+              WHERE work_id = ? AND legacy_artwork_id IS NOT NULL
+           )`
+        )
+        .run(workId);
+      const result = this.#database.prepare("DELETE FROM works WHERE id = ?").run(workId);
+      this.#database.exec("COMMIT");
+      return Number(result.changes) > 0;
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   getPreference<T>(key: string): T | null {
@@ -1015,6 +1044,7 @@ export class LibraryDatabase {
     const oldAsset = this.#database
       .prepare("SELECT id, work_id FROM assets WHERE legacy_artwork_id = ?")
       .get(row.id) as { id: string; work_id: string } | undefined;
+    const fileStat = existsSync(row.path) ? statSync(row.path) : null;
 
     if (isPixiv && row.author_id && row.author_name) {
       this.#database
@@ -1078,13 +1108,15 @@ export class LibraryDatabase {
       .prepare(
         `INSERT INTO assets
            (id, work_id, legacy_artwork_id, page_index, path, media_type,
-            extension, file_state, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'image', ?, 'available', ?, ?)
+            extension, byte_length, file_state, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'image', ?, ?, ?, ?, ?)
          ON CONFLICT(legacy_artwork_id) DO UPDATE SET
            work_id = excluded.work_id,
            page_index = excluded.page_index,
            path = excluded.path,
            extension = excluded.extension,
+           byte_length = excluded.byte_length,
+           file_state = excluded.file_state,
            updated_at = excluded.updated_at`
       )
       .run(
@@ -1094,6 +1126,8 @@ export class LibraryDatabase {
         pageIndex,
         row.path,
         extname(row.path).slice(1).toLowerCase() || null,
+        fileStat?.size ?? null,
+        fileStat ? "available" : "missing",
         row.imported_at,
         now
       );

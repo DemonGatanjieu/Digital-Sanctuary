@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type {
   CollectionRecord,
   WorkListItem,
+  WorkDeletionPreview,
   WorkQuery,
   WorkQueryResult,
   WorkRecord
@@ -16,6 +17,7 @@ export function WorkLibrary({
   onQueryChange,
   onLoadMore,
   onAssignCollection,
+  onLibraryChanged,
   onError
 }: {
   result: WorkQueryResult;
@@ -25,10 +27,16 @@ export function WorkLibrary({
   onQueryChange: (query: WorkQuery) => void;
   onLoadMore: () => void;
   onAssignCollection: (workId: string, collectionId: string) => Promise<void>;
+  onLibraryChanged: () => Promise<void>;
   onError: (error: unknown) => void;
 }) {
   const [selectedWork, setSelectedWork] = useState<WorkRecord | null>(null);
   const [openingWorkId, setOpeningWorkId] = useState("");
+  const [selecting, setSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deletionPreview, setDeletionPreview] = useState<WorkDeletionPreview | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [notice, setNotice] = useState("");
 
   async function openWork(item: WorkListItem) {
     setOpeningWorkId(item.id);
@@ -40,6 +48,42 @@ export function WorkLibrary({
       onError(error);
     } finally {
       setOpeningWorkId("");
+    }
+  }
+
+  function toggleSelection(workId: string) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      next.has(workId) ? next.delete(workId) : next.add(workId);
+      return next;
+    });
+  }
+
+  async function previewDeletion() {
+    if (selectedIds.size === 0) return;
+    try {
+      setDeletionPreview(await window.sanctuary.previewWorkDeletion([...selectedIds]));
+    } catch (error) {
+      onError(error);
+    }
+  }
+
+  async function confirmDeletion() {
+    if (!deletionPreview) return;
+    setDeleting(true);
+    try {
+      const result = await window.sanctuary.confirmWorkDeletion(deletionPreview.token);
+      setDeletionPreview(null);
+      setSelectedIds(new Set());
+      setSelecting(false);
+      await onLibraryChanged();
+      setNotice(result.failures.length > 0
+        ? `已处理 ${result.completedWorkIds.length} 个作品，${result.failures.length} 个失败。`
+        : `已处理 ${result.completedWorkIds.length} 个作品。托管文件已进入系统回收站。`);
+    } catch (error) {
+      onError(error);
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -104,6 +148,16 @@ export function WorkLibrary({
         >
           {query.direction === "asc" ? "升序 ↑" : "降序 ↓"}
         </button>
+        <button
+          type="button"
+          className={`work-select-toggle ${selecting ? "active" : ""}`}
+          onClick={() => {
+            setSelecting((value) => !value);
+            setSelectedIds(new Set());
+          }}
+        >
+          {selecting ? "退出选择" : "选择"}
+        </button>
       </section>
 
       <div className="work-result-note">
@@ -125,7 +179,10 @@ export function WorkLibrary({
               work={work}
               collections={collections}
               opening={openingWorkId === work.id}
-              onOpen={() => void openWork(work)}
+              selecting={selecting}
+              selected={selectedIds.has(work.id)}
+              onOpen={() => selecting ? toggleSelection(work.id) : void openWork(work)}
+              onToggleSelection={() => toggleSelection(work.id)}
               onAssign={(collectionId) => onAssignCollection(work.id, collectionId)}
             />
           ))}
@@ -140,8 +197,64 @@ export function WorkLibrary({
         </div>
       )}
 
+      {selecting && (
+        <section className="work-selection-bar" aria-live="polite">
+          <div><strong>已选择 {selectedIds.size} 个作品</strong><span>批量操作以作品为单位，包含其全部页面。</span></div>
+          <select
+            value=""
+            disabled={selectedIds.size === 0 || collections.length === 0}
+            onChange={async (event) => {
+              const collectionId = event.target.value;
+              if (!collectionId) return;
+              try {
+                await Promise.all([...selectedIds].map((workId) =>
+                  window.sanctuary.addWorkToCollection(workId, collectionId)
+                ));
+                await onLibraryChanged();
+                setNotice(`已把 ${selectedIds.size} 个作品加入分类。`);
+              } catch (error) {
+                onError(error);
+              }
+            }}
+          >
+            <option value="">加入分类…</option>
+            {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+          </select>
+          <button type="button" className="work-delete-button" disabled={selectedIds.size === 0} onClick={() => void previewDeletion()}>
+            移出画廊…
+          </button>
+        </section>
+      )}
+
+      {notice && <div className="work-operation-notice" role="status">{notice}<button type="button" onClick={() => setNotice("")}>×</button></div>}
+
       {selectedWork && (
         <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} />
+      )}
+      {deletionPreview && createPortal(
+        <div className="work-delete-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setDeletionPreview(null)}>
+          <section className="work-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="work-delete-title">
+            <p className="eyebrow">DELETE PREVIEW</p>
+            <h2 id="work-delete-title">确认处理 {deletionPreview.items.length} 个作品？</h2>
+            <div className="work-delete-summary">
+              <div><strong>{deletionPreview.managedWorkCount}</strong><span>托管作品</span><small>文件移至 Windows 回收站</small></div>
+              <div><strong>{deletionPreview.externalWorkCount}</strong><span>外部导入</span><small>只移除索引，不碰原文件</small></div>
+              <div><strong>{deletionPreview.fileCount}</strong><span>图片文件</span><small>{formatBytes(deletionPreview.byteLength)}</small></div>
+            </div>
+            <div className="work-delete-list">
+              {deletionPreview.items.slice(0, 6).map((item) => (
+                <div key={item.id}><span>{item.title}</span><small>{item.ownership === "managed" ? "移至回收站" : "仅移除索引"} · {item.fileCount} 页</small></div>
+              ))}
+              {deletionPreview.items.length > 6 && <p>以及另外 {deletionPreview.items.length - 6} 个作品</p>}
+            </div>
+            <p className="work-delete-warning">不会永久删除托管文件；需要恢复时可前往 Windows 回收站。</p>
+            <footer>
+              <button type="button" className="secondary" disabled={deleting} onClick={() => setDeletionPreview(null)}>取消</button>
+              <button type="button" className="work-delete-confirm" disabled={deleting} onClick={() => void confirmDeletion()}>{deleting ? "正在处理…" : "确认处理"}</button>
+            </footer>
+          </section>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -151,19 +264,30 @@ function WorkCard({
   work,
   collections,
   opening,
+  selecting,
+  selected,
   onOpen,
+  onToggleSelection,
   onAssign
 }: {
   work: WorkListItem;
   collections: CollectionRecord[];
   opening: boolean;
+  selecting: boolean;
+  selected: boolean;
   onOpen: () => void;
+  onToggleSelection: () => void;
   onAssign: (collectionId: string) => Promise<void>;
 }) {
   const [assigning, setAssigning] = useState(false);
   const coverPath = work.coverAsset?.thumbnailPath ?? work.coverAsset?.path ?? "";
   return (
-    <article className="work-library-card">
+    <article className={`work-library-card ${selected ? "selected" : ""}`}>
+      {selecting && (
+        <button type="button" className="work-card-check" aria-label={selected ? `取消选择 ${work.title}` : `选择 ${work.title}`} onClick={onToggleSelection}>
+          {selected ? "✓" : ""}
+        </button>
+      )}
       <button className="work-cover-button" type="button" disabled={opening} onClick={onOpen}>
         {coverPath ? (
           <LazyWorkImage path={coverPath} />
@@ -301,4 +425,11 @@ function formatDate(value: string): string {
   return Number.isNaN(date.valueOf())
     ? "时间未知"
     : new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric" }).format(date);
+}
+
+function formatBytes(value: number): string {
+  if (value <= 0) return "大小待补充";
+  if (value < 1024 * 1024) return `${Math.max(1, Math.round(value / 1024))} KB`;
+  if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
