@@ -6,13 +6,16 @@ import {
   type ArtworkRecord,
   type CollectionRecord,
   type ElementFilterSetting,
-  type FilterAction
+  type FilterAction,
+  type WorkQuery,
+  type WorkQueryResult
 } from "@sanctuary/domain";
 import type {
   ExploreBounds,
   ExploreCommand,
   ExploreState
 } from "../../preload/index";
+import { WorkLibrary } from "./WorkLibrary";
 
 interface AppStatus {
   visionEngine: string;
@@ -30,9 +33,26 @@ const actionText: Record<FilterAction, string> = {
   hide: "已隐藏"
 };
 
+const EMPTY_WORK_RESULT: WorkQueryResult = {
+  items: [],
+  total: 0,
+  totalPages: 0,
+  offset: 0,
+  limit: 60,
+  hasMore: false
+};
+
 export function App() {
   const [activeView, setActiveView] = useState<ActiveView>("gallery");
   const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
+  const [workResult, setWorkResult] = useState<WorkQueryResult>(EMPTY_WORK_RESULT);
+  const [workQuery, setWorkQuery] = useState<WorkQuery>({
+    sortBy: "savedAt",
+    direction: "desc",
+    offset: 0,
+    limit: 60
+  });
+  const [workLoading, setWorkLoading] = useState(false);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [artists, setArtists] = useState<ArtistRecord[]>([]);
   const [filterSettings, setFilterSettings] = useState<ElementFilterSetting[]>([]);
@@ -48,27 +68,31 @@ export function App() {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
 
+  const refreshWorks = useCallback(async (query: WorkQuery = workQuery) => {
+    setWorkResult(await window.sanctuary.queryWorks(query));
+  }, [workQuery]);
+
   const refreshLibrary = useCallback(async () => {
-    const [nextArtworks, nextCollections, nextArtists] = await Promise.all([
-      window.sanctuary.listArtworks(),
+    const [nextWorks, nextCollections, nextArtists, nextArtworks] = await Promise.all([
+      window.sanctuary.queryWorks(workQuery),
       window.sanctuary.listCollections(),
-      window.sanctuary.listArtists()
+      window.sanctuary.listArtists(),
+      galleryMode === "flat" ? Promise.resolve(null) : window.sanctuary.listArtworks()
     ]);
-    setArtworks(nextArtworks);
+    setWorkResult(nextWorks);
+    if (nextArtworks) setArtworks(nextArtworks);
     setCollections(nextCollections);
     setArtists(nextArtists);
-  }, []);
+  }, [galleryMode, workQuery]);
 
   useEffect(() => {
     void Promise.all([
-      window.sanctuary.listArtworks(),
       window.sanctuary.listCollections(),
       window.sanctuary.listFilterSettings(),
       window.sanctuary.status(),
       window.sanctuary.listArtists()
     ])
-      .then(([nextArtworks, nextCollections, nextFilterSettings, nextStatus, nextArtists]) => {
-        setArtworks(nextArtworks);
+      .then(([nextCollections, nextFilterSettings, nextStatus, nextArtists]) => {
         setCollections(nextCollections);
         setFilterSettings(nextFilterSettings);
         setStatus(nextStatus);
@@ -77,19 +101,25 @@ export function App() {
       .catch(showError);
   }, []);
 
-  const counts = useMemo(
-    () => ({
-      allow: artworks.filter((item) => item.decision?.action === "allow").length,
-      guarded: artworks.filter((item) => item.decision?.action !== "allow").length
-    }),
-    [artworks]
-  );
+  useEffect(() => {
+    if (activeView !== "gallery" || galleryMode !== "flat") return;
+    const timer = window.setTimeout(() => {
+      setWorkLoading(true);
+      void window.sanctuary.queryWorks(workQuery)
+        .then(setWorkResult)
+        .catch(showError)
+        .finally(() => setWorkLoading(false));
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [activeView, galleryMode, showError, workQuery]);
 
   async function importImages() {
     setBusy(true);
     setError("");
     try {
-      setArtworks(await window.sanctuary.importImages());
+      await window.sanctuary.importImages();
+      await refreshWorks();
+      if (galleryMode !== "flat") setArtworks(await window.sanctuary.listArtworks());
     } catch (caught) {
       showError(caught);
     } finally {
@@ -111,6 +141,16 @@ export function App() {
     if (!collectionId) return;
     try {
       setArtworks(await window.sanctuary.addArtworkToCollection(artworkId, collectionId));
+    } catch (caught) {
+      showError(caught);
+    }
+  }
+
+  async function assignWorkCollection(workId: string, collectionId: string) {
+    if (!collectionId) return;
+    try {
+      await window.sanctuary.addWorkToCollection(workId, collectionId);
+      await refreshWorks();
     } catch (caught) {
       showError(caught);
     }
@@ -155,7 +195,6 @@ export function App() {
     setError("");
     try {
       setFilterSettings(await window.sanctuary.updateFilterSetting(setting));
-      setArtworks(await window.sanctuary.listArtworks());
     } catch (caught) {
       showError(caught);
     } finally {
@@ -169,6 +208,37 @@ export function App() {
       await refreshLibrary();
     } catch (caught) {
       showError(caught);
+    }
+  }
+
+  async function changeGalleryMode(mode: GalleryMode) {
+    setGalleryMode(mode);
+    if (mode === "flat" || artworks.length > 0) return;
+    try {
+      setArtworks(await window.sanctuary.listArtworks());
+    } catch (caught) {
+      showError(caught);
+    }
+  }
+
+  async function loadMoreWorks() {
+    if (workLoading || !workResult.hasMore) return;
+    setWorkLoading(true);
+    try {
+      const next = await window.sanctuary.queryWorks({
+        ...workQuery,
+        offset: workResult.items.length,
+        limit: workResult.limit
+      });
+      setWorkResult((current) => ({
+        ...next,
+        offset: 0,
+        items: [...current.items, ...next.items]
+      }));
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setWorkLoading(false);
     }
   }
 
@@ -301,9 +371,11 @@ export function App() {
         {activeView === "gallery" ? (
           <GalleryView
             artworks={artworks}
+            workResult={workResult}
+            workQuery={workQuery}
+            workLoading={workLoading}
             collections={collections}
             artists={artists}
-            counts={counts}
             mode={galleryMode}
             busy={busy}
             repairingAvatars={repairingAvatars}
@@ -312,9 +384,13 @@ export function App() {
             onImport={importImages}
             onCreateCollection={createCollection}
             onAssignCollection={assignCollection}
+            onAssignWorkCollection={assignWorkCollection}
             onUpdateCollectionCover={updateCollectionCover}
             onRepairArtistAvatars={repairArtistAvatars}
-            onModeChange={setGalleryMode}
+            onModeChange={(nextMode) => void changeGalleryMode(nextMode)}
+            onWorkQueryChange={setWorkQuery}
+            onLoadMoreWorks={() => void loadMoreWorks()}
+            onError={showError}
           />
         ) : activeView === "rules" ? (
           <RulesView
@@ -523,9 +599,11 @@ function ExploreView({
 
 function GalleryView({
   artworks,
+  workResult,
+  workQuery,
+  workLoading,
   collections,
   artists,
-  counts,
   mode,
   busy,
   repairingAvatars,
@@ -534,14 +612,20 @@ function GalleryView({
   onImport,
   onCreateCollection,
   onAssignCollection,
+  onAssignWorkCollection,
   onUpdateCollectionCover,
   onRepairArtistAvatars,
-  onModeChange
+  onModeChange,
+  onWorkQueryChange,
+  onLoadMoreWorks,
+  onError
 }: {
   artworks: ArtworkRecord[];
+  workResult: WorkQueryResult;
+  workQuery: WorkQuery;
+  workLoading: boolean;
   collections: CollectionRecord[];
   artists: ArtistRecord[];
-  counts: { allow: number; guarded: number };
   mode: GalleryMode;
   busy: boolean;
   repairingAvatars: boolean;
@@ -550,9 +634,13 @@ function GalleryView({
   onImport: () => void;
   onCreateCollection: () => void;
   onAssignCollection: (artworkId: string, collectionId: string) => void;
+  onAssignWorkCollection: (workId: string, collectionId: string) => Promise<void>;
   onUpdateCollectionCover: (collectionId: string, artworkId: string | null) => void;
   onRepairArtistAvatars: () => void;
   onModeChange: (mode: GalleryMode) => void;
+  onWorkQueryChange: (query: WorkQuery) => void;
+  onLoadMoreWorks: () => void;
+  onError: (error: unknown) => void;
 }) {
   const authorGroups = useMemo(() => buildAuthorGroups(artworks, artists), [artworks, artists]);
   const [selectedAuthorKey, setSelectedAuthorKey] = useState("");
@@ -627,13 +715,13 @@ function GalleryView({
       {error && <div className="error-banner">{error}</div>}
 
       <section className="summary-row">
-        <article><span>作品</span><strong>{artworks.length}</strong></article>
-        <article><span>清晰展示</span><strong>{counts.allow}</strong></article>
-        <article><span>受保护</span><strong>{counts.guarded}</strong></article>
+        <article><span>作品</span><strong>{workResult.total}</strong></article>
+        <article><span>图片页</span><strong>{workResult.totalPages}</strong></article>
+        <article><span>作者</span><strong>{artists.length}</strong></article>
         <article><span>分类</span><strong>{collections.length}</strong></article>
       </section>
 
-      {artworks.length === 0 ? (
+      {workResult.total === 0 && !workQuery.search ? (
         <section className="empty-state">
           <div className="empty-orbit"><span>✦</span></div>
           <p className="eyebrow">FIRST VERTICAL SLICE</p>
@@ -672,17 +760,16 @@ function GalleryView({
           </section>
         )
       ) : mode === "flat" ? (
-        <section className="gallery-grid">
-          {artworks.map((artwork) => (
-            <ArtworkCard
-              key={artwork.id}
-              artwork={artwork}
-              collections={collections}
-              onAssign={onAssignCollection}
-              onOpen={setSelectedArtworkId}
-            />
-          ))}
-        </section>
+        <WorkLibrary
+          result={workResult}
+          query={workQuery}
+          collections={collections}
+          loading={workLoading}
+          onQueryChange={onWorkQueryChange}
+          onLoadMore={onLoadMoreWorks}
+          onAssignCollection={onAssignWorkCollection}
+          onError={onError}
+        />
       ) : (
         <section className="author-gallery">
           {missingPixivMetadata > 0 && (

@@ -94,6 +94,53 @@ export interface WorkAssetRecord {
   updatedAt: string;
 }
 
+export type WorkSortField =
+  | "savedAt"
+  | "publishedAt"
+  | "title"
+  | "artist"
+  | "pageCount"
+  | "byteLength";
+export type SortDirection = "asc" | "desc";
+
+export interface WorkQuery {
+  search?: string;
+  workType?: WorkType;
+  artistId?: string;
+  collectionId?: string;
+  sortBy?: WorkSortField;
+  direction?: SortDirection;
+  offset?: number;
+  limit?: number;
+}
+
+export interface WorkListItem {
+  id: string;
+  sourcePlatform: "pixiv" | null;
+  sourceWorkId: string | null;
+  artistId: string | null;
+  artistName: string | null;
+  title: string;
+  workType: WorkType;
+  publishedAt: string | null;
+  savedAt: string;
+  favorite: boolean;
+  pageCount: number;
+  totalByteLength: number;
+  ownership: WorkOwnership;
+  collectionIds: string[];
+  coverAsset: WorkAssetRecord | null;
+}
+
+export interface WorkQueryResult {
+  items: WorkListItem[];
+  total: number;
+  totalPages: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+}
+
 export interface ArtistRecord {
   id: string;
   name: string;

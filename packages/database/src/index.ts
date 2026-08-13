@@ -11,7 +11,10 @@ import type {
   ArtworkSource,
   VisionAssessment,
   WorkAssetRecord,
+  WorkListItem,
   WorkOwnership,
+  WorkQuery,
+  WorkQueryResult,
   WorkRecord,
   WorkType
 } from "@sanctuary/domain";
@@ -96,6 +99,38 @@ interface WorkAssetRow {
   file_state: string;
   created_at: string;
   updated_at: string;
+}
+
+interface WorkListRow {
+  id: string;
+  source_platform: string | null;
+  source_work_id: string | null;
+  artist_id: string | null;
+  artist_name: string | null;
+  title: string;
+  work_type: string;
+  published_at: string | null;
+  saved_at: string;
+  favorite: number;
+  page_count: number;
+  total_byte_length: number;
+  ownership: string;
+  collection_ids: string | null;
+  cover_id: string | null;
+  cover_work_id: string | null;
+  cover_legacy_artwork_id: string | null;
+  cover_page_index: number | null;
+  cover_path: string | null;
+  cover_media_type: string | null;
+  cover_extension: string | null;
+  cover_width: number | null;
+  cover_height: number | null;
+  cover_byte_length: number | null;
+  cover_content_hash: string | null;
+  cover_thumbnail_path: string | null;
+  cover_file_state: string | null;
+  cover_created_at: string | null;
+  cover_updated_at: string | null;
 }
 
 export interface RemoteImageReviewKey {
@@ -318,6 +353,172 @@ export class LibraryDatabase {
       });
     }
     return [...byId.values()];
+  }
+
+  queryWorks(query: WorkQuery = {}): WorkQueryResult {
+    const search = typeof query.search === "string" ? query.search.trim().slice(0, 200) : "";
+    const limit = clampInteger(query.limit, 60, 1, 200);
+    const offset = clampInteger(query.offset, 0, 0, 10_000_000);
+    const direction = query.direction === "asc" ? "ASC" : "DESC";
+    const sortExpressions: Record<NonNullable<WorkQuery["sortBy"]>, string> = {
+      savedAt: "w.saved_at",
+      publishedAt: "w.published_at",
+      title: "w.title COLLATE NOCASE",
+      artist: "ar.name COLLATE NOCASE",
+      pageCount: "w.page_count",
+      byteLength: "total_byte_length"
+    };
+    const sortExpression = sortExpressions[query.sortBy ?? "savedAt"];
+    const clauses = ["w.deleted_at IS NULL"];
+    const parameters: Array<string | number> = [];
+    if (search) {
+      clauses.push(
+        `(instr(lower(w.title), lower(?)) > 0
+          OR instr(lower(COALESCE(ar.name, '')), lower(?)) > 0
+          OR instr(lower(COALESCE(w.source_work_id, '')), lower(?)) > 0)`
+      );
+      parameters.push(search, search, search);
+    }
+    if (isWorkType(query.workType)) {
+      clauses.push("w.work_type = ?");
+      parameters.push(query.workType);
+    }
+    if (typeof query.artistId === "string" && query.artistId) {
+      clauses.push("w.artist_id = ?");
+      parameters.push(query.artistId);
+    }
+    if (typeof query.collectionId === "string" && query.collectionId) {
+      clauses.push(
+        "EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id = ?)"
+      );
+      parameters.push(query.collectionId);
+    }
+    const where = clauses.join(" AND ");
+
+    const totalRow = this.#database
+      .prepare(
+        `SELECT COUNT(*) AS total, COALESCE(SUM(w.page_count), 0) AS total_pages
+           FROM works w
+           LEFT JOIN artists ar ON ar.id = w.artist_id
+          WHERE ${where}`
+      )
+      .get(...parameters) as { total: number; total_pages: number };
+    const rows = this.#database
+      .prepare(
+        `SELECT w.id, w.source_platform, w.source_work_id, w.artist_id,
+                ar.name AS artist_name, w.title, w.work_type, w.published_at,
+                w.saved_at, w.favorite, w.page_count,
+                (SELECT COALESCE(SUM(a.byte_length), 0) FROM assets a WHERE a.work_id = w.id) AS total_byte_length,
+                w.ownership,
+                (SELECT GROUP_CONCAT(cw.collection_id, char(31)) FROM collection_works cw WHERE cw.work_id = w.id) AS collection_ids,
+                ca.id AS cover_id, ca.work_id AS cover_work_id,
+                ca.legacy_artwork_id AS cover_legacy_artwork_id,
+                ca.page_index AS cover_page_index, ca.path AS cover_path,
+                ca.media_type AS cover_media_type, ca.extension AS cover_extension,
+                ca.width AS cover_width, ca.height AS cover_height,
+                ca.byte_length AS cover_byte_length, ca.content_hash AS cover_content_hash,
+                ca.thumbnail_path AS cover_thumbnail_path, ca.file_state AS cover_file_state,
+                ca.created_at AS cover_created_at, ca.updated_at AS cover_updated_at
+           FROM works w
+           LEFT JOIN artists ar ON ar.id = w.artist_id
+           LEFT JOIN assets ca ON ca.id = w.cover_asset_id
+          WHERE ${where}
+          ORDER BY (${sortExpression} IS NULL) ASC, ${sortExpression} ${direction}, w.id ASC
+          LIMIT ? OFFSET ?`
+      )
+      .all(...parameters, limit, offset) as unknown as WorkListRow[];
+    const total = Number(totalRow.total);
+    return {
+      items: rows.map(mapWorkListItem),
+      total,
+      totalPages: Number(totalRow.total_pages),
+      offset,
+      limit,
+      hasMore: offset + rows.length < total
+    };
+  }
+
+  getWork(workId: string): WorkRecord | null {
+    const rows = this.#database
+      .prepare(
+        `SELECT w.id, w.source_platform, w.source_work_id, w.artist_id,
+                ar.name AS artist_name, w.title, w.work_type, w.published_at,
+                w.bookmarked_at, w.saved_at, w.last_viewed_at, w.favorite,
+                w.page_count, w.cover_asset_id, w.ownership, w.deleted_at,
+                w.created_at, w.updated_at, cw.collection_id
+           FROM works w
+           LEFT JOIN artists ar ON ar.id = w.artist_id
+           LEFT JOIN collection_works cw ON cw.work_id = w.id
+          WHERE w.id = ?`
+      )
+      .all(workId) as unknown as WorkRow[];
+    const first = rows[0];
+    if (!first) return null;
+    const assets = this.#database
+      .prepare(
+        `SELECT id, work_id, legacy_artwork_id, page_index, path, media_type,
+                extension, width, height, byte_length, content_hash,
+                thumbnail_path, file_state, created_at, updated_at
+           FROM assets WHERE work_id = ? ORDER BY page_index, id`
+      )
+      .all(workId) as unknown as WorkAssetRow[];
+    return {
+      id: first.id,
+      sourcePlatform: first.source_platform === "pixiv" ? "pixiv" : null,
+      sourceWorkId: first.source_work_id,
+      artistId: first.artist_id,
+      artistName: first.artist_name,
+      title: first.title,
+      workType: asWorkType(first.work_type),
+      publishedAt: first.published_at,
+      bookmarkedAt: first.bookmarked_at,
+      savedAt: first.saved_at,
+      lastViewedAt: first.last_viewed_at,
+      favorite: first.favorite === 1,
+      pageCount: first.page_count,
+      coverAssetId: first.cover_asset_id,
+      ownership: asWorkOwnership(first.ownership),
+      deletedAt: first.deleted_at,
+      createdAt: first.created_at,
+      updatedAt: first.updated_at,
+      collectionIds: rows.flatMap((row) => row.collection_id ? [row.collection_id] : []),
+      assets: assets.map(mapWorkAsset)
+    };
+  }
+
+  addWorkToCollection(workId: string, collectionId: string): void {
+    this.#database
+      .prepare(
+        `INSERT OR IGNORE INTO collection_works (collection_id, work_id, added_at)
+         SELECT ?, id, ? FROM works WHERE id = ?`
+      )
+      .run(collectionId, new Date().toISOString(), workId);
+    this.#database
+      .prepare(
+        `INSERT OR IGNORE INTO collection_artworks (collection_id, artwork_id)
+         SELECT ?, legacy_artwork_id FROM assets
+          WHERE work_id = ? AND legacy_artwork_id IS NOT NULL`
+      )
+      .run(collectionId, workId);
+  }
+
+  getPreference<T>(key: string): T | null {
+    const row = this.#database
+      .prepare("SELECT value_json FROM user_preferences WHERE key = ?")
+      .get(key) as { value_json: string } | undefined;
+    return row ? parseJson<T>(row.value_json) : null;
+  }
+
+  setPreference(key: string, value: unknown): void {
+    this.#database
+      .prepare(
+        `INSERT INTO user_preferences (key, value_json, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET
+           value_json = excluded.value_json,
+           updated_at = excluded.updated_at`
+      )
+      .run(key, JSON.stringify(value), new Date().toISOString());
   }
 
   hasArtworkPath(path: string): boolean {
@@ -988,6 +1189,47 @@ function mapWorkAsset(row: WorkAssetRow): WorkAssetRecord {
   };
 }
 
+function mapWorkListItem(row: WorkListRow): WorkListItem {
+  const coverAsset = row.cover_id && row.cover_work_id && row.cover_page_index !== null &&
+      row.cover_path && row.cover_media_type && row.cover_file_state &&
+      row.cover_created_at && row.cover_updated_at
+    ? mapWorkAsset({
+        id: row.cover_id,
+        work_id: row.cover_work_id,
+        legacy_artwork_id: row.cover_legacy_artwork_id,
+        page_index: row.cover_page_index,
+        path: row.cover_path,
+        media_type: row.cover_media_type,
+        extension: row.cover_extension,
+        width: row.cover_width,
+        height: row.cover_height,
+        byte_length: row.cover_byte_length,
+        content_hash: row.cover_content_hash,
+        thumbnail_path: row.cover_thumbnail_path,
+        file_state: row.cover_file_state,
+        created_at: row.cover_created_at,
+        updated_at: row.cover_updated_at
+      })
+    : null;
+  return {
+    id: row.id,
+    sourcePlatform: row.source_platform === "pixiv" ? "pixiv" : null,
+    sourceWorkId: row.source_work_id,
+    artistId: row.artist_id,
+    artistName: row.artist_name,
+    title: row.title,
+    workType: asWorkType(row.work_type),
+    publishedAt: row.published_at,
+    savedAt: row.saved_at,
+    favorite: row.favorite === 1,
+    pageCount: row.page_count,
+    totalByteLength: Number(row.total_byte_length),
+    ownership: asWorkOwnership(row.ownership),
+    collectionIds: row.collection_ids ? row.collection_ids.split("\u001f") : [],
+    coverAsset
+  };
+}
+
 function asWorkType(value: string): WorkType {
   return value === "illustration" || value === "manga" || value === "ugoira" ||
       value === "local"
@@ -1003,4 +1245,14 @@ function asAssetFileState(value: string): AssetFileState {
   return value === "missing" || value === "trashed" || value === "error"
     ? value
     : "available";
+}
+
+function isWorkType(value: unknown): value is WorkType {
+  return value === "illustration" || value === "manga" || value === "ugoira" ||
+    value === "local" || value === "unknown";
+}
+
+function clampInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) return fallback;
+  return Math.min(maximum, Math.max(minimum, value));
 }

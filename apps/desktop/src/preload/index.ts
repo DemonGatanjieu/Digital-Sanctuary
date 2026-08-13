@@ -3,7 +3,10 @@ import type {
   ArtistRecord,
   ArtworkRecord,
   CollectionRecord,
-  ElementFilterSetting
+  ElementFilterSetting,
+  WorkQuery,
+  WorkQueryResult,
+  WorkRecord
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -52,11 +55,14 @@ export type ExploreCommand =
 
 export interface SanctuaryApi {
   listArtworks(): Promise<ArtworkRecord[]>;
+  queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
+  getWork(workId: string): Promise<WorkRecord | null>;
   importImages(): Promise<ArtworkRecord[]>;
   listCollections(): Promise<CollectionRecord[]>;
   createCollection(name: string): Promise<CollectionRecord[]>;
   updateCollectionCover(collectionId: string, artworkId: string | null): Promise<CollectionRecord[]>;
   addArtworkToCollection(artworkId: string, collectionId: string): Promise<ArtworkRecord[]>;
+  addWorkToCollection(workId: string, collectionId: string): Promise<WorkRecord | null>;
   listArtists(): Promise<ArtistRecord[]>;
   repairArtistAvatars(): Promise<ArtistAvatarRepairResult>;
   listFilterSettings(): Promise<ElementFilterSetting[]>;
@@ -80,6 +86,10 @@ export interface SanctuaryApi {
 
 const api: SanctuaryApi = {
   listArtworks: () => ipcRenderer.invoke("library:list") as Promise<ArtworkRecord[]>,
+  queryWorks: (query = {}) =>
+    ipcRenderer.invoke("library:query-works", query) as Promise<WorkQueryResult>,
+  getWork: (workId) =>
+    ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
   importImages: () => ipcRenderer.invoke("library:import") as Promise<ArtworkRecord[]>,
   listCollections: () => ipcRenderer.invoke("collections:list") as Promise<CollectionRecord[]>,
   createCollection: (name) =>
@@ -92,6 +102,12 @@ const api: SanctuaryApi = {
       artworkId,
       collectionId
     ) as Promise<ArtworkRecord[]>,
+  addWorkToCollection: (workId, collectionId) =>
+    ipcRenderer.invoke(
+      "collections:add-work",
+      workId,
+      collectionId
+    ) as Promise<WorkRecord | null>,
   listArtists: () => ipcRenderer.invoke("artists:list") as Promise<ArtistRecord[]>,
   repairArtistAvatars: () =>
     ipcRenderer.invoke("artists:repair-avatars") as Promise<ArtistAvatarRepairResult>,

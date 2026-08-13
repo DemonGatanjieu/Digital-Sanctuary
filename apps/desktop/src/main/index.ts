@@ -12,6 +12,7 @@ import {
   ipcMain,
   net,
   protocol,
+  screen,
   shell,
   type Session,
   WebContentsView
@@ -73,6 +74,7 @@ import {
   AsyncTaskGate,
   mapWithConcurrency
 } from "../shared/bounded-concurrency.js";
+import { parseWorkId, parseWorkQuery } from "../shared/library-query.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -98,6 +100,7 @@ let exploreStateTimer: ReturnType<typeof setTimeout> | undefined;
 let exploreDownloadState: ExploreDownloadState = { ...IDLE_EXPLORE_DOWNLOAD_STATE };
 let activeExploreDownload: Promise<ExploreDownloadResult> | undefined;
 let activeArtistAvatarRepair: Promise<ArtistAvatarRepairResult> | undefined;
+let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
 interface RemoteReviewOutcome {
   allowed: boolean;
   reasons: string[];
@@ -170,14 +173,21 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   if (exploreStateTimer) clearTimeout(exploreStateTimer);
+  if (windowStateTimer) clearTimeout(windowStateTimer);
+  saveWindowState();
   vision?.close();
   database?.close();
 });
 
 function createWindow(): void {
+  const savedState = readWindowState();
+  const primaryWorkArea = screen.getPrimaryDisplay().workArea;
+  const width = savedState?.width ?? Math.min(1440, primaryWorkArea.width);
+  const height = savedState?.height ?? Math.min(900, primaryWorkArea.height);
   const window = new BrowserWindow({
-    width: 1240,
-    height: 800,
+    width,
+    height,
+    ...(savedState ? { x: savedState.x, y: savedState.y } : {}),
     minWidth: 900,
     minHeight: 620,
     backgroundColor: "#f7f8fa",
@@ -190,8 +200,15 @@ function createWindow(): void {
     }
   });
   mainWindow = window;
+  if (!savedState) window.center();
+  if (savedState?.maximized) window.maximize();
   window.on("maximize", scheduleExploreState);
   window.on("unmaximize", scheduleExploreState);
+  window.on("move", scheduleWindowStateSave);
+  window.on("resize", scheduleWindowStateSave);
+  window.on("maximize", scheduleWindowStateSave);
+  window.on("unmaximize", scheduleWindowStateSave);
+  window.on("close", saveWindowState);
   window.on("closed", () => {
     exploreView = undefined;
     mainWindow = undefined;
@@ -203,6 +220,70 @@ function createWindow(): void {
   } else {
     void window.loadFile(join(moduleDirectory, "../renderer/index.html"));
   }
+}
+
+interface PersistedWindowState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  maximized: boolean;
+}
+
+function readWindowState(): PersistedWindowState | null {
+  const value = database?.getPreference<unknown>("window.main");
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<PersistedWindowState>;
+  if (![candidate.x, candidate.y, candidate.width, candidate.height].every(Number.isFinite) ||
+      typeof candidate.maximized !== "boolean") {
+    return null;
+  }
+  const state: PersistedWindowState = {
+    x: Math.round(candidate.x as number),
+    y: Math.round(candidate.y as number),
+    width: Math.max(900, Math.round(candidate.width as number)),
+    height: Math.max(620, Math.round(candidate.height as number)),
+    maximized: candidate.maximized
+  };
+  const display = screen.getAllDisplays().find(({ workArea }) =>
+    state.x < workArea.x + workArea.width - 120 &&
+    state.x + state.width > workArea.x + 120 &&
+    state.y < workArea.y + workArea.height - 80 &&
+    state.y + state.height > workArea.y + 80
+  );
+  if (!display) return null;
+  state.width = Math.min(state.width, display.workArea.width);
+  state.height = Math.min(state.height, display.workArea.height);
+  state.x = Math.min(
+    display.workArea.x + display.workArea.width - state.width,
+    Math.max(display.workArea.x, state.x)
+  );
+  state.y = Math.min(
+    display.workArea.y + display.workArea.height - state.height,
+    Math.max(display.workArea.y, state.y)
+  );
+  return state;
+}
+
+function scheduleWindowStateSave(): void {
+  if (windowStateTimer) clearTimeout(windowStateTimer);
+  windowStateTimer = setTimeout(saveWindowState, 300);
+}
+
+function saveWindowState(): void {
+  if (windowStateTimer) {
+    clearTimeout(windowStateTimer);
+    windowStateTimer = undefined;
+  }
+  if (!database || !mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+  const bounds = mainWindow.getNormalBounds();
+  database.setPreference("window.main", {
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    maximized: mainWindow.isMaximized()
+  } satisfies PersistedWindowState);
 }
 
 function registerImageProtocol(): void {
@@ -219,6 +300,16 @@ function registerImageProtocol(): void {
 
 function registerIpc(): void {
   ipcMain.handle("library:list", () => database?.listArtworks() ?? []);
+  ipcMain.handle("library:query-works", (_event, query: unknown) =>
+    database?.queryWorks(parseWorkQuery(query)) ?? {
+      items: [], total: 0, totalPages: 0, offset: 0, limit: 60, hasMore: false
+    }
+  );
+  ipcMain.handle("library:get-work", (_event, value: unknown) => {
+    const workId = parseWorkId(value);
+    if (!database || !workId) throw new Error("Invalid work id");
+    return database.getWork(workId);
+  });
   ipcMain.handle("collections:list", () => database?.listCollections() ?? []);
   ipcMain.handle("artists:list", () => database?.listArtists() ?? []);
   ipcMain.handle("artists:repair-avatars", () => repairMissingArtistAvatars());
@@ -446,6 +537,21 @@ function registerIpc(): void {
       }
       database.addArtworkToCollection(artworkId, collectionId);
       return database.listArtworks();
+    }
+  );
+  ipcMain.handle(
+    "collections:add-work",
+    (_event, workIdValue: unknown, collectionId: unknown) => {
+      const workId = parseWorkId(workIdValue);
+      if (!database || !workId || typeof collectionId !== "string") {
+        throw new Error("Invalid work collection assignment");
+      }
+      if (!database.getWork(workId)) throw new Error("Work does not exist");
+      if (!database.listCollections().some((collection) => collection.id === collectionId)) {
+        throw new Error("Collection does not exist");
+      }
+      database.addWorkToCollection(workId, collectionId);
+      return database.getWork(workId);
     }
   );
 

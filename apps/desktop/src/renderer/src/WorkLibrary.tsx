@@ -1,0 +1,304 @@
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import type {
+  CollectionRecord,
+  WorkListItem,
+  WorkQuery,
+  WorkQueryResult,
+  WorkRecord
+} from "@sanctuary/domain";
+
+export function WorkLibrary({
+  result,
+  query,
+  collections,
+  loading,
+  onQueryChange,
+  onLoadMore,
+  onAssignCollection,
+  onError
+}: {
+  result: WorkQueryResult;
+  query: WorkQuery;
+  collections: CollectionRecord[];
+  loading: boolean;
+  onQueryChange: (query: WorkQuery) => void;
+  onLoadMore: () => void;
+  onAssignCollection: (workId: string, collectionId: string) => Promise<void>;
+  onError: (error: unknown) => void;
+}) {
+  const [selectedWork, setSelectedWork] = useState<WorkRecord | null>(null);
+  const [openingWorkId, setOpeningWorkId] = useState("");
+
+  async function openWork(item: WorkListItem) {
+    setOpeningWorkId(item.id);
+    try {
+      const work = await window.sanctuary.getWork(item.id);
+      if (!work) throw new Error("作品记录不存在，可能已经被移出画廊。");
+      setSelectedWork(work);
+    } catch (error) {
+      onError(error);
+    } finally {
+      setOpeningWorkId("");
+    }
+  }
+
+  return (
+    <>
+      <section className="work-library-controls" aria-label="画廊搜索与排序">
+        <label className="work-search">
+          <span>⌕</span>
+          <input
+            type="search"
+            value={query.search ?? ""}
+            placeholder="搜索标题、作者或 Pixiv ID"
+            onChange={(event) => onQueryChange({ ...query, search: event.target.value, offset: 0 })}
+          />
+        </label>
+        <select
+          aria-label="作品类型"
+          value={query.workType ?? ""}
+          onChange={(event) => {
+            const { workType: _currentWorkType, ...withoutWorkType } = query;
+            onQueryChange(event.target.value
+              ? {
+                  ...withoutWorkType,
+                  workType: event.target.value as NonNullable<WorkQuery["workType"]>,
+                  offset: 0
+                }
+              : { ...withoutWorkType, offset: 0 });
+          }}
+        >
+          <option value="">全部类型</option>
+          <option value="illustration">插画</option>
+          <option value="manga">漫画</option>
+          <option value="ugoira">动图</option>
+          <option value="local">本地导入</option>
+          <option value="unknown">待补充</option>
+        </select>
+        <select
+          aria-label="排序字段"
+          value={query.sortBy ?? "savedAt"}
+          onChange={(event) => onQueryChange({
+            ...query,
+            sortBy: event.target.value as NonNullable<WorkQuery["sortBy"]>,
+            offset: 0
+          })}
+        >
+          <option value="savedAt">本地保存时间</option>
+          <option value="publishedAt">Pixiv 发布时间</option>
+          <option value="title">标题</option>
+          <option value="artist">作者</option>
+          <option value="pageCount">页数</option>
+          <option value="byteLength">文件大小</option>
+        </select>
+        <button
+          type="button"
+          className="work-sort-direction"
+          title={query.direction === "asc" ? "当前升序" : "当前降序"}
+          onClick={() => onQueryChange({
+            ...query,
+            direction: query.direction === "asc" ? "desc" : "asc",
+            offset: 0
+          })}
+        >
+          {query.direction === "asc" ? "升序 ↑" : "降序 ↓"}
+        </button>
+      </section>
+
+      <div className="work-result-note">
+        <span>{result.total} 个作品 · {result.totalPages} 页</span>
+        {loading && <span className="work-querying">正在更新…</span>}
+      </div>
+
+      {result.items.length === 0 && !loading ? (
+        <section className="empty-state compact-empty">
+          <p className="eyebrow">NO MATCHES</p>
+          <h2>{query.search ? "没有匹配的作品" : "画廊还是空的"}</h2>
+          <p>{query.search ? "换一个标题、作者或 Pixiv ID 试试。" : "从探索页保存作品，或导入本地图片。"}</p>
+        </section>
+      ) : (
+        <section className="work-library-grid" aria-busy={loading}>
+          {result.items.map((work) => (
+            <WorkCard
+              key={work.id}
+              work={work}
+              collections={collections}
+              opening={openingWorkId === work.id}
+              onOpen={() => void openWork(work)}
+              onAssign={(collectionId) => onAssignCollection(work.id, collectionId)}
+            />
+          ))}
+        </section>
+      )}
+
+      {result.hasMore && (
+        <div className="work-load-more">
+          <button className="secondary" type="button" disabled={loading} onClick={onLoadMore}>
+            {loading ? "正在读取…" : `继续加载（已显示 ${result.items.length} / ${result.total}）`}
+          </button>
+        </div>
+      )}
+
+      {selectedWork && (
+        <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} />
+      )}
+    </>
+  );
+}
+
+function WorkCard({
+  work,
+  collections,
+  opening,
+  onOpen,
+  onAssign
+}: {
+  work: WorkListItem;
+  collections: CollectionRecord[];
+  opening: boolean;
+  onOpen: () => void;
+  onAssign: (collectionId: string) => Promise<void>;
+}) {
+  const [assigning, setAssigning] = useState(false);
+  const coverPath = work.coverAsset?.thumbnailPath ?? work.coverAsset?.path ?? "";
+  return (
+    <article className="work-library-card">
+      <button className="work-cover-button" type="button" disabled={opening} onClick={onOpen}>
+        {coverPath ? (
+          <LazyWorkImage path={coverPath} />
+        ) : (
+          <span className="work-cover-missing">◇<small>封面待生成</small></span>
+        )}
+        {work.pageCount > 1 && <span className="work-page-badge">▱ {work.pageCount}</span>}
+        {opening && <span className="work-opening">正在打开…</span>}
+      </button>
+      <div className="work-card-copy">
+        <strong title={work.title}>{work.title}</strong>
+        <span title={work.artistName ?? "本地作品"}>{work.artistName ?? "本地作品"}</span>
+        <div className="work-card-foot">
+          <time dateTime={work.savedAt}>{formatDate(work.savedAt)}</time>
+          <select
+            value=""
+            aria-label={`把《${work.title}》加入分类`}
+            disabled={assigning || collections.length === 0}
+            onChange={async (event) => {
+              const collectionId = event.target.value;
+              if (!collectionId) return;
+              setAssigning(true);
+              try {
+                await onAssign(collectionId);
+              } finally {
+                setAssigning(false);
+              }
+            }}
+          >
+            <option value="">{assigning ? "正在加入…" : "加入分类…"}</option>
+            {collections.map((collection) => (
+              <option key={collection.id} value={collection.id}>
+                {work.collectionIds.includes(collection.id) ? "✓ " : ""}{collection.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function LazyWorkImage({ path }: { path: string }) {
+  const imageRef = useRef<HTMLImageElement>(null);
+  const [load, setLoad] = useState(false);
+  useEffect(() => {
+    const image = imageRef.current;
+    if (!image || load) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setLoad(true);
+      observer.disconnect();
+    }, { rootMargin: "700px 0px" });
+    observer.observe(image);
+    return () => observer.disconnect();
+  }, [load]);
+  return (
+    <img
+      ref={imageRef}
+      src={load ? workImageUrl(path) : undefined}
+      alt=""
+      loading="lazy"
+      decoding="async"
+      draggable={false}
+    />
+  );
+}
+
+function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void }) {
+  const [pageIndex, setPageIndex] = useState(0);
+  const [actualSize, setActualSize] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const page = work.assets[pageIndex];
+
+  useEffect(() => {
+    document.body.classList.add("lightbox-open");
+    closeRef.current?.focus({ preventScroll: true });
+    return () => document.body.classList.remove("lightbox-open");
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowLeft") setPageIndex((value) => Math.max(0, value - 1));
+      if (event.key === "ArrowRight") setPageIndex((value) => Math.min(work.assets.length - 1, value + 1));
+      if (event.key === "0") setActualSize(false);
+      if (event.key === "1") setActualSize(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose, work.assets.length]);
+
+  if (!page) return null;
+  return createPortal(
+    <div className="artwork-lightbox work-lightbox" role="dialog" aria-modal="true" aria-label={work.title}>
+      <header className="lightbox-toolbar">
+        <div className="lightbox-heading">
+          <strong>{work.title}</strong>
+          <small>{work.artistName ?? "本地作品"} · {work.pageCount} 页</small>
+        </div>
+        <div className="lightbox-actions">
+          <button type="button" className={actualSize ? "active" : ""} onClick={() => setActualSize((value) => !value)}>
+            {actualSize ? "适应窗口" : "1:1 原图"}
+          </button>
+          <button ref={closeRef} type="button" className="lightbox-close" aria-label="关闭大图" onClick={onClose}>×</button>
+        </div>
+      </header>
+      <button className="lightbox-nav previous" type="button" aria-label="上一页" disabled={pageIndex === 0} onClick={() => setPageIndex((value) => value - 1)}>‹</button>
+      <div className={`lightbox-stage ${actualSize ? "actual-size" : "fit-window"}`} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+        <img src={workImageUrl(page.path)} alt="" draggable={false} onClick={() => setActualSize((value) => !value)} />
+      </div>
+      <button className="lightbox-nav next" type="button" aria-label="下一页" disabled={pageIndex >= work.assets.length - 1} onClick={() => setPageIndex((value) => value + 1)}>›</button>
+      <footer className="lightbox-footer work-lightbox-footer">
+        <span>{pageIndex + 1} / {work.assets.length}</span>
+        <div className="work-page-strip">
+          {work.assets.map((asset, index) => (
+            <button key={asset.id} type="button" className={index === pageIndex ? "active" : ""} aria-label={`第 ${index + 1} 页`} onClick={() => setPageIndex(index)}>
+              <img src={workImageUrl(asset.thumbnailPath ?? asset.path)} alt="" loading="lazy" />
+            </button>
+          ))}
+        </div>
+        <span>← → 翻页 · Esc 关闭</span>
+      </footer>
+    </div>,
+    document.body
+  );
+}
+
+function workImageUrl(path: string): string {
+  return `sanctuary-image://local/${encodeURIComponent(path)}`;
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.valueOf())
+    ? "时间未知"
+    : new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric" }).format(date);
+}

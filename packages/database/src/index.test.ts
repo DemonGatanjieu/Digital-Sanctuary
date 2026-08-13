@@ -224,6 +224,47 @@ describe("LibraryDatabase", () => {
     database.close();
   });
 
+  it("queries works with database search, sorting, filters, and bounded pagination", () => {
+    const database = new LibraryDatabase(":memory:");
+    for (const [index, title] of ["Gamma", "Alpha", "Beta"].entries()) {
+      const artwork = database.importArtwork(`E:\\gallery\\q${index}.jpg`);
+      database.saveArtworkSource(artwork.id, {
+        platform: "pixiv",
+        workId: String(100 + index),
+        pageIndex: 0,
+        authorId: index === 1 ? "featured" : `artist-${index}`,
+        authorName: index === 1 ? "Featured Artist" : `Artist ${index}`,
+        title
+      });
+    }
+    const collection = database.createCollection("精选");
+    database.addWorkToCollection("pixiv:101", collection.id);
+
+    const firstPage = database.queryWorks({ sortBy: "title", direction: "asc", limit: 2 });
+    expect(firstPage).toMatchObject({ total: 3, totalPages: 3, offset: 0, limit: 2, hasMore: true });
+    expect(firstPage.items.map((work) => work.title)).toEqual(["Alpha", "Beta"]);
+    expect(database.queryWorks({ sortBy: "title", direction: "asc", offset: 2, limit: 2 }))
+      .toMatchObject({ total: 3, offset: 2, hasMore: false, items: [{ title: "Gamma" }] });
+    expect(database.queryWorks({ search: "featured" }).items.map((work) => work.id))
+      .toEqual(["pixiv:101"]);
+    expect(database.queryWorks({ collectionId: collection.id }).items[0]).toMatchObject({
+      id: "pixiv:101",
+      collectionIds: [collection.id],
+      coverAsset: { pageIndex: 0 }
+    });
+    expect(database.getWork("pixiv:101")).toMatchObject({
+      title: "Alpha",
+      assets: [{ pageIndex: 0 }]
+    });
+    expect(database.getPreference("gallery.view")).toBeNull();
+    database.setPreference("gallery.view", { sortBy: "title", density: "comfortable" });
+    expect(database.getPreference("gallery.view")).toEqual({
+      sortBy: "title",
+      density: "comfortable"
+    });
+    database.close();
+  });
+
   it("persists artists and explicit collection covers", () => {
     const database = new LibraryDatabase(":memory:");
     const artwork = database.importArtwork("E:\\gallery\\cover.jpg");

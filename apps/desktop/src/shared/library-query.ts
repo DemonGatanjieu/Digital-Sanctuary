@@ -1,0 +1,61 @@
+import type {
+  SortDirection,
+  WorkQuery,
+  WorkSortField,
+  WorkType
+} from "@sanctuary/domain";
+
+const WORK_TYPES = new Set<WorkType>(["illustration", "manga", "ugoira", "local", "unknown"]);
+const SORT_FIELDS = new Set<WorkSortField>([
+  "savedAt",
+  "publishedAt",
+  "title",
+  "artist",
+  "pageCount",
+  "byteLength"
+]);
+const DIRECTIONS = new Set<SortDirection>(["asc", "desc"]);
+
+/** Converts untrusted renderer input into a small, bounded database query. */
+export function parseWorkQuery(value: unknown): WorkQuery {
+  if (!isRecord(value)) return { limit: 60, offset: 0 };
+  const query: WorkQuery = {
+    limit: boundedInteger(value.limit, 60, 1, 200),
+    offset: boundedInteger(value.offset, 0, 0, 10_000_000)
+  };
+  if (typeof value.search === "string" && value.search.trim()) {
+    query.search = value.search.trim().slice(0, 200);
+  }
+  if (typeof value.workType === "string" && WORK_TYPES.has(value.workType as WorkType)) {
+    query.workType = value.workType as WorkType;
+  }
+  if (typeof value.artistId === "string" && value.artistId.length <= 200) {
+    query.artistId = value.artistId;
+  }
+  if (typeof value.collectionId === "string" && value.collectionId.length <= 200) {
+    query.collectionId = value.collectionId;
+  }
+  if (typeof value.sortBy === "string" && SORT_FIELDS.has(value.sortBy as WorkSortField)) {
+    query.sortBy = value.sortBy as WorkSortField;
+  }
+  if (typeof value.direction === "string" && DIRECTIONS.has(value.direction as SortDirection)) {
+    query.direction = value.direction as SortDirection;
+  }
+  return query;
+}
+
+export function parseWorkId(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 && value.length <= 300
+    ? value
+    : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function boundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  return typeof value === "number" && Number.isSafeInteger(value)
+    ? Math.min(maximum, Math.max(minimum, value))
+    : fallback;
+}
