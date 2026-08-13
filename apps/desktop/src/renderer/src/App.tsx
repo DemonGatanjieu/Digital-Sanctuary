@@ -15,20 +15,19 @@ import { WorkLibrary } from "./WorkLibrary";
 import { CollectionEditor, type CollectionDraft } from "./CollectionEditor";
 import { BookmarkDownloadDialog } from "./BookmarkDownloadDialog";
 import { SettingsView } from "./SettingsView";
-import { ExploreView, downloadPhaseLabel, initialExploreState } from "./ExploreView";
+import { ExploreView, initialExploreState } from "./ExploreView";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
+import { AppSidebar, type ActiveView, type AppStatus } from "./AppSidebar";
 import { SegmentedControl } from "./SegmentedControl";
+import {
+  artworkPageIndex,
+  artworkWorkPages,
+  buildAuthorGroups,
+  type AuthorGalleryGroup
+} from "./gallery-model";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
 
-interface AppStatus {
-  visionEngine: string;
-  visionProvider: string;
-  visionReady: boolean;
-  modelBacked: boolean;
-}
-
-type ActiveView = "gallery" | "explore" | "settings";
 type GalleryMode = "flat" | "author-work" | "collections";
 
 const actionText: Record<FilterAction, string> = {
@@ -335,108 +334,18 @@ export function App() {
       data-reduced-motion={appearance.reducedMotion ? "true" : "false"}
       data-ambient-artwork={appearance.ambientArtwork ? "true" : "false"}
     >
-      <aside className="sidebar">
-        <div className="brand-mark">DS</div>
-        <div className="brand-copy">
-          <strong>纯净领域</strong>
-          <span>Digital Sanctuary</span>
-        </div>
-
-        <nav>
-          <button
-            className={`nav-item ${activeView === "gallery" ? "active" : ""}`}
-            onClick={() => void openGallery()}
-          >
-            画廊
-          </button>
-          <button
-            className={`nav-item ${activeView === "explore" ? "active" : ""}`}
-            onClick={() => setActiveView("explore")}
-          >
-            探索
-          </button>
-          <button
-            className={`nav-item ${activeView === "settings" ? "active" : ""}`}
-            onClick={() => setActiveView("settings")}
-          >
-            设置
-          </button>
-        </nav>
-
-        {activeView === "explore" && (
-          <section className="explore-sidebar-actions">
-            <p className="sidebar-section-label">保存到本地</p>
-            <button
-              className="explore-action primary-action"
-              disabled={exploreState.pageKind !== "artwork" || downloadBusy}
-              onClick={() => void downloadCurrentArtwork()}
-            >
-              <strong>保存当前作品</strong>
-              <small>
-                {exploreState.pageKind === "artwork"
-                  ? `作品 ${exploreState.artworkId} · 自动保存全部页`
-                  : "打开作品详情后可用"}
-              </small>
-            </button>
-            <button
-              className="explore-action"
-              disabled={exploreState.pageKind !== "bookmarks" || downloadBusy}
-              onClick={() => void previewAllBookmarks()}
-            >
-              <strong>下载全部收藏</strong>
-              <small>
-                {exploreState.pageKind === "bookmarks"
-                  ? "用户信任 · 不执行 AI 审查"
-                  : "进入收藏作品页后可用"}
-              </small>
-            </button>
-            <p className="download-location">图片 → Digital Sanctuary → Pixiv</p>
-            {exploreState.download.phase !== "idle" && (
-              <div className={`download-progress ${exploreState.download.phase}`}>
-                <strong>{downloadPhaseLabel(exploreState.download.phase)}</strong>
-                <span>{exploreState.download.message}</span>
-                {(exploreState.download.totalArtworks > 0 || exploreState.download.totalPages > 0) && (
-                  <small>
-                    作品已处理 {exploreState.download.completedArtworks + exploreState.download.failedArtworks}/{exploreState.download.totalArtworks}
-                    {`（成功 ${exploreState.download.completedArtworks} · 失败 ${exploreState.download.failedArtworks}）`}
-                    {exploreState.download.totalPages > 0
-                      ? ` · 已知页面 ${exploreState.download.completedPages}/${exploreState.download.totalPages}`
-                      : ""}
-                  </small>
-                )}
-              </div>
-            )}
-          </section>
-        )}
-
-        <div className="sidebar-spacer" />
-        <section className="display-profile-control" aria-label="显示性能档位">
-          <div><span>显示档位</span><small>{appearance.displayProfile === "quality" ? "完整氛围" : appearance.displayProfile === "balanced" ? "日常推荐" : "减少特效"}</small></div>
-          <SegmentedControl
-            compact
-            label="显示性能档位"
-            value={appearance.displayProfile}
-            options={[
-              { value: "quality", label: "精", title: "精致" },
-              { value: "balanced", label: "衡", title: "均衡" },
-              { value: "efficient", label: "省", title: "省电" }
-            ]}
-            onChange={(profile) => void updateAppearance({ ...appearance, displayProfile: profile })}
-          />
-        </section>
-        <div className="engine-card">
-          <span className={`status-dot ${status?.visionReady ? "online" : ""}`} />
-          <div>
-          <small>视觉引擎 · {status?.visionProvider ?? "检测中"}</small>
-            <strong>{status?.visionEngine ?? "连接中"}</strong>
-          </div>
-        </div>
-        <p className="probe-warning">
-          {status?.modelBacked
-            ? "WD Tagger 元素雷达 · 不使用年龄分级"
-            : "开发探针，不具备真实内容审查能力"}
-        </p>
-      </aside>
+      <AppSidebar
+        activeView={activeView}
+        exploreState={exploreState}
+        downloadBusy={downloadBusy}
+        appearance={appearance}
+        status={status}
+        onOpenGallery={openGallery}
+        onViewChange={setActiveView}
+        onDownloadCurrentArtwork={downloadCurrentArtwork}
+        onPreviewBookmarks={previewAllBookmarks}
+        onAppearanceChange={updateAppearance}
+      />
 
       <main className="animate-fade-in">
         {activeView === "gallery" ? (
@@ -722,81 +631,6 @@ function GalleryView({
       )}
     </>
   );
-}
-
-interface AuthorGalleryGroup {
-  key: string;
-  id: string;
-  name: string;
-  pageCount: number;
-  artistRecord?: ArtistRecord;
-  works: Array<{
-    key: string;
-    workId: string;
-    title: string;
-    pages: ArtworkRecord[];
-  }>;
-}
-
-function buildAuthorGroups(artworks: readonly ArtworkRecord[], artists: readonly ArtistRecord[]): AuthorGalleryGroup[] {
-  const authors = new Map<string, AuthorGalleryGroup>();
-  for (const artwork of artworks) {
-    const inferred = inferPixivWorkFromFileName(artwork.fileName);
-    const authorId = artwork.source?.authorId ?? "";
-    const authorName = artwork.source?.authorName ?? "待补充作者信息";
-    const authorKey = authorId ? `pixiv:${authorId}` : "pixiv:unknown";
-    const workId = artwork.source?.workId ?? inferred?.workId ?? artwork.id;
-    const workKey = `${authorKey}:work:${workId}`;
-    let author = authors.get(authorKey);
-    if (!author) {
-      const artistRecord = artists.find(a => a.id === authorId);
-      author = { key: authorKey, id: authorId, name: authorName, pageCount: 0, works: [] };
-      if (artistRecord) author.artistRecord = artistRecord;
-      authors.set(authorKey, author);
-    }
-    let work = author.works.find((candidate) => candidate.key === workKey);
-    if (!work) {
-      work = {
-        key: workKey,
-        workId,
-        title: artwork.source?.title ?? (inferred ? `Pixiv 作品 ${workId}` : artwork.fileName),
-        pages: []
-      };
-      author.works.push(work);
-    }
-    work.pages.push(artwork);
-    author.pageCount += 1;
-  }
-  for (const author of authors.values()) {
-    for (const work of author.works) {
-      work.pages.sort((left, right) => artworkPageIndex(left) - artworkPageIndex(right));
-    }
-  }
-  return [...authors.values()];
-}
-
-function inferPixivWorkFromFileName(fileName: string): { workId: string; pageIndex: number } | null {
-  const match = fileName.match(/^(\d+)_p(\d+)\.[^.]+$/i);
-  const workId = match?.[1];
-  const pageIndex = Number(match?.[2]);
-  return workId && Number.isSafeInteger(pageIndex) ? { workId, pageIndex } : null;
-}
-
-function artworkPageIndex(artwork: ArtworkRecord): number {
-  return artwork.source?.pageIndex ?? inferPixivWorkFromFileName(artwork.fileName)?.pageIndex ?? 0;
-}
-
-function artworkWorkPages(
-  artworks: readonly ArtworkRecord[],
-  selected: ArtworkRecord
-): ArtworkRecord[] {
-  const selectedWorkId = selected.source?.workId ?? inferPixivWorkFromFileName(selected.fileName)?.workId;
-  if (!selectedWorkId) return [selected];
-  return artworks
-    .filter((artwork) =>
-      (artwork.source?.workId ?? inferPixivWorkFromFileName(artwork.fileName)?.workId) === selectedWorkId
-    )
-    .sort((left, right) => artworkPageIndex(left) - artworkPageIndex(right));
 }
 
 function AuthorAvatar({
