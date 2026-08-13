@@ -486,6 +486,53 @@ export class LibraryDatabase {
     };
   }
 
+  listAssetsNeedingThumbnails(limit = 100): WorkAssetRecord[] {
+    const safeLimit = Math.max(1, Math.min(1000, Math.trunc(limit) || 100));
+    const missingRows = this.#database
+      .prepare(
+        `SELECT id, work_id, legacy_artwork_id, page_index, path, media_type,
+                extension, width, height, byte_length, content_hash,
+                thumbnail_path, file_state, created_at, updated_at
+           FROM assets
+          WHERE media_type = 'image'
+            AND file_state = 'available'
+            AND thumbnail_path IS NULL
+          ORDER BY created_at, id
+          LIMIT ?`
+      )
+      .all(safeLimit) as unknown as WorkAssetRow[];
+    if (missingRows.length > 0) return missingRows.map(mapWorkAsset);
+
+    const cachedRows = this.#database
+      .prepare(
+        `SELECT id, work_id, legacy_artwork_id, page_index, path, media_type,
+                extension, width, height, byte_length, content_hash,
+                thumbnail_path, file_state, created_at, updated_at
+           FROM assets
+          WHERE media_type = 'image'
+            AND file_state = 'available'
+            AND thumbnail_path IS NOT NULL
+          ORDER BY created_at, id`
+      )
+      .all() as unknown as WorkAssetRow[];
+    return cachedRows
+      .filter((row) => !row.thumbnail_path || !existsSync(row.thumbnail_path))
+      .slice(0, safeLimit)
+      .map(mapWorkAsset);
+  }
+
+  updateAssetThumbnail(assetId: string, thumbnailPath: string | null): boolean {
+    const normalizedPath = thumbnailPath?.trim() || null;
+    const result = this.#database
+      .prepare(
+        `UPDATE assets
+            SET thumbnail_path = ?, updated_at = ?
+          WHERE id = ? AND file_state = 'available'`
+      )
+      .run(normalizedPath, new Date().toISOString(), assetId);
+    return result.changes > 0;
+  }
+
   addWorkToCollection(workId: string, collectionId: string): void {
     this.#database
       .prepare(

@@ -99,6 +99,23 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    void (async () => {
+      let changed = false;
+      for (let batch = 0; batch < 20; batch += 1) {
+        const result = await window.sanctuary.generateThumbnails();
+        changed ||= result.generated + result.reused > 0;
+        if (result.attempted < 24 || result.generated + result.reused === 0) break;
+        await new Promise((resolveTask) => window.setTimeout(resolveTask, 80));
+      }
+      if (active && changed) await refreshWorks();
+    })().catch(showError);
+    return () => {
+      active = false;
+    };
+  }, [refreshWorks, showError]);
+
+  useEffect(() => {
     if (activeView !== "gallery" || galleryMode !== "flat") return;
     const timer = window.setTimeout(() => {
       setWorkLoading(true);

@@ -18,6 +18,7 @@ import type {
   ExploreDownloadState,
   PixivPageKind
 } from "../shared/pixiv-download.js";
+import type { ThumbnailBatchResult } from "../main/thumbnail-service.js";
 
 export interface ExploreBounds {
   x: number;
@@ -60,6 +61,7 @@ export interface SanctuaryApi {
   listArtworks(): Promise<ArtworkRecord[]>;
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
   getWork(workId: string): Promise<WorkRecord | null>;
+  generateThumbnails(): Promise<ThumbnailBatchResult>;
   previewWorkDeletion(workIds: string[]): Promise<WorkDeletionPreview>;
   confirmWorkDeletion(token: string): Promise<WorkDeletionResult>;
   importImages(): Promise<ArtworkRecord[]>;
@@ -101,6 +103,8 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:query-works", query) as Promise<WorkQueryResult>,
   getWork: (workId) =>
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
+  generateThumbnails: () =>
+    ipcRenderer.invoke("library:generate-thumbnails") as Promise<ThumbnailBatchResult>,
   previewWorkDeletion: (workIds) =>
     ipcRenderer.invoke("library:delete-preview", workIds) as Promise<WorkDeletionPreview>,
   confirmWorkDeletion: (token) =>

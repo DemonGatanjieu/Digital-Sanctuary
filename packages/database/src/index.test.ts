@@ -1,12 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { decideFilter, DEFAULT_FILTER_RULES, type VisionAssessment } from "../../domain/dist/index.js";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
+  it("queues available image assets for persistent thumbnail generation", () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-thumbnails-"));
+    const imagePath = join(directory, "cover.png");
+    const thumbnailPath = join(directory, "cover.thumb.jpg");
+    writeFileSync(imagePath, "image-placeholder");
+    const database = new LibraryDatabase(":memory:");
+    try {
+      database.importArtwork(imagePath);
+      const [asset] = database.listAssetsNeedingThumbnails(10);
+      expect(asset?.path).toBe(imagePath);
+      expect(asset?.thumbnailPath).toBeNull();
+      writeFileSync(thumbnailPath, "thumbnail-placeholder");
+      expect(database.updateAssetThumbnail(asset!.id, thumbnailPath)).toBe(true);
+      expect(database.listAssetsNeedingThumbnails(10)).toEqual([]);
+      expect(database.listWorks()[0]?.assets[0]?.thumbnailPath).toBe(thumbnailPath);
+      rmSync(thumbnailPath, { force: true });
+      expect(database.listAssetsNeedingThumbnails(10)[0]?.id).toBe(asset?.id);
+    } finally {
+      database.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("persists an indexed artwork, assessment, and collection relation", () => {
     const database = new LibraryDatabase(":memory:");
     const artwork = database.importArtwork("E:\\gallery\\safe-image.png");

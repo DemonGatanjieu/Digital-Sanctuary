@@ -11,6 +11,7 @@ import {
   dialog,
   ipcMain,
   net,
+  nativeImage,
   protocol,
   screen,
   shell,
@@ -78,6 +79,7 @@ import {
   mapWithConcurrency
 } from "../shared/bounded-concurrency.js";
 import { parseWorkId, parseWorkIds, parseWorkQuery } from "../shared/library-query.js";
+import { generateThumbnailBatch, type ThumbnailBatchResult } from "./thumbnail-service.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -386,6 +388,15 @@ function registerIpc(): void {
     const workId = parseWorkId(value);
     if (!database || !workId) throw new Error("Invalid work id");
     return database.getWork(workId);
+  });
+  ipcMain.handle("library:generate-thumbnails", (): Promise<ThumbnailBatchResult> => {
+    if (!database) throw new Error("Library database is unavailable");
+    return generateThumbnailBatch(
+      database,
+      join(app.getPath("userData"), "thumbnails"),
+      encodeLocalThumbnail,
+      24
+    );
   });
   ipcMain.handle("library:delete-preview", (_event, value: unknown): WorkDeletionPreview => {
     if (!database) throw new Error("Application is not ready");
@@ -726,6 +737,31 @@ function registerIpc(): void {
     visionReady: vision?.available ?? false,
     modelBacked: vision?.engine === "wd-swinv2-tagger-v3"
   }));
+}
+
+async function encodeLocalThumbnail(sourcePath: string, targetPath: string): Promise<void> {
+  await new Promise<void>((resolveTask) => setImmediate(resolveTask));
+  const image = nativeImage.createFromPath(sourcePath);
+  if (image.isEmpty()) throw new Error(`Unable to decode image: ${sourcePath}`);
+  const size = image.getSize();
+  const longestEdge = Math.max(size.width, size.height);
+  const scale = longestEdge > 640 ? 640 / longestEdge : 1;
+  const resized = scale < 1
+    ? image.resize({
+        width: Math.max(1, Math.round(size.width * scale)),
+        height: Math.max(1, Math.round(size.height * scale)),
+        quality: "better"
+      })
+    : image;
+  const bytes = resized.toPNG();
+  if (bytes.length === 0) throw new Error(`Unable to encode thumbnail: ${sourcePath}`);
+  const temporaryPath = `${targetPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, bytes);
+    await rename(temporaryPath, targetPath);
+  } finally {
+    await unlink(temporaryPath).catch(() => undefined);
+  }
 }
 
 function ensureExploreView(): WebContentsView {
