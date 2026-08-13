@@ -239,6 +239,11 @@ describe("LibraryDatabase", () => {
     }
     const collection = database.createCollection("精选");
     database.addWorkToCollection("pixiv:101", collection.id);
+    expect(database.updateCollection(collection.id, "编辑精选", "说明")).toMatchObject({
+      name: "编辑精选",
+      description: "说明"
+    });
+    expect(database.updateWorkFavorite(["pixiv:101"], true)).toBe(1);
 
     const firstPage = database.queryWorks({ sortBy: "title", direction: "asc", limit: 2 });
     expect(firstPage).toMatchObject({ total: 3, totalPages: 3, offset: 0, limit: 2, hasMore: true });
@@ -249,6 +254,7 @@ describe("LibraryDatabase", () => {
       .toEqual(["pixiv:101"]);
     expect(database.queryWorks({ collectionId: collection.id }).items[0]).toMatchObject({
       id: "pixiv:101",
+      favorite: true,
       collectionIds: [collection.id],
       coverAsset: { pageIndex: 0 }
     });
@@ -262,6 +268,11 @@ describe("LibraryDatabase", () => {
       sortBy: "title",
       density: "comfortable"
     });
+    database.removeWorkFromCollection("pixiv:101", collection.id);
+    expect(database.getWork("pixiv:101")?.collectionIds).toEqual([]);
+    database.addWorkToCollection("pixiv:101", collection.id);
+    expect(database.deleteCollection(collection.id)).toBe(true);
+    expect(database.getWork("pixiv:101")?.collectionIds).toEqual([]);
     expect(database.removeWorkFromIndex("pixiv:101")).toBe(true);
     expect(database.getWork("pixiv:101")).toBeNull();
     expect(database.listArtworks().some((artwork) => artwork.source?.workId === "101")).toBe(false);

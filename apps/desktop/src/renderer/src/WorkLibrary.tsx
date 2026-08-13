@@ -36,7 +36,8 @@ export function WorkLibrary({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deletionPreview, setDeletionPreview] = useState<WorkDeletionPreview | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{ message: string; undo?: () => Promise<void> } | null>(null);
+  const activeCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
 
   async function openWork(item: WorkListItem) {
     setOpeningWorkId(item.id);
@@ -77,9 +78,9 @@ export function WorkLibrary({
       setSelectedIds(new Set());
       setSelecting(false);
       await onLibraryChanged();
-      setNotice(result.failures.length > 0
+      setNotice({ message: result.failures.length > 0
         ? `已处理 ${result.completedWorkIds.length} 个作品，${result.failures.length} 个失败。`
-        : `已处理 ${result.completedWorkIds.length} 个作品。托管文件已进入系统回收站。`);
+        : `已处理 ${result.completedWorkIds.length} 个作品。托管文件已进入系统回收站。` });
     } catch (error) {
       onError(error);
     } finally {
@@ -160,6 +161,16 @@ export function WorkLibrary({
         </button>
       </section>
 
+      {activeCollection && (
+        <section className="work-collection-context">
+          <div><span>当前分类</span><strong>{activeCollection.name}</strong>{activeCollection.description && <small>{activeCollection.description}</small>}</div>
+          <button type="button" onClick={() => {
+            const { collectionId: _collectionId, ...withoutCollection } = query;
+            onQueryChange({ ...withoutCollection, offset: 0 });
+          }}>查看全部作品</button>
+        </section>
+      )}
+
       <div className="work-result-note">
         <span>{result.total} 个作品 · {result.totalPages} 页</span>
         {loading && <span className="work-querying">正在更新…</span>}
@@ -183,7 +194,40 @@ export function WorkLibrary({
               selected={selectedIds.has(work.id)}
               onOpen={() => selecting ? toggleSelection(work.id) : void openWork(work)}
               onToggleSelection={() => toggleSelection(work.id)}
-              onAssign={(collectionId) => onAssignCollection(work.id, collectionId)}
+              onAssign={async (collectionId) => {
+                await onAssignCollection(work.id, collectionId);
+                const collectionName = collections.find((item) => item.id === collectionId)?.name ?? "分类";
+                setNotice({
+                  message: `已把《${work.title}》加入“${collectionName}”。`,
+                  undo: async () => {
+                    await window.sanctuary.removeWorkFromCollection(work.id, collectionId);
+                    await onLibraryChanged();
+                  }
+                });
+              }}
+              onFavorite={async () => {
+                const next = !work.favorite;
+                await window.sanctuary.updateWorkFavorite([work.id], next);
+                await onLibraryChanged();
+                setNotice({
+                  message: next ? `已喜欢《${work.title}》。` : `已取消喜欢《${work.title}》。`,
+                  undo: async () => {
+                    await window.sanctuary.updateWorkFavorite([work.id], !next);
+                    await onLibraryChanged();
+                  }
+                });
+              }}
+              onRemoveFromCollection={activeCollection ? async () => {
+                await window.sanctuary.removeWorkFromCollection(work.id, activeCollection.id);
+                await onLibraryChanged();
+                setNotice({
+                  message: `已把《${work.title}》移出“${activeCollection.name}”。`,
+                  undo: async () => {
+                    await window.sanctuary.addWorkToCollection(work.id, activeCollection.id);
+                    await onLibraryChanged();
+                  }
+                });
+              } : null}
             />
           ))}
         </section>
@@ -211,7 +255,16 @@ export function WorkLibrary({
                   window.sanctuary.addWorkToCollection(workId, collectionId)
                 ));
                 await onLibraryChanged();
-                setNotice(`已把 ${selectedIds.size} 个作品加入分类。`);
+                const affectedIds = [...selectedIds];
+                setNotice({
+                  message: `已把 ${affectedIds.length} 个作品加入分类。`,
+                  undo: async () => {
+                    await Promise.all(affectedIds.map((workId) =>
+                      window.sanctuary.removeWorkFromCollection(workId, collectionId)
+                    ));
+                    await onLibraryChanged();
+                  }
+                });
               } catch (error) {
                 onError(error);
               }
@@ -220,13 +273,37 @@ export function WorkLibrary({
             <option value="">加入分类…</option>
             {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
           </select>
+          <button
+            type="button"
+            className="work-favorite-selected"
+            disabled={!result.items.some((work) => selectedIds.has(work.id) && !work.favorite)}
+            onClick={async () => {
+              const affectedIds = result.items.filter((work) => selectedIds.has(work.id) && !work.favorite).map((work) => work.id);
+              if (!affectedIds.length) return;
+              try {
+                await window.sanctuary.updateWorkFavorite(affectedIds, true);
+                await onLibraryChanged();
+                setNotice({
+                  message: `已喜欢 ${affectedIds.length} 个作品。`,
+                  undo: async () => {
+                    await window.sanctuary.updateWorkFavorite(affectedIds, false);
+                    await onLibraryChanged();
+                  }
+                });
+              } catch (error) {
+                onError(error);
+              }
+            }}
+          >
+            ♡ 喜欢
+          </button>
           <button type="button" className="work-delete-button" disabled={selectedIds.size === 0} onClick={() => void previewDeletion()}>
             移出画廊…
           </button>
         </section>
       )}
 
-      {notice && <div className="work-operation-notice" role="status">{notice}<button type="button" onClick={() => setNotice("")}>×</button></div>}
+      {notice && <div className="work-operation-notice" role="status"><span>{notice.message}</span><div>{notice.undo && <button type="button" className="work-undo-button" onClick={async () => { try { await notice.undo?.(); setNotice(null); } catch (error) { onError(error); } }}>撤销</button>}<button type="button" aria-label="关闭消息" onClick={() => setNotice(null)}>×</button></div></div>}
 
       {selectedWork && (
         <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} />
@@ -268,6 +345,8 @@ function WorkCard({
   selected,
   onOpen,
   onToggleSelection,
+  onFavorite,
+  onRemoveFromCollection,
   onAssign
 }: {
   work: WorkListItem;
@@ -277,6 +356,8 @@ function WorkCard({
   selected: boolean;
   onOpen: () => void;
   onToggleSelection: () => void;
+  onFavorite: () => Promise<void>;
+  onRemoveFromCollection: (() => Promise<void>) | null;
   onAssign: (collectionId: string) => Promise<void>;
 }) {
   const [assigning, setAssigning] = useState(false);
@@ -297,6 +378,11 @@ function WorkCard({
         {work.pageCount > 1 && <span className="work-page-badge">▱ {work.pageCount}</span>}
         {opening && <span className="work-opening">正在打开…</span>}
       </button>
+      {!selecting && (
+        <button type="button" className={`work-card-favorite ${work.favorite ? "active" : ""}`} aria-label={work.favorite ? `取消喜欢 ${work.title}` : `喜欢 ${work.title}`} onClick={() => void onFavorite()}>
+          {work.favorite ? "♥" : "♡"}
+        </button>
+      )}
       <div className="work-card-copy">
         <strong title={work.title}>{work.title}</strong>
         <span title={work.artistName ?? "本地作品"}>{work.artistName ?? "本地作品"}</span>
@@ -325,6 +411,7 @@ function WorkCard({
             ))}
           </select>
         </div>
+        {onRemoveFromCollection && <button type="button" className="work-remove-from-collection" onClick={() => void onRemoveFromCollection()}>移出当前分类</button>}
       </div>
     </article>
   );

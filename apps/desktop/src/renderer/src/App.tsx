@@ -16,6 +16,7 @@ import type {
   ExploreState
 } from "../../preload/index";
 import { WorkLibrary } from "./WorkLibrary";
+import { CollectionEditor, type CollectionDraft } from "./CollectionEditor";
 
 interface AppStatus {
   visionEngine: string;
@@ -53,6 +54,8 @@ export function App() {
     limit: 60
   });
   const [workLoading, setWorkLoading] = useState(false);
+  const [collectionEditor, setCollectionEditor] = useState<CollectionRecord | "new" | null>(null);
+  const [collectionSaving, setCollectionSaving] = useState(false);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [artists, setArtists] = useState<ArtistRecord[]>([]);
   const [filterSettings, setFilterSettings] = useState<ElementFilterSetting[]>([]);
@@ -127,13 +130,31 @@ export function App() {
     }
   }
 
-  async function createCollection() {
-    const name = window.prompt("新分类名称");
-    if (!name?.trim()) return;
+  async function saveCollection(draft: CollectionDraft) {
+    setCollectionSaving(true);
     try {
-      setCollections(await window.sanctuary.createCollection(name));
+      setCollections(collectionEditor === "new"
+        ? await window.sanctuary.createCollection(draft)
+        : await window.sanctuary.updateCollection(collectionEditor?.id ?? "", draft));
+      setCollectionEditor(null);
     } catch (caught) {
       showError(caught);
+    } finally {
+      setCollectionSaving(false);
+    }
+  }
+
+  async function deleteEditedCollection() {
+    if (!collectionEditor || collectionEditor === "new") return;
+    setCollectionSaving(true);
+    try {
+      setCollections(await window.sanctuary.deleteCollection(collectionEditor.id));
+      setCollectionEditor(null);
+      await refreshWorks();
+    } catch (caught) {
+      showError(caught);
+    } finally {
+      setCollectionSaving(false);
     }
   }
 
@@ -382,7 +403,8 @@ export function App() {
             avatarRepairMessage={avatarRepairMessage}
             error={error}
             onImport={importImages}
-            onCreateCollection={createCollection}
+            onCreateCollection={() => setCollectionEditor("new")}
+            onEditCollection={setCollectionEditor}
             onAssignCollection={assignCollection}
             onAssignWorkCollection={assignWorkCollection}
             onUpdateCollectionCover={updateCollectionCover}
@@ -410,6 +432,15 @@ export function App() {
           />
         )}
       </main>
+      {collectionEditor && (
+        <CollectionEditor
+          collection={collectionEditor === "new" ? null : collectionEditor}
+          saving={collectionSaving}
+          onSave={saveCollection}
+          onDelete={collectionEditor === "new" ? null : deleteEditedCollection}
+          onClose={() => !collectionSaving && setCollectionEditor(null)}
+        />
+      )}
     </div>
   );
 }
@@ -612,6 +643,7 @@ function GalleryView({
   error,
   onImport,
   onCreateCollection,
+  onEditCollection,
   onAssignCollection,
   onAssignWorkCollection,
   onUpdateCollectionCover,
@@ -635,6 +667,7 @@ function GalleryView({
   error: string;
   onImport: () => void;
   onCreateCollection: () => void;
+  onEditCollection: (collection: CollectionRecord) => void;
   onAssignCollection: (artworkId: string, collectionId: string) => void;
   onAssignWorkCollection: (workId: string, collectionId: string) => Promise<void>;
   onUpdateCollectionCover: (collectionId: string, artworkId: string | null) => void;
@@ -660,6 +693,11 @@ function GalleryView({
     (artwork) => !artwork.source && /^\d+_p\d+\./i.test(artwork.fileName)
   ).length;
   const missingAvatarCount = artists.filter((artist) => !artist.avatarLocalPath).length;
+  const showAllWorks = () => {
+    const { collectionId: _collectionId, ...withoutCollection } = workQuery;
+    onWorkQueryChange({ ...withoutCollection, offset: 0 });
+    onModeChange("flat");
+  };
   useEffect(() => {
     if (mode !== "author-work") setSelectedAuthorKey("");
     if (mode !== "collections") setSelectedCollectionId("");
@@ -675,7 +713,7 @@ function GalleryView({
           <div className="gallery-mode-switch" aria-label="画廊布局">
             <button
               className={mode === "flat" ? "active" : ""}
-              onClick={() => onModeChange("flat")}
+              onClick={showAllWorks}
             >
               平铺
             </button>
@@ -757,7 +795,11 @@ function GalleryView({
                 key={collection.id}
                 collection={collection}
                 artworks={artworks}
-                onOpen={() => setSelectedCollectionId(collection.id)}
+                onOpen={() => {
+                  onWorkQueryChange({ ...workQuery, collectionId: collection.id, offset: 0 });
+                  onModeChange("flat");
+                }}
+                onEdit={() => onEditCollection(collection)}
               />
             ))}
           </section>
@@ -1416,11 +1458,13 @@ function CollectionDetailPage({
 function CollectionCard({
   collection,
   artworks,
-  onOpen
+  onOpen,
+  onEdit
 }: {
   collection: CollectionRecord;
   artworks: ArtworkRecord[];
   onOpen: () => void;
+  onEdit: () => void;
 }) {
   const coverArtwork = artworks.find(a => a.id === collection.coverArtworkId) ?? 
     artworks.find(a => a.collectionIds.includes(collection.id));
@@ -1429,6 +1473,17 @@ function CollectionCard({
   
   return (
     <article className="collection-card" onClick={onOpen}>
+      <button
+        type="button"
+        className="collection-edit-button"
+        aria-label={`编辑分类 ${collection.name}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          onEdit();
+        }}
+      >
+        ···
+      </button>
       <div className="collection-cover">
         {coverUrl ? <img src={coverUrl} alt="" loading="lazy" /> : <div className="collection-cover-placeholder"><span>◇</span></div>}
       </div>

@@ -289,6 +289,16 @@ function saveWindowState(): void {
   } satisfies PersistedWindowState);
 }
 
+function parseCollectionDraft(value: unknown): { name: string; description: string } | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as { name?: unknown; description?: unknown };
+  if (typeof candidate.name !== "string" || typeof candidate.description !== "string") return null;
+  const name = candidate.name.trim();
+  const description = candidate.description.trim();
+  if (!name || name.length > 80 || description.length > 500) return null;
+  return { name, description };
+}
+
 async function deleteConfirmedWorks(workIds: readonly string[]): Promise<WorkDeletionResult> {
   const target = database;
   if (!target) throw new Error("Application is not ready");
@@ -596,9 +606,23 @@ function registerIpc(): void {
     if (exploreReviewQueue.remove(normalizedUrl)) scheduleExploreState();
   });
 
-  ipcMain.handle("collections:create", (_event, name: unknown) => {
-    if (!database || typeof name !== "string") throw new Error("Invalid collection name");
-    database.createCollection(name);
+  ipcMain.handle("collections:create", (_event, value: unknown) => {
+    const draft = parseCollectionDraft(value);
+    if (!database || !draft) throw new Error("Invalid collection");
+    database.createCollection(draft.name, draft.description);
+    return database.listCollections();
+  });
+  ipcMain.handle("collections:update", (_event, collectionId: unknown, value: unknown) => {
+    const draft = parseCollectionDraft(value);
+    if (!database || typeof collectionId !== "string" || !draft) {
+      throw new Error("Invalid collection update");
+    }
+    database.updateCollection(collectionId, draft.name, draft.description);
+    return database.listCollections();
+  });
+  ipcMain.handle("collections:delete", (_event, collectionId: unknown) => {
+    if (!database || typeof collectionId !== "string") throw new Error("Invalid collection id");
+    database.deleteCollection(collectionId);
     return database.listCollections();
   });
 
@@ -644,6 +668,25 @@ function registerIpc(): void {
       return database.getWork(workId);
     }
   );
+  ipcMain.handle(
+    "collections:remove-work",
+    (_event, workIdValue: unknown, collectionId: unknown) => {
+      const workId = parseWorkId(workIdValue);
+      if (!database || !workId || typeof collectionId !== "string") {
+        throw new Error("Invalid work collection removal");
+      }
+      database.removeWorkFromCollection(workId, collectionId);
+      return database.getWork(workId);
+    }
+  );
+  ipcMain.handle("library:update-favorite", (_event, values: unknown, favorite: unknown) => {
+    const workIds = parseWorkIds(values);
+    if (!database || !workIds || typeof favorite !== "boolean") {
+      throw new Error("Invalid favorite update");
+    }
+    database.updateWorkFavorite(workIds, favorite);
+    return true;
+  });
 
   ipcMain.handle("app:status", () => ({
     visionEngine: vision?.engine ?? "unavailable",

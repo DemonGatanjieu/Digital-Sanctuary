@@ -404,7 +404,8 @@ button:disabled { opacity: .5; cursor: wait; }
 
 /* Collections */
 .collections-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; }
-.collection-card { cursor: pointer; }
+.collection-card { position: relative; cursor: pointer; }
+.collection-edit-button { position: absolute; z-index: 3; top: 10px; right: 10px; width: 34px; height: 30px; padding: 0; border: 1px solid rgba(255,255,255,.72); border-radius: 10px; color: #fff; background: rgba(25,33,43,.58); cursor: pointer; letter-spacing: 1px; }
 .collection-cover { position: relative; aspect-ratio: 16/10; overflow: hidden; background: #eef1f4; }
 .collection-cover img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
 .collection-card:hover .collection-cover img { transform: scale(1.05); }
@@ -421,6 +422,20 @@ button:disabled { opacity: .5; cursor: wait; }
 .collection-cover-action { width: 100%; margin-top: 10px; padding: 10px 12px; border: 1px solid rgba(220,226,233,0.8); border-radius: 12px; color: #555e69; background: rgba(255,255,255,0.7); cursor: pointer; font-weight: 600; transition: all 0.2s ease; }
 .collection-cover-action:hover { border-color: #b9ddf5; color: #007aff; background: #fff; box-shadow: 0 4px 12px rgba(0,122,255,0.06); }
 .collection-cover-action.active, .collection-cover-action:disabled { color: #1e7a5c; border-color: #cdeee3; background: #eaf8f3; box-shadow: none; cursor: default; }
+
+.collection-editor-overlay { position: fixed; z-index: 1100; inset: 0; display: grid; place-items: center; padding: 26px; background: rgba(25,31,39,.46); backdrop-filter: blur(5px); }
+.collection-editor-dialog { width: min(560px, 92vw); padding: 28px; border: 1px solid #e1e6ec; border-radius: 22px; color: #28303a; background: #fff; box-shadow: 0 30px 80px rgba(17,25,35,.25); }
+.collection-editor-dialog h2 { margin: 4px 0 24px; font-size: 24px; }
+.collection-editor-dialog > label { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 16px; color: #4a5360; font-size: 12px; font-weight: 600; }
+.collection-editor-dialog input, .collection-editor-dialog textarea { grid-column: 1 / -1; width: 100%; padding: 11px 12px; border: 1px solid #dfe4ea; border-radius: 11px; color: #29313a; background: #fbfcfd; font: inherit; resize: vertical; }
+.collection-editor-dialog input:focus, .collection-editor-dialog textarea:focus { outline: 3px solid rgba(0,122,255,.12); border-color: #83bff0; }
+.collection-editor-dialog label small { color: #9aa2ac; font-size: 9px; font-weight: 400; }
+.collection-editor-note { margin-top: 16px; padding: 10px 12px; border-radius: 11px; color: #66717e; background: #f3f6f8; font-size: 10px; line-height: 1.6; }
+.collection-editor-dialog footer { display: flex; justify-content: space-between; gap: 18px; margin-top: 24px; }
+.collection-editor-dialog footer > div { display: flex; gap: 9px; }
+.collection-delete-trigger { min-height: 38px; padding: 0 12px; border: 1px solid #efc9cf; border-radius: 10px; color: #b34152; background: #fff8f9; cursor: pointer; }
+.collection-delete-confirm { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: 14px; padding: 12px; border: 1px solid #efc9cf; border-radius: 11px; color: #93414e; background: #fff7f8; font-size: 10px; }
+.collection-delete-confirm button { flex: 0 0 auto; min-height: 32px; padding: 0 11px; border: 0; border-radius: 8px; color: #fff; background: #bf4657; cursor: pointer; }
 
 /* Work-level library (v2 data model) */
 .work-library-controls {
@@ -442,6 +457,12 @@ button:disabled { opacity: .5; cursor: wait; }
 }
 .work-search input:focus { outline: 3px solid rgba(0,122,255,.12); border-color: #83bff0; }
 .work-result-note { display: flex; justify-content: space-between; min-height: 24px; padding: 0 4px; color: #858e99; font-size: 11px; }
+.work-collection-context { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 16px; padding: 14px 16px; border: 1px solid #d8e9f4; border-radius: 15px; color: #43515d; background: #f1f8fc; }
+.work-collection-context > div { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+.work-collection-context span { color: #1781bd; font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+.work-collection-context strong { font-size: 13px; }
+.work-collection-context small { min-width: 0; overflow: hidden; color: #82909c; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.work-collection-context button { flex: 0 0 auto; min-height: 32px; padding: 0 11px; border: 1px solid #c4dfef; border-radius: 9px; color: #177bb2; background: #fff; cursor: pointer; }
 .work-querying { color: #087dc5; }
 .work-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 20px; }
 .work-library-card {
@@ -453,6 +474,8 @@ button:disabled { opacity: .5; cursor: wait; }
 .work-library-card.selected { border-color: #57aee7; box-shadow: 0 0 0 3px rgba(55,157,224,.14), 0 14px 30px rgba(42,53,68,.08); }
 .work-card-check { position: absolute; z-index: 4; width: 28px; height: 28px; margin: 10px; padding: 0; border: 2px solid #fff; border-radius: 9px; color: #fff; background: rgba(24,33,43,.58); cursor: pointer; box-shadow: 0 3px 10px rgba(0,0,0,.14); }
 .work-library-card.selected .work-card-check { background: #078ad9; }
+.work-card-favorite { position: absolute; z-index: 4; top: 10px; left: 10px; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(255,255,255,.72); border-radius: 10px; color: #fff; background: rgba(24,33,43,.52); cursor: pointer; font-size: 17px; box-shadow: 0 3px 12px rgba(0,0,0,.12); }
+.work-card-favorite.active { color: #ffced5; background: rgba(177,54,74,.78); }
 .work-cover-button { position: relative; display: block; width: 100%; aspect-ratio: 1.18 / 1; padding: 0; overflow: hidden; border: 0; border-radius: 18px 18px 0 0; background: #edf1f5; cursor: pointer; }
 .work-cover-button > img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .24s ease, opacity .18s ease; }
 .work-library-card:hover .work-cover-button > img { transform: scale(1.018); }
@@ -467,16 +490,22 @@ button:disabled { opacity: .5; cursor: wait; }
 .work-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
 .work-card-foot time { color: #a0a7b0; font-size: 9px; white-space: nowrap; }
 .work-card-foot select { min-width: 0; max-width: 122px; height: 29px; padding: 0 7px; border: 1px solid #e1e5eb; border-radius: 8px; color: #66707b; background: #f9fafb; font-size: 9px; }
+.work-remove-from-collection { width: 100%; min-height: 29px; margin-top: 4px; border: 1px solid #e3e6ea; border-radius: 8px; color: #707a85; background: #fafbfc; cursor: pointer; font-size: 9px; }
+.work-remove-from-collection:hover { color: #b14b59; border-color: #eacbd0; background: #fff8f9; }
 .work-load-more { display: flex; justify-content: center; padding: 28px 0 4px; }
-.work-selection-bar { position: sticky; z-index: 8; bottom: 10px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 12px; margin: 20px auto 0; padding: 13px 14px 13px 18px; border: 1px solid #d8e0e9; border-radius: 17px; background: rgba(255,255,255,.96); box-shadow: 0 15px 38px rgba(34,46,62,.16); }
+.work-selection-bar { position: sticky; z-index: 8; bottom: 10px; display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 12px; margin: 20px auto 0; padding: 13px 14px 13px 18px; border: 1px solid #d8e0e9; border-radius: 17px; background: rgba(255,255,255,.96); box-shadow: 0 15px 38px rgba(34,46,62,.16); }
 .work-selection-bar div { display: grid; gap: 3px; }
 .work-selection-bar strong { color: #29313a; font-size: 12px; }
 .work-selection-bar span { color: #858e99; font-size: 9px; }
 .work-selection-bar select, .work-delete-button { min-height: 36px; padding: 0 12px; border: 1px solid #dce2e8; border-radius: 10px; background: #fff; font: inherit; font-size: 11px; }
+.work-favorite-selected { min-height: 36px; padding: 0 12px; border: 1px solid #ead6da; border-radius: 10px; color: #a94858; background: #fff8f9; cursor: pointer; }
+.work-favorite-selected:disabled { opacity: .42; cursor: default; }
 .work-delete-button { color: #b83e50; border-color: #efc7cd; background: #fff8f9; cursor: pointer; }
 .work-delete-button:disabled { opacity: .45; cursor: default; }
 .work-operation-notice { position: sticky; z-index: 9; bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 14px auto 0; padding: 11px 12px 11px 16px; border: 1px solid #cce7dc; border-radius: 13px; color: #26775c; background: #eff9f5; font-size: 11px; }
+.work-operation-notice > div { display: flex; align-items: center; gap: 5px; }
 .work-operation-notice button { border: 0; color: inherit; background: transparent; cursor: pointer; font-size: 17px; }
+.work-operation-notice .work-undo-button { padding: 5px 10px; border-radius: 8px; background: rgba(34,131,98,.10); font-size: 11px; font-weight: 600; }
 .work-delete-overlay { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 28px; background: rgba(25,31,39,.48); backdrop-filter: blur(5px); }
 .work-delete-dialog { width: min(600px, 92vw); max-height: 86vh; overflow: auto; padding: 28px; border: 1px solid #e2e6eb; border-radius: 22px; color: #252c34; background: #fff; box-shadow: 0 30px 80px rgba(17,25,35,.28); }
 .work-delete-dialog h2 { margin: 4px 0 20px; font-size: 23px; }

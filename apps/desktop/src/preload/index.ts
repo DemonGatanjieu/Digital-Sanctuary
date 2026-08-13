@@ -63,10 +63,14 @@ export interface SanctuaryApi {
   confirmWorkDeletion(token: string): Promise<WorkDeletionResult>;
   importImages(): Promise<ArtworkRecord[]>;
   listCollections(): Promise<CollectionRecord[]>;
-  createCollection(name: string): Promise<CollectionRecord[]>;
+  createCollection(draft: { name: string; description: string }): Promise<CollectionRecord[]>;
+  updateCollection(collectionId: string, draft: { name: string; description: string }): Promise<CollectionRecord[]>;
+  deleteCollection(collectionId: string): Promise<CollectionRecord[]>;
   updateCollectionCover(collectionId: string, artworkId: string | null): Promise<CollectionRecord[]>;
   addArtworkToCollection(artworkId: string, collectionId: string): Promise<ArtworkRecord[]>;
   addWorkToCollection(workId: string, collectionId: string): Promise<WorkRecord | null>;
+  removeWorkFromCollection(workId: string, collectionId: string): Promise<WorkRecord | null>;
+  updateWorkFavorite(workIds: string[], favorite: boolean): Promise<boolean>;
   listArtists(): Promise<ArtistRecord[]>;
   repairArtistAvatars(): Promise<ArtistAvatarRepairResult>;
   listFilterSettings(): Promise<ElementFilterSetting[]>;
@@ -100,8 +104,12 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:delete-confirmed", token) as Promise<WorkDeletionResult>,
   importImages: () => ipcRenderer.invoke("library:import") as Promise<ArtworkRecord[]>,
   listCollections: () => ipcRenderer.invoke("collections:list") as Promise<CollectionRecord[]>,
-  createCollection: (name) =>
-    ipcRenderer.invoke("collections:create", name) as Promise<CollectionRecord[]>,
+  createCollection: (draft) =>
+    ipcRenderer.invoke("collections:create", draft) as Promise<CollectionRecord[]>,
+  updateCollection: (collectionId, draft) =>
+    ipcRenderer.invoke("collections:update", collectionId, draft) as Promise<CollectionRecord[]>,
+  deleteCollection: (collectionId) =>
+    ipcRenderer.invoke("collections:delete", collectionId) as Promise<CollectionRecord[]>,
   updateCollectionCover: (collectionId, artworkId) =>
     ipcRenderer.invoke("collections:update-cover", collectionId, artworkId) as Promise<CollectionRecord[]>,
   addArtworkToCollection: (artworkId, collectionId) =>
@@ -116,6 +124,14 @@ const api: SanctuaryApi = {
       workId,
       collectionId
     ) as Promise<WorkRecord | null>,
+  removeWorkFromCollection: (workId, collectionId) =>
+    ipcRenderer.invoke(
+      "collections:remove-work",
+      workId,
+      collectionId
+    ) as Promise<WorkRecord | null>,
+  updateWorkFavorite: (workIds, favorite) =>
+    ipcRenderer.invoke("library:update-favorite", workIds, favorite) as Promise<boolean>,
   listArtists: () => ipcRenderer.invoke("artists:list") as Promise<ArtistRecord[]>,
   repairArtistAvatars: () =>
     ipcRenderer.invoke("artists:repair-avatars") as Promise<ArtistAvatarRepairResult>,

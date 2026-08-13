@@ -502,6 +502,48 @@ export class LibraryDatabase {
       .run(collectionId, workId);
   }
 
+  removeWorkFromCollection(workId: string, collectionId: string): void {
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      this.#database
+        .prepare("DELETE FROM collection_works WHERE collection_id = ? AND work_id = ?")
+        .run(collectionId, workId);
+      this.#database
+        .prepare(
+          `DELETE FROM collection_artworks
+            WHERE collection_id = ? AND artwork_id IN (
+              SELECT legacy_artwork_id FROM assets
+               WHERE work_id = ? AND legacy_artwork_id IS NOT NULL
+            )`
+        )
+        .run(collectionId, workId);
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  updateWorkFavorite(workIds: readonly string[], favorite: boolean): number {
+    if (workIds.length === 0) return 0;
+    const statement = this.#database.prepare(
+      "UPDATE works SET favorite = ?, updated_at = ? WHERE id = ?"
+    );
+    let changes = 0;
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const now = new Date().toISOString();
+      for (const workId of workIds) {
+        changes += Number(statement.run(favorite ? 1 : 0, now, workId).changes);
+      }
+      this.#database.exec("COMMIT");
+      return changes;
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   updateAssetFileState(assetId: string, state: AssetFileState): void {
     this.#database
       .prepare("UPDATE assets SET file_state = ?, updated_at = ? WHERE id = ?")
@@ -577,6 +619,23 @@ export class LibraryDatabase {
       )
       .run(collection.id, collection.name, collection.description, collection.createdAt);
     return collection;
+  }
+
+  updateCollection(collectionId: string, name: string, description = ""): CollectionRecord {
+    const normalizedName = name.trim();
+    if (!normalizedName) throw new Error("Collection name is required");
+    this.#database
+      .prepare("UPDATE collections SET name = ?, description = ? WHERE id = ?")
+      .run(normalizedName, description.trim(), collectionId);
+    const collection = this.listCollections().find((item) => item.id === collectionId);
+    if (!collection) throw new Error("Collection does not exist");
+    return collection;
+  }
+
+  deleteCollection(collectionId: string): boolean {
+    return Number(
+      this.#database.prepare("DELETE FROM collections WHERE id = ?").run(collectionId).changes
+    ) > 0;
   }
 
   updateCollectionCover(collectionId: string, artworkId: string | null): void {
