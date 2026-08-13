@@ -534,6 +534,7 @@ button:disabled { opacity: .5; cursor: wait; }
 .work-library-card {
   position: relative; min-width: 0; overflow: hidden; border: 1px solid rgba(219,225,233,.92); border-radius: 19px;
   background: #fff; box-shadow: 0 6px 22px rgba(42,53,68,.055);
+  content-visibility: auto; contain: layout style paint; contain-intrinsic-size: auto 340px;
   transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
 }
 .work-library-card:hover { transform: translateY(-2px); border-color: #cbd7e4; box-shadow: 0 14px 32px rgba(42,53,68,.10); }

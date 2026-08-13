@@ -46,6 +46,24 @@ export function WorkLibrary({
   const activeCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
   const featuredWork = result.items[0] ?? null;
   const lastSelectedWorkId = useRef<string | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !result.hasMore || loading || !("IntersectionObserver" in window)) return;
+    let requested = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!requested && entries.some((entry) => entry.isIntersecting)) {
+          requested = true;
+          onLoadMore();
+        }
+      },
+      { rootMargin: "700px 0px", threshold: 0 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loading, onLoadMore, result.hasMore, result.items.length]);
 
   async function openWork(item: WorkListItem) {
     setOpeningWorkId(item.id);
@@ -267,7 +285,7 @@ export function WorkLibrary({
       )}
 
       {result.hasMore && (
-        <div className="work-load-more">
+        <div className="work-load-more" ref={loadMoreRef}>
           <Button busy={loading} busyLabel="正在读取…" onClick={onLoadMore}>
             继续加载（已显示 {result.items.length} / {result.total}）
           </Button>

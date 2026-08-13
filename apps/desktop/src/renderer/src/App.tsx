@@ -102,11 +102,12 @@ export function App() {
     let active = true;
     void (async () => {
       let changed = false;
-      for (let batch = 0; batch < 20; batch += 1) {
+      for (let batch = 0; batch < 80; batch += 1) {
+        await waitForRendererIdle();
         const result = await window.sanctuary.generateThumbnails();
         changed ||= result.generated + result.reused > 0;
-        if (result.attempted < 24 || result.generated + result.reused === 0) break;
-        await new Promise((resolveTask) => window.setTimeout(resolveTask, 80));
+        if (result.attempted < 6 || result.generated + result.reused === 0) break;
+        await new Promise((resolveTask) => window.setTimeout(resolveTask, 120));
       }
       if (active && changed) await refreshWorks();
     })().catch(showError);
@@ -411,4 +412,14 @@ export function App() {
       )}
     </div>
   );
+}
+
+function waitForRendererIdle(): Promise<void> {
+  return new Promise((resolveTask) => {
+    if ("requestIdleCallback" in window) {
+      window.requestIdleCallback(() => resolveTask(), { timeout: 800 });
+      return;
+    }
+    globalThis.setTimeout(resolveTask, 80);
+  });
 }

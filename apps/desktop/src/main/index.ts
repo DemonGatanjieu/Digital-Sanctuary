@@ -395,7 +395,7 @@ function registerIpc(): void {
       database,
       join(app.getPath("userData"), "thumbnails"),
       encodeLocalThumbnail,
-      24
+      6
     );
   });
   ipcMain.handle("library:delete-preview", (_event, value: unknown): WorkDeletionPreview => {
