@@ -69,6 +69,7 @@ export interface SanctuaryApi {
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
   getWork(workId: string): Promise<WorkRecord | null>;
   generateThumbnails(): Promise<ThumbnailBatchResult>;
+  createLibraryBackup(): Promise<string | null>;
   previewWorkDeletion(workIds: string[]): Promise<WorkDeletionPreview>;
   confirmWorkDeletion(token: string): Promise<WorkDeletionResult>;
   importImages(): Promise<ArtworkRecord[]>;
@@ -124,6 +125,8 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
   generateThumbnails: () =>
     ipcRenderer.invoke("library:generate-thumbnails") as Promise<ThumbnailBatchResult>,
+  createLibraryBackup: () =>
+    ipcRenderer.invoke("library:create-backup") as Promise<string | null>,
   previewWorkDeletion: (workIds) =>
     ipcRenderer.invoke("library:delete-preview", workIds) as Promise<WorkDeletionPreview>,
   confirmWorkDeletion: (token) =>

@@ -44,10 +44,10 @@ export function AppSidebar({
       </div>
 
       <nav>
-        <button className={`nav-item ${activeView === "gallery" ? "active" : ""}`} onClick={() => void onOpenGallery()}>画廊</button>
-        <button className={`nav-item ${activeView === "organize" ? "active" : ""}`} onClick={() => onViewChange("organize")}>模型整理</button>
-        <button className={`nav-item ${activeView === "explore" ? "active" : ""}`} onClick={() => onViewChange("explore")}>探索</button>
-        <button className={`nav-item ${activeView === "settings" ? "active" : ""}`} onClick={() => onViewChange("settings")}>设置</button>
+        <button aria-current={activeView === "gallery" ? "page" : undefined} className={`nav-item ${activeView === "gallery" ? "active" : ""}`} onClick={() => void onOpenGallery()}>画廊</button>
+        <button aria-current={activeView === "organize" ? "page" : undefined} className={`nav-item ${activeView === "organize" ? "active" : ""}`} onClick={() => onViewChange("organize")}>模型整理</button>
+        <button aria-current={activeView === "explore" ? "page" : undefined} className={`nav-item ${activeView === "explore" ? "active" : ""}`} onClick={() => onViewChange("explore")}>探索</button>
+        <button aria-current={activeView === "settings" ? "page" : undefined} className={`nav-item ${activeView === "settings" ? "active" : ""}`} onClick={() => onViewChange("settings")}>设置</button>
       </nav>
 
       {activeView === "explore" && (

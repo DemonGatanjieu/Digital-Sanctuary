@@ -7,6 +7,24 @@ import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
+  it("records schema version 2 and creates a portable SQLite backup", () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-backup-"));
+    const databasePath = join(directory, "library.db");
+    const backupPath = join(directory, "library-backup.db");
+    const database = new LibraryDatabase(databasePath);
+    try {
+      expect(database.schemaVersion()).toBe(2);
+      database.createCollection("Backup fixture");
+      expect(database.backupTo(backupPath)).toBe(backupPath);
+      const backup = new DatabaseSync(backupPath, { readOnly: true });
+      expect((backup.prepare("SELECT COUNT(*) AS count FROM collections").get() as { count: number }).count).toBe(1);
+      backup.close();
+    } finally {
+      database.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("persists explicit analysis jobs, reusable results, and suggestions", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-analysis-"));
     const imagePath = join(directory, "sample.png");

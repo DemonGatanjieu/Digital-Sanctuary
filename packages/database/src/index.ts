@@ -205,6 +205,18 @@ export class LibraryDatabase {
     this.#database.close();
   }
 
+  schemaVersion(): number {
+    const row = this.#database.prepare("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations").get() as { version: number };
+    return Number(row.version);
+  }
+
+  backupTo(destinationPath: string): string {
+    if (this.#databasePath === ":memory:" || this.#databasePath.startsWith("file:")) throw new Error("In-memory databases cannot be backed up");
+    if (!destinationPath.trim()) throw new Error("Backup destination is required");
+    this.#database.exec(`VACUUM INTO '${destinationPath.replaceAll("'", "''")}'`);
+    return destinationPath;
+  }
+
   /** Creates metadata-only works for an isolated renderer benchmark database. */
   seedBenchmarkWorks(count: number): void {
     const total = clampInteger(count, 0, 0, 50_000);
@@ -1280,6 +1292,7 @@ export class LibraryDatabase {
     `);
     this.#ensureWorkSchema();
     this.#migrateLegacyArtworksToWorks();
+    this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)").run(new Date().toISOString());
   }
 
   #ensureCollectionColumns(): void {

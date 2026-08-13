@@ -9,6 +9,7 @@
 }
 
 * { box-sizing: border-box; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [href]:focus-visible, [tabindex]:focus-visible { outline: 3px solid rgba(0,122,255,.32); outline-offset: 2px; }
 body { 
   margin: 0; min-width: 900px; min-height: 100vh; overflow: hidden; 
   background: #f5f7fa;
@@ -445,6 +446,7 @@ button:disabled { opacity: .5; cursor: wait; }
 .storage-preference > span { display: grid; flex: 1; min-width: 0; gap: 4px; }
 .storage-preference strong { color: #3b4651; font-size: 11px; }
 .storage-preference small { overflow: hidden; color: #89939e; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.storage-backup-notice { grid-column: 1 / -1; }
 .rule-card-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .custom-group-editor { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 7px; margin-top: 14px; padding: 10px; border: 1px solid #e5e9ee; border-radius: 13px; background: #f8fafb; }
 .custom-rule-builder { display: grid; grid-template-columns: minmax(190px, 1.2fr) repeat(2, minmax(140px, 1fr)) 110px auto; align-items: end; gap: 10px; margin-top: 20px; padding: 20px; border: 1px solid #dce8f0; border-radius: 20px; background: linear-gradient(120deg, #f7fbfe, #fff); }

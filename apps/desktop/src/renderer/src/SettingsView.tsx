@@ -25,6 +25,7 @@ interface SettingsViewProps {
   onAppearanceChange: (preferences: AppearancePreferences) => Promise<void>;
   onLibraryPreferencesChange: (preferences: LibraryPreferences) => Promise<void>;
   onChooseDownloadDirectory: () => Promise<void>;
+  onCreateBackup: () => Promise<string | null>;
   onCustomGroupsChange: (groups: CustomElementGroup[]) => Promise<void>;
 }
 
@@ -41,6 +42,7 @@ export function SettingsView({
   onAppearanceChange,
   onLibraryPreferencesChange,
   onChooseDownloadDirectory,
+  onCreateBackup,
   onCustomGroupsChange
 }: SettingsViewProps) {
   const [customName, setCustomName] = useState("");
@@ -49,6 +51,7 @@ export function SettingsView({
   const [customAction, setCustomAction] = useState<"blur" | "hide">("hide");
   const [sandboxBusy, setSandboxBusy] = useState(false);
   const [sandboxResult, setSandboxResult] = useState<RuleSandboxResult | null>(null);
+  const [backupMessage, setBackupMessage] = useState("");
   const elementGroups = useMemo(() => [...ELEMENT_BLACKLIST_GROUPS, ...customGroups], [customGroups]);
 
   async function createCustomGroup() {
@@ -135,8 +138,10 @@ export function SettingsView({
         <div className="storage-preference">
           <span><strong>Pixiv 保存目录</strong><small>{libraryPreferences.downloadDirectory ?? "系统图片 / Digital Sanctuary / Pixiv"}</small></span>
           <Button onClick={() => void onChooseDownloadDirectory()}>选择目录</Button>
+          <Button onClick={() => void onCreateBackup().then((path) => path && setBackupMessage(`备份已保存到 ${path}`))}>备份数据库</Button>
           <Button variant="ghost" onClick={() => void onLibraryPreferencesChange(DEFAULT_LIBRARY_PREFERENCES)}>恢复画廊默认值</Button>
         </div>
+        {backupMessage && <AppNotice className="storage-backup-notice" tone="success" onDismiss={() => setBackupMessage("")}>{backupMessage}</AppNotice>}
       </section>
 
       <SectionHeading eyebrow="ELEMENT BLACKLIST" title="元素拦截规则" description="只控制不受欢迎的画面元素；R18、裸露和露骨程度不参与拦截。" />

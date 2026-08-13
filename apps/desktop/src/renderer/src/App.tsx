@@ -431,6 +431,10 @@ export function App() {
             onAppearanceChange={updateAppearance}
             onLibraryPreferencesChange={updateLibraryPreferences}
             onChooseDownloadDirectory={async () => setLibraryPreferences(await window.sanctuary.chooseDownloadDirectory())}
+            onCreateBackup={async () => {
+              try { return await window.sanctuary.createLibraryBackup(); }
+              catch (caught) { showError(caught); return null; }
+            }}
             onCustomGroupsChange={async (groups) => {
               setCustomElementGroups(await window.sanctuary.updateCustomElementGroups(groups));
               setFilterSettings(await window.sanctuary.listFilterSettings());

@@ -24,15 +24,10 @@ import {
   decideFilter,
   DEFAULT_LIBRARY_PREFERENCES,
   isCustomElementGroup,
-  isAnalysisScope,
   isElementFilterSetting,
   isLibraryPreferences,
   rulesFingerprint,
   type AppearancePreferences,
-  type AnalysisApplyResult,
-  type AnalysisJob,
-  type AnalysisScope,
-  type AnalysisScopePreview,
   type ArtistRecord,
   type ArtworkRecord,
   type CustomElementGroup,
@@ -89,8 +84,11 @@ import {
   AsyncTaskGate,
   mapWithConcurrency
 } from "../shared/bounded-concurrency.js";
-import { parseWorkId, parseWorkIds, parseWorkQuery } from "../shared/library-query.js";
-import { generateThumbnailBatch, type ThumbnailBatchResult } from "./thumbnail-service.js";
+import { parseWorkId, parseWorkIds } from "../shared/library-query.js";
+import { registerLibraryReadIpc } from "./library-ipc.js";
+import { normalizeWindowState, type PersistedWindowState } from "./window-state.js";
+import { AnalysisJobScheduler } from "./analysis-job-runner.js";
+import { registerAnalysisIpc } from "./analysis-ipc.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -117,8 +115,7 @@ let exploreDownloadState: ExploreDownloadState = { ...IDLE_EXPLORE_DOWNLOAD_STAT
 let activeExploreDownload: Promise<ExploreDownloadResult> | undefined;
 let activeArtistAvatarRepair: Promise<ArtistAvatarRepairResult> | undefined;
 let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
-const scheduledAnalysisJobIds = new Set<string>();
-let analysisRunner: Promise<void> = Promise.resolve();
+const analysisJobScheduler = new AnalysisJobScheduler();
 interface RemoteReviewOutcome {
   allowed: boolean;
   reasons: string[];
@@ -245,47 +242,11 @@ function createWindow(): void {
   }
 }
 
-interface PersistedWindowState {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  maximized: boolean;
-}
-
 function readWindowState(): PersistedWindowState | null {
-  const value = database?.getPreference<unknown>("window.main");
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as Partial<PersistedWindowState>;
-  if (![candidate.x, candidate.y, candidate.width, candidate.height].every(Number.isFinite) ||
-      typeof candidate.maximized !== "boolean") {
-    return null;
-  }
-  const state: PersistedWindowState = {
-    x: Math.round(candidate.x as number),
-    y: Math.round(candidate.y as number),
-    width: Math.max(900, Math.round(candidate.width as number)),
-    height: Math.max(620, Math.round(candidate.height as number)),
-    maximized: candidate.maximized
-  };
-  const display = screen.getAllDisplays().find(({ workArea }) =>
-    state.x < workArea.x + workArea.width - 120 &&
-    state.x + state.width > workArea.x + 120 &&
-    state.y < workArea.y + workArea.height - 80 &&
-    state.y + state.height > workArea.y + 80
+  return normalizeWindowState(
+    database?.getPreference<unknown>("window.main"),
+    screen.getAllDisplays().map((display) => display.workArea)
   );
-  if (!display) return null;
-  state.width = Math.min(state.width, display.workArea.width);
-  state.height = Math.min(state.height, display.workArea.height);
-  state.x = Math.min(
-    display.workArea.x + display.workArea.width - state.width,
-    Math.max(display.workArea.x, state.x)
-  );
-  state.y = Math.min(
-    display.workArea.y + display.workArea.height - state.height,
-    Math.max(display.workArea.y, state.y)
-  );
-  return state;
 }
 
 function scheduleWindowStateSave(): void {
@@ -404,77 +365,21 @@ function registerImageProtocol(): void {
   });
 }
 
-function scheduleAnalysisJob(jobId: string): void {
-  if (scheduledAnalysisJobIds.has(jobId)) return;
-  scheduledAnalysisJobIds.add(jobId);
-  analysisRunner = analysisRunner
-    .catch(() => undefined)
-    .then(() => runAnalysisJob(jobId))
-    .finally(() => scheduledAnalysisJobIds.delete(jobId));
-}
-
-async function runAnalysisJob(jobId: string): Promise<void> {
-  const target = database;
-  const client = vision;
-  if (!target || !client) return;
-  try {
-    if (target.isAnalysisCancellationRequested(jobId)) {
-      target.finishAnalysisJob(jobId, "cancelled");
-      return;
-    }
-    if (!target.startAnalysisJob(jobId)) return;
-    while (true) {
-      if (target.isAnalysisCancellationRequested(jobId)) {
-        target.finishAnalysisJob(jobId, "cancelled");
-        return;
-      }
-      const item = target.claimNextAnalysisItem(jobId);
-      if (!item) {
-        target.finishAnalysisJob(jobId, "completed");
-        return;
-      }
-      if (!existsSync(item.path)) {
-        target.failAnalysisItem(item, "图片文件不存在");
-        continue;
-      }
-      const cached = target.getCachedAssetAnalysis(item.assetId, item.assetUpdatedAt, client.engine);
-      if (cached) {
-        target.completeAnalysisItem(item, cached, true);
-        continue;
-      }
-      try {
-        const assessment = await client.classify(item.path, 30_000);
-        if (assessment.status === "error") target.failAnalysisItem(item, assessment.error ?? "模型分析失败");
-        else target.completeAnalysisItem(item, assessment, false);
-      } catch (error) {
-        target.failAnalysisItem(item, errorMessage(error));
-      }
-    }
-  } catch (error) {
-    target.finishAnalysisJob(jobId, "failed", errorMessage(error));
-  }
-}
-
 function registerIpc(): void {
-  ipcMain.handle("library:list", () => database?.listArtworks() ?? []);
-  ipcMain.handle("library:query-works", (_event, query: unknown) =>
-    database?.queryWorks(parseWorkQuery(query)) ?? {
-      items: [], total: 0, totalPages: 0, offset: 0, limit: 60, hasMore: false
-    }
-  );
-  ipcMain.handle("library:get-work", (_event, value: unknown) => {
-    const workId = parseWorkId(value);
-    if (!database || !workId) throw new Error("Invalid work id");
-    return database.getWork(workId);
-  });
-  ipcMain.handle("library:generate-thumbnails", (): Promise<ThumbnailBatchResult> => {
-    if (!database) throw new Error("Library database is unavailable");
-    return generateThumbnailBatch(
-      database,
-      join(app.getPath("userData"), "thumbnails"),
-      encodeLocalThumbnail,
-      6
-    );
+  if (!database || !vision) throw new Error("Application services are unavailable");
+  registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler);
+  registerLibraryReadIpc(ipcMain, database, join(app.getPath("userData"), "thumbnails"), encodeLocalThumbnail);
+  ipcMain.handle("library:create-backup", async (): Promise<string | null> => {
+    if (!database || !mainWindow) throw new Error("Application is not ready");
+    const timestamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
+    const selected = await dialog.showSaveDialog(mainWindow, {
+      title: "备份纯净领域数据库",
+      defaultPath: join(app.getPath("documents"), `Digital-Sanctuary-${timestamp}.db`),
+      filters: [{ name: "SQLite 数据库", extensions: ["db"] }]
+    });
+    if (selected.canceled || !selected.filePath) return null;
+    if (existsSync(selected.filePath)) throw new Error("为避免覆盖已有备份，请选择一个新的文件名");
+    return database.backupTo(resolve(selected.filePath));
   });
   ipcMain.handle("library:delete-preview", (_event, value: unknown): WorkDeletionPreview => {
     if (!database) throw new Error("Application is not ready");
@@ -587,54 +492,6 @@ function registerIpc(): void {
       buildElementFilterRules(database.listElementFilterSettings(), customElementGroups())
     );
     return { fileName: basename(path), assessment, decision };
-  });
-
-  ipcMain.handle("analysis:preview", (_event, value: unknown): AnalysisScopePreview => {
-    if (!database || !vision || !isAnalysisScope(value)) throw new Error("Invalid analysis scope");
-    return database.previewAnalysisScope(value, vision.engine);
-  });
-  ipcMain.handle("analysis:create", (_event, value: unknown): AnalysisJob => {
-    if (!database || !vision || !isAnalysisScope(value)) throw new Error("Invalid analysis scope");
-    return database.createAnalysisJob(value, vision.engine);
-  });
-  ipcMain.handle("analysis:list", (): AnalysisJob[] => database?.listAnalysisJobs() ?? []);
-  ipcMain.handle("analysis:start", (_event, value: unknown): AnalysisJob => {
-    if (!database || typeof value !== "string" || value.length > 100) throw new Error("Invalid analysis job");
-    const job = database.getAnalysisJob(value);
-    if (!job || job.status !== "queued") throw new Error("Analysis job is not queued");
-    scheduleAnalysisJob(job.id);
-    return job;
-  });
-  ipcMain.handle("analysis:cancel", (_event, value: unknown): AnalysisJob => {
-    if (!database || typeof value !== "string" || value.length > 100) throw new Error("Invalid analysis job");
-    if (!database.requestAnalysisCancellation(value)) throw new Error("Analysis job cannot be cancelled");
-    return database.getAnalysisJob(value)!;
-  });
-  ipcMain.handle("analysis:apply-suggestions", (_event, value: unknown): AnalysisApplyResult => {
-    if (!database || !value || typeof value !== "object") throw new Error("Invalid suggestion request");
-    const candidate = value as { jobId?: unknown; suggestionIds?: unknown };
-    if (typeof candidate.jobId !== "string" || candidate.jobId.length > 100 ||
-        !Array.isArray(candidate.suggestionIds) || candidate.suggestionIds.length > 12 ||
-        !candidate.suggestionIds.every((id) => typeof id === "string" && id.length <= 200)) {
-      throw new Error("Invalid suggestion request");
-    }
-    const suggestionIds = candidate.suggestionIds as string[];
-    const job = database.getAnalysisJob(candidate.jobId);
-    if (!job || job.status !== "completed") throw new Error("Analysis job is not complete");
-    const selected = job.suggestions.filter((suggestion) => suggestionIds.includes(suggestion.id));
-    const affected = new Set<string>();
-    const collectionIds: string[] = [];
-    for (const suggestion of selected) {
-      const name = `AI · ${suggestion.label.replaceAll("_", " ")}`.slice(0, 80);
-      const collection = database.listCollections().find((item) => item.name === name) ??
-        database.createCollection(name, `由 ${job.engine} 建议；需由用户明确确认后加入。`);
-      collectionIds.push(collection.id);
-      for (const workId of suggestion.workIds) {
-        database.addWorkToCollection(workId, collection.id);
-        affected.add(workId);
-      }
-    }
-    return { collectionIds, affectedWorkCount: affected.size };
   });
 
   ipcMain.handle("explore:show", (_event, bounds: unknown) => {
@@ -2170,12 +2027,15 @@ async function classifyFailClosed(
 
 function resolveVisionProcess(): VisionProcessOptions {
   if (app.isPackaged) {
+    const executable = join(process.resourcesPath, "vision-runtime", "sanctuary-vision.exe");
+    const modelDirectory = join(process.resourcesPath, "models", "wd-swinv2-tagger-v3");
     return {
-      executable: process.execPath,
-      args: [join(process.resourcesPath, "vision", "index.js")],
-      engine: "filename-probe",
-      engineVersion: "0.1.0",
-      env: { ELECTRON_RUN_AS_NODE: "1" }
+      executable,
+      args: [],
+      engine: "wd-swinv2-tagger-v3",
+      engineVersion: "v3/e6774bff34d4/ort-1.28.0",
+      executionProvider: "CPU",
+      env: { WD_TAGGER_MODEL_DIR: modelDirectory }
     };
   }
 
