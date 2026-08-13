@@ -767,7 +767,7 @@ export class LibraryDatabase {
       .all() as unknown as ElementFilterSettingRow[];
     const overrides = new Map(rows.map((row) => [row.group_id, row]));
 
-    return DEFAULT_ELEMENT_FILTER_SETTINGS.map((defaults) => {
+    const defaults = DEFAULT_ELEMENT_FILTER_SETTINGS.map((defaults) => {
       const row = overrides.get(defaults.groupId);
       return row
         ? {
@@ -777,6 +777,17 @@ export class LibraryDatabase {
           }
         : { ...defaults };
     });
+    const builtInIds = new Set(defaults.map((setting) => setting.groupId));
+    return [
+      ...defaults,
+      ...rows
+        .filter((row) => !builtInIds.has(row.group_id) && /^custom-[a-z0-9-]{1,64}$/.test(row.group_id))
+        .map((row) => ({
+          groupId: row.group_id,
+          enabled: row.enabled === 1,
+          minimumConfidence: row.minimum_confidence
+        }))
+    ];
   }
 
   saveElementFilterSetting(setting: ElementFilterSetting): void {
@@ -887,6 +898,10 @@ export class LibraryDatabase {
       .prepare("SELECT COUNT(*) AS count FROM remote_image_reviews")
       .get() as { count: number };
     return Number(row.count);
+  }
+
+  clearRemoteImageReviews(): number {
+    return Number(this.#database.prepare("DELETE FROM remote_image_reviews").run().changes);
   }
 
   #migrate(): void {

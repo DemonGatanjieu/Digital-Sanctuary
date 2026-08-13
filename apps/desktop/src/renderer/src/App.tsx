@@ -4,7 +4,10 @@ import {
   type ArtistRecord,
   type ArtworkRecord,
   type CollectionRecord,
+  type CustomElementGroup,
   type ElementFilterSetting,
+  DEFAULT_LIBRARY_PREFERENCES,
+  type LibraryPreferences,
   type WorkQuery,
   type WorkQueryResult
 } from "@sanctuary/domain";
@@ -46,6 +49,8 @@ export function App() {
   const [collectionEditor, setCollectionEditor] = useState<CollectionRecord | "new" | null>(null);
   const [collectionSaving, setCollectionSaving] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreferences>(DEFAULT_APPEARANCE);
+  const [libraryPreferences, setLibraryPreferences] = useState<LibraryPreferences>(DEFAULT_LIBRARY_PREFERENCES);
+  const [customElementGroups, setCustomElementGroups] = useState<CustomElementGroup[]>([]);
   const [bookmarkPreview, setBookmarkPreview] = useState<BookmarkDownloadPreview | null>(null);
   const [startingBookmarkDownload, setStartingBookmarkDownload] = useState(false);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
@@ -86,14 +91,25 @@ export function App() {
       window.sanctuary.listFilterSettings(),
       window.sanctuary.status(),
       window.sanctuary.listArtists(),
-      window.sanctuary.getAppearancePreferences()
+      window.sanctuary.getAppearancePreferences(),
+      window.sanctuary.getLibraryPreferences(),
+      window.sanctuary.listCustomElementGroups()
     ])
-      .then(([nextCollections, nextFilterSettings, nextStatus, nextArtists, nextAppearance]) => {
+      .then(([nextCollections, nextFilterSettings, nextStatus, nextArtists, nextAppearance, nextLibraryPreferences, nextCustomGroups]) => {
         setCollections(nextCollections);
         setFilterSettings(nextFilterSettings);
         setStatus(nextStatus);
         setArtists(nextArtists);
         setAppearance(nextAppearance);
+        setLibraryPreferences(nextLibraryPreferences);
+        setCustomElementGroups(nextCustomGroups);
+        setGalleryMode(nextLibraryPreferences.defaultView);
+        setWorkQuery((current) => ({
+          ...current,
+          sortBy: nextLibraryPreferences.defaultSortBy,
+          direction: nextLibraryPreferences.defaultSortDirection,
+          offset: 0
+        }));
       })
       .catch(showError);
   }, []);
@@ -326,12 +342,23 @@ export function App() {
     }
   }
 
+  async function updateLibraryPreferences(next: LibraryPreferences) {
+    setLibraryPreferences(next);
+    try {
+      const stored = await window.sanctuary.updateLibraryPreferences(next);
+      setLibraryPreferences(stored);
+    } catch (caught) {
+      showError(caught);
+    }
+  }
+
   return (
     <div
       className={`app-shell ${activeView === "explore" ? "exploring" : ""}`}
       data-display-profile={appearance.displayProfile}
       data-reduced-motion={appearance.reducedMotion ? "true" : "false"}
       data-ambient-artwork={appearance.ambientArtwork ? "true" : "false"}
+      data-grid-density={libraryPreferences.gridDensity}
     >
       <AppSidebar
         activeView={activeView}
@@ -378,11 +405,20 @@ export function App() {
           <SettingsView
             settings={filterSettings}
             appearance={appearance}
+            libraryPreferences={libraryPreferences}
+            customGroups={customElementGroups}
+            status={status}
             savingGroupId={savingGroupId}
             error={error}
             onEdit={editFilterSetting}
             onSave={saveFilterSetting}
             onAppearanceChange={updateAppearance}
+            onLibraryPreferencesChange={updateLibraryPreferences}
+            onChooseDownloadDirectory={async () => setLibraryPreferences(await window.sanctuary.chooseDownloadDirectory())}
+            onCustomGroupsChange={async (groups) => {
+              setCustomElementGroups(await window.sanctuary.updateCustomElementGroups(groups));
+              setFilterSettings(await window.sanctuary.listFilterSettings());
+            }}
           />
         ) : (
           <ExploreView

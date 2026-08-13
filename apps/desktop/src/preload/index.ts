@@ -4,7 +4,10 @@ import type {
   ArtistRecord,
   ArtworkRecord,
   CollectionRecord,
+  CustomElementGroup,
   ElementFilterSetting,
+  LibraryPreferences,
+  RuleSandboxResult,
   WorkQuery,
   WorkQueryResult,
   WorkRecord,
@@ -80,6 +83,12 @@ export interface SanctuaryApi {
   repairArtistAvatars(): Promise<ArtistAvatarRepairResult>;
   listFilterSettings(): Promise<ElementFilterSetting[]>;
   updateFilterSetting(setting: ElementFilterSetting): Promise<ElementFilterSetting[]>;
+  listCustomElementGroups(): Promise<CustomElementGroup[]>;
+  updateCustomElementGroups(groups: CustomElementGroup[]): Promise<CustomElementGroup[]>;
+  getLibraryPreferences(): Promise<LibraryPreferences>;
+  updateLibraryPreferences(preferences: LibraryPreferences): Promise<LibraryPreferences>;
+  chooseDownloadDirectory(): Promise<LibraryPreferences>;
+  testFilterImage(): Promise<RuleSandboxResult | null>;
   showExplore(bounds: ExploreBounds): Promise<ExploreState>;
   setExploreBounds(bounds: ExploreBounds): Promise<boolean>;
   hideExplore(): Promise<void>;
@@ -150,6 +159,18 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("filters:list") as Promise<ElementFilterSetting[]>,
   updateFilterSetting: (setting) =>
     ipcRenderer.invoke("filters:update", setting) as Promise<ElementFilterSetting[]>,
+  listCustomElementGroups: () =>
+    ipcRenderer.invoke("filters:custom-list") as Promise<CustomElementGroup[]>,
+  updateCustomElementGroups: (groups) =>
+    ipcRenderer.invoke("filters:custom-update", groups) as Promise<CustomElementGroup[]>,
+  getLibraryPreferences: () =>
+    ipcRenderer.invoke("preferences:library:get") as Promise<LibraryPreferences>,
+  updateLibraryPreferences: (preferences) =>
+    ipcRenderer.invoke("preferences:library:update", preferences) as Promise<LibraryPreferences>,
+  chooseDownloadDirectory: () =>
+    ipcRenderer.invoke("preferences:library:choose-download-directory") as Promise<LibraryPreferences>,
+  testFilterImage: () =>
+    ipcRenderer.invoke("filters:test-image") as Promise<RuleSandboxResult | null>,
   showExplore: (bounds) =>
     ipcRenderer.invoke("explore:show", bounds) as Promise<ExploreState>,
   setExploreBounds: (bounds) =>

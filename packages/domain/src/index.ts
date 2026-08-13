@@ -56,6 +56,25 @@ export interface AppearancePreferences {
   ambientArtwork: boolean;
 }
 
+export type GalleryDefaultView = "flat" | "collections" | "author-work";
+export type GridDensity = "comfortable" | "compact";
+
+export interface LibraryPreferences {
+  defaultView: GalleryDefaultView;
+  defaultSortBy: WorkSortField;
+  defaultSortDirection: SortDirection;
+  gridDensity: GridDensity;
+  downloadDirectory: string | null;
+}
+
+export const DEFAULT_LIBRARY_PREFERENCES: LibraryPreferences = {
+  defaultView: "flat",
+  defaultSortBy: "savedAt",
+  defaultSortDirection: "desc",
+  gridDensity: "comfortable",
+  downloadDirectory: null
+};
+
 /**
  * A user-visible work. Multi-page Pixiv works have one WorkRecord and many
  * WorkAssetRecords; ArtworkRecord remains the page-level compatibility model.
@@ -219,6 +238,17 @@ export interface ElementFilterSetting {
   minimumConfidence: number;
 }
 
+export interface CustomElementGroup extends ElementBlacklistGroup {
+  aliases: string[];
+  action: Exclude<FilterAction, "allow">;
+}
+
+export interface RuleSandboxResult {
+  fileName: string;
+  assessment: VisionAssessment;
+  decision: FilterDecision;
+}
+
 export const ELEMENT_BLACKLIST_GROUPS: ElementBlacklistGroup[] = [
   {
     id: "guro",
@@ -275,22 +305,31 @@ export const DEFAULT_ELEMENT_FILTER_SETTINGS: ElementFilterSetting[] =
   }));
 
 export function buildElementFilterRules(
-  settings: readonly ElementFilterSetting[] = DEFAULT_ELEMENT_FILTER_SETTINGS
+  settings: readonly ElementFilterSetting[] = DEFAULT_ELEMENT_FILTER_SETTINGS,
+  customGroups: readonly CustomElementGroup[] = []
 ): FilterRule[] {
   const settingsByGroup = new Map(settings.map((setting) => [setting.groupId, setting]));
-  return ELEMENT_BLACKLIST_GROUPS.flatMap((group, groupIndex) => {
+  const groups: Array<ElementBlacklistGroup & {
+    aliases: string[];
+    action: Exclude<FilterAction, "allow">;
+  }> = [
+    ...ELEMENT_BLACKLIST_GROUPS.map((group) => ({ ...group, aliases: [], action: "hide" as const })),
+    ...customGroups
+  ];
+  return groups.flatMap((group, groupIndex) => {
     const setting = settingsByGroup.get(group.id);
     const minimumConfidence = normalizeConfidence(
       setting?.minimumConfidence,
       group.defaultThreshold
     );
-    return group.tags.map((tag) => ({
+    const tags = [...group.tags, ...group.aliases];
+    return [...new Set(tags)].map((tag) => ({
       id: `element-${group.id}-${tag}`,
       name: `${group.name}：${tag}`,
       enabled: setting?.enabled ?? true,
       label: tag,
       minimumConfidence,
-      action: "hide" as const,
+      action: group.action,
       priority: 1_000 - groupIndex
     }));
   });
@@ -301,9 +340,10 @@ export function buildElementFilterRules(
  * This is a cache namespace, not an integrity token.
  */
 export function rulesFingerprint(
-  settings: readonly ElementFilterSetting[] = DEFAULT_ELEMENT_FILTER_SETTINGS
+  settings: readonly ElementFilterSetting[] = DEFAULT_ELEMENT_FILTER_SETTINGS,
+  customGroups: readonly CustomElementGroup[] = []
 ): string {
-  const canonical = buildElementFilterRules(settings)
+  const canonical = buildElementFilterRules(settings, customGroups)
     .sort((left, right) => left.id.localeCompare(right.id))
     .map((rule) => [
       rule.id,
@@ -322,13 +362,42 @@ export function rulesFingerprint(
   return `fnv1a64-${hash.toString(16).padStart(16, "0")}`;
 }
 
+export function isLibraryPreferences(value: unknown): value is LibraryPreferences {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<LibraryPreferences>;
+  return (
+    (candidate.defaultView === "flat" || candidate.defaultView === "collections" || candidate.defaultView === "author-work") &&
+    (["savedAt", "publishedAt", "title", "artist", "pageCount", "byteLength"] as const).includes(candidate.defaultSortBy as WorkSortField) &&
+    (candidate.defaultSortDirection === "asc" || candidate.defaultSortDirection === "desc") &&
+    (candidate.gridDensity === "comfortable" || candidate.gridDensity === "compact") &&
+    (candidate.downloadDirectory === null || typeof candidate.downloadDirectory === "string")
+  );
+}
+
+export function isCustomElementGroup(value: unknown): value is CustomElementGroup {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<CustomElementGroup>;
+  const validStrings = (items: unknown): items is string[] =>
+    Array.isArray(items) && items.length <= 64 && items.every((item) => typeof item === "string" && item.trim().length > 0 && item.length <= 80);
+  return Boolean(
+    typeof candidate.id === "string" && /^custom-[a-z0-9-]{1,64}$/.test(candidate.id) &&
+    typeof candidate.name === "string" && candidate.name.trim() && candidate.name.length <= 80 &&
+    typeof candidate.description === "string" && candidate.description.length <= 300 &&
+    validStrings(candidate.tags) && candidate.tags.length > 0 &&
+    validStrings(candidate.aliases) &&
+    typeof candidate.defaultThreshold === "number" && candidate.defaultThreshold >= 0.05 && candidate.defaultThreshold <= 0.95 &&
+    (candidate.action === "blur" || candidate.action === "hide")
+  );
+}
+
 export const DEFAULT_FILTER_RULES: FilterRule[] = buildElementFilterRules();
 
 export function isElementFilterSetting(value: unknown): value is ElementFilterSetting {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<ElementFilterSetting>;
   return Boolean(
-    ELEMENT_BLACKLIST_GROUPS.some((group) => group.id === candidate.groupId) &&
+    typeof candidate.groupId === "string" &&
+      (ELEMENT_BLACKLIST_GROUPS.some((group) => group.id === candidate.groupId) || /^custom-[a-z0-9-]{1,64}$/.test(candidate.groupId)) &&
       typeof candidate.enabled === "boolean" &&
       typeof candidate.minimumConfidence === "number" &&
       Number.isFinite(candidate.minimumConfidence) &&

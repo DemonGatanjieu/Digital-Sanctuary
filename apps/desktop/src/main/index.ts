@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
-import { dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -22,11 +22,17 @@ import { LibraryDatabase, type RemoteImageReviewRecord } from "@sanctuary/databa
 import {
   buildElementFilterRules,
   decideFilter,
+  DEFAULT_LIBRARY_PREFERENCES,
+  isCustomElementGroup,
   isElementFilterSetting,
+  isLibraryPreferences,
   rulesFingerprint,
   type AppearancePreferences,
   type ArtistRecord,
   type ArtworkRecord,
+  type CustomElementGroup,
+  type LibraryPreferences,
+  type RuleSandboxResult,
   type VisionAssessment,
   type WorkDeletionPreview,
   type WorkDeletionResult
@@ -320,6 +326,16 @@ function parseAppearancePreferences(value: unknown): AppearancePreferences | nul
   };
 }
 
+function libraryPreferences(): LibraryPreferences {
+  const stored = database?.getPreference<unknown>("library.preferences");
+  return isLibraryPreferences(stored) ? stored : { ...DEFAULT_LIBRARY_PREFERENCES };
+}
+
+function customElementGroups(): CustomElementGroup[] {
+  const stored = database?.getPreference<unknown>("filters.custom-groups");
+  return Array.isArray(stored) ? stored.filter(isCustomElementGroup) : [];
+}
+
 async function deleteConfirmedWorks(workIds: readonly string[]): Promise<WorkDeletionResult> {
   const target = database;
   if (!target) throw new Error("Application is not ready");
@@ -455,7 +471,7 @@ function registerIpc(): void {
     });
     if (selected.canceled) return database.listArtworks();
 
-    const rules = buildElementFilterRules(database.listElementFilterSettings());
+    const rules = buildElementFilterRules(database.listElementFilterSettings(), customElementGroups());
     for (const imagePath of selected.filePaths) {
       const artwork = database.importArtwork(imagePath);
       const assessment = await classifyFailClosed(vision, imagePath);
@@ -466,14 +482,49 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("filters:list", () => database?.listElementFilterSettings() ?? []);
+  ipcMain.handle("filters:custom-list", () => customElementGroups());
   ipcMain.handle("filters:update", (_event, setting: unknown) => {
     if (!database || !isElementFilterSetting(setting)) {
       throw new Error("Invalid element filter setting");
     }
     database.saveElementFilterSetting(setting);
+    database.clearRemoteImageReviews();
     recalculateStoredDecisions(database);
     remoteReviewCache.clear();
     return database.listElementFilterSettings();
+  });
+  ipcMain.handle("filters:custom-update", (_event, value: unknown): CustomElementGroup[] => {
+    if (!database || !Array.isArray(value) || value.length > 32 || !value.every(isCustomElementGroup)) {
+      throw new Error("Invalid custom element groups");
+    }
+    const uniqueIds = new Set(value.map((group) => group.id));
+    if (uniqueIds.size !== value.length) throw new Error("Custom element group ids must be unique");
+    database.setPreference("filters.custom-groups", value);
+    const existingSettings = new Map(database.listElementFilterSettings().map((setting) => [setting.groupId, setting]));
+    for (const group of value) {
+      if (!existingSettings.has(group.id)) {
+        database.saveElementFilterSetting({ groupId: group.id, enabled: true, minimumConfidence: group.defaultThreshold });
+      }
+    }
+    database.clearRemoteImageReviews();
+    recalculateStoredDecisions(database);
+    return value;
+  });
+  ipcMain.handle("filters:test-image", async (): Promise<RuleSandboxResult | null> => {
+    if (!database || !vision || !mainWindow) throw new Error("Application is not ready");
+    const selected = await dialog.showOpenDialog(mainWindow, {
+      title: "选择规则测试图片",
+      properties: ["openFile"],
+      filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp", "gif", "bmp"] }]
+    });
+    const path = selected.filePaths[0];
+    if (selected.canceled || !path) return null;
+    const assessment = await classifyFailClosed(vision, path, 30_000);
+    const decision = decideFilter(
+      assessment,
+      buildElementFilterRules(database.listElementFilterSettings(), customElementGroups())
+    );
+    return { fileName: basename(path), assessment, decision };
   });
 
   ipcMain.handle("explore:show", (_event, bounds: unknown) => {
@@ -729,6 +780,23 @@ function registerIpc(): void {
     if (!database || !preferences) throw new Error("Invalid appearance preferences");
     database.setPreference("appearance", preferences);
     return preferences;
+  });
+  ipcMain.handle("preferences:library:get", (): LibraryPreferences => libraryPreferences());
+  ipcMain.handle("preferences:library:update", (_event, value: unknown): LibraryPreferences => {
+    if (!database || !isLibraryPreferences(value)) throw new Error("Invalid library preferences");
+    database.setPreference("library.preferences", value);
+    return value;
+  });
+  ipcMain.handle("preferences:library:choose-download-directory", async (): Promise<LibraryPreferences> => {
+    if (!database || !mainWindow) throw new Error("Application window is unavailable");
+    const selected = await dialog.showOpenDialog(mainWindow, {
+      title: "选择 Pixiv 作品保存目录",
+      properties: ["openDirectory", "createDirectory"]
+    });
+    if (selected.canceled || !selected.filePaths[0]) return libraryPreferences();
+    const next = { ...libraryPreferences(), downloadDirectory: resolve(selected.filePaths[0]) };
+    database.setPreference("library.preferences", next);
+    return next;
   });
 
   ipcMain.handle("app:status", () => ({
@@ -1092,7 +1160,7 @@ function requireExploreSession(): Session {
 }
 
 function pixivGalleryDirectory(): string {
-  return join(app.getPath("pictures"), "Digital Sanctuary", "Pixiv");
+  return libraryPreferences().downloadDirectory ?? join(app.getPath("pictures"), "Digital Sanctuary", "Pixiv");
 }
 
 function repairMissingArtistAvatars(): Promise<ArtistAvatarRepairResult> {
@@ -1502,7 +1570,7 @@ async function downloadPixivArtwork(
     } else if (!localArtwork.assessment || localArtwork.assessment.engine !== vision.engine) {
       await enqueueRemoteVisionTask(async () => {
         const assessment = await classifyFailClosed(vision!, imagePath, 30_000);
-        const rules = buildElementFilterRules(database!.listElementFilterSettings());
+        const rules = buildElementFilterRules(database!.listElementFilterSettings(), customElementGroups());
         database!.saveAssessment(
           localArtwork.id,
           assessment,
@@ -1744,7 +1812,7 @@ function createRemoteReviewContext(imageUrl: string): RemoteReviewContext | null
     normalizedUrl,
     engine: vision.engine,
     engineVersion: vision.engineVersion,
-    rulesFingerprint: rulesFingerprint(settings)
+    rulesFingerprint: rulesFingerprint(settings, customElementGroups())
   };
   return { settings, cacheKey, memoryKey: JSON.stringify(cacheKey) };
 }
@@ -1915,7 +1983,7 @@ async function performRemoteArtworkReview(
       ) {
         throw new Error("Vision engine version changed during review");
       }
-      const rules = buildElementFilterRules(settings);
+      const rules = buildElementFilterRules(settings, customElementGroups());
       const decision = decideFilter(assessment, rules);
       if (decision.action !== "allow") {
         console.warn(
@@ -1956,7 +2024,11 @@ function safeRemoteImageExtension(imageUrl: string): string {
 }
 
 function recalculateStoredDecisions(target: LibraryDatabase): void {
-  const rules = buildElementFilterRules(target.listElementFilterSettings());
+  const groups = target.getPreference<unknown>("filters.custom-groups");
+  const rules = buildElementFilterRules(
+    target.listElementFilterSettings(),
+    Array.isArray(groups) ? groups.filter(isCustomElementGroup) : []
+  );
   for (const artwork of target.listArtworks()) {
     if (!artwork.assessment) continue;
     target.saveAssessment(

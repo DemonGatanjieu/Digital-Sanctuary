@@ -96,6 +96,23 @@ describe("LibraryDatabase", () => {
     expect(database.getRemoteImageReview(review)).toEqual(review);
     expect(database.getRemoteImageReview({ ...review, rulesFingerprint: "rules-b" })).toBeNull();
     expect(database.countRemoteImageReviews()).toBe(1);
+    database.clearRemoteImageReviews();
+    expect(database.countRemoteImageReviews()).toBe(0);
+    database.close();
+  });
+
+  it("round-trips custom element settings alongside built-in defaults", () => {
+    const database = new LibraryDatabase(":memory:");
+    database.saveElementFilterSetting({
+      groupId: "custom-watermark",
+      enabled: true,
+      minimumConfidence: 0.55
+    });
+    expect(database.listElementFilterSettings()).toContainEqual({
+      groupId: "custom-watermark",
+      enabled: true,
+      minimumConfidence: 0.55
+    });
     database.close();
   });
 

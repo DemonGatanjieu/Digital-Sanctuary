@@ -4,6 +4,8 @@ import {
   DEFAULT_FILTER_RULES,
   buildElementFilterRules,
   decideFilter,
+  isCustomElementGroup,
+  isLibraryPreferences,
   rulesFingerprint,
   type VisionAssessment
 } from "./index.js";
@@ -75,5 +77,33 @@ describe("decideFilter", () => {
     expect(rulesFingerprint(reversed.map((setting) =>
       setting.groupId === "blood" ? { ...setting, minimumConfidence: 0.8 } : setting
     ))).not.toBe(rulesFingerprint());
+  });
+
+  it("supports custom labels, aliases, actions, and cache fingerprints", () => {
+    const customGroup = {
+      id: "custom-watermark",
+      name: "水印",
+      description: "测试自定义元素",
+      tags: ["watermark"],
+      aliases: ["sample_watermark"],
+      defaultThreshold: 0.45,
+      action: "blur" as const
+    };
+    const rules = buildElementFilterRules([], [customGroup]);
+
+    expect(decideFilter(assessment({ sample_watermark: 0.7 }), rules).action).toBe("blur");
+    expect(rulesFingerprint([], [customGroup])).not.toBe(rulesFingerprint([], [{ ...customGroup, action: "hide" }]));
+    expect(isCustomElementGroup(customGroup)).toBe(true);
+  });
+
+  it("validates persistent library preferences", () => {
+    expect(isLibraryPreferences({
+      defaultView: "author-work",
+      defaultSortBy: "artist",
+      defaultSortDirection: "asc",
+      gridDensity: "compact",
+      downloadDirectory: "E:\\Pictures"
+    })).toBe(true);
+    expect(isLibraryPreferences({ defaultView: "flat" })).toBe(false);
   });
 });
