@@ -32,6 +32,8 @@
 | **visual-audit-remediation-phase-5-6** | `dedb39b3be5f714a3b67a07a2d729d835c0877b3` | 2026-08-15 | 实施视觉审计闭环整改 Phase 5~6：消除 900×620 最小窗口 60px 溢出、重构外部 AI 视觉配置 Tokens、提升画册暗色舞台对比度、统一大图雷达画像抽屉与全局相册弹窗文案，全量 7 项 VA 问题全部闭环验证。 |
 | **typography-phase-0-probes-and-adr** | `ae83e1d641cd0fdc09cf52ab37d21e5d671b6789` | 2026-08-15 | 实施排版与字体系统升级 Phase 0：完成样式硬编码热点扫描、Electron 43 Local Font Access 探针实测、Domain 领域契约/验证器与 ADR 0007 架构决策，全量通过单元测试与编译。 |
 | **typography-phase-1-tokens-migration** | `98e2720299aa941090bb1f25145402a2609020af` | 2026-08-15 | 实施排版与字体系统升级 Phase 1：在 tokens.css 建立四槽位语义字体 Token 及排版规范变量，完成 collections.css、themes.css、vision-radar.css 样式热点无行为平滑迁移，门禁 100% 通过。 |
+| **typography-phase-2-sandbox-and-protocol** | `9625fe272d540b22b15c890725da72195c423c32` | 2026-08-15 | 实施排版与字体系统升级 Phase 2：构建零依赖 SFNT 验证解析器、userData/fonts 沙箱原子索引、sanctuary-font:// 受控特权协议与 IPC 接入，单元测试与编译全部通过。 |
+
 
 
 
