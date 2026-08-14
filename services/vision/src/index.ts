@@ -38,3 +38,7 @@ input.on("line", async (line) => {
 function write(response: VisionResponse): void {
   process.stdout.write(`${JSON.stringify(response)}\n`);
 }
+
+export * from "./fixtures.js";
+export * from "./engine.js";
+
