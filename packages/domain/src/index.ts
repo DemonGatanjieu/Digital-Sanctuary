@@ -56,6 +56,69 @@ export interface AppearancePreferences {
   ambientArtwork: boolean;
 }
 
+export type ThemeColorScheme = "dark" | "light" | "auto";
+
+export interface ThemeManifest {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  authorUrl?: string;
+  description: string;
+  colorScheme: ThemeColorScheme;
+  cssEntry?: string;
+  previewImage?: string;
+  tags?: string[];
+  minAppVersion?: string;
+  isPreset?: boolean;
+}
+
+export interface InstalledTheme extends ThemeManifest {
+  localPath: string;
+  installedAt: number;
+  isActive: boolean;
+}
+
+export interface ActiveTheme {
+  themeId: string;
+  cssContent: string;
+  manifest?: ThemeManifest;
+}
+
+export interface StoreThemeItem {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  authorUrl?: string;
+  description: string;
+  colorScheme: ThemeColorScheme;
+  tags: string[];
+  previewImageUrl: string;
+  downloadPath: string;
+  stars?: number;
+  updatedAt: string;
+  installedVersion?: string;
+}
+
+export interface StoreCatalogResponse {
+  themes: StoreThemeItem[];
+  fetchedAt: number;
+  fromCache: boolean;
+  rateLimitRemaining: number;
+  rateLimitResetAt: number;
+}
+
+export interface ThemeDownloadProgress {
+  themeId: string;
+  progress: number;
+}
+
+export interface ThemeChangedEvent {
+  activeThemeId: string;
+  cssContent: string;
+}
+
 export type GalleryDefaultView = "flat" | "collections" | "author-work";
 export type GridDensity = "comfortable" | "compact";
 

@@ -1,0 +1,11 @@
+{
+  "id": "default",
+  "name": "Digital Sanctuary Default",
+  "version": "1.0.0",
+  "author": "Digital Sanctuary Official",
+  "description": "The built-in light sanctuary design using the application's default tokens.",
+  "colorScheme": "light",
+  "cssEntry": "theme.css",
+  "tags": ["official", "default", "light"],
+  "isPreset": true
+}

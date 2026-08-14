@@ -47,7 +47,7 @@ flowchart LR
 - **分类组合与组合视图（Saved Collection Views）**：分类页支持将多个普通分类组合为保存视图；支持多选包含/排除、实时防抖匹配数量与封面预览、拼贴卡片及画廊顶部组合条件摘要栏。
 - **探索防线雷达 HUD**：将审查统计重构为彩色状态芯片组（放行绿 / 拦截红 / 广告黄 / 缓存紫 / 审查中蓝），提供清晰直观的实时吞吐监控。
 - **三档性能与显示策略**：持久化精致（Quality）、均衡（Balanced）、省电（Efficient）三档，支持 reduced motion 优雅退化；大图库渐进分页与 `content-visibility` 跳过屏幕外绘制，当前 10,000 作品基准首屏约 564 ms、JS 堆约 22 MB。
-- **动态主题引擎与 GitHub 社区主题商店（规划中）**：将前端视觉 tokens 与个性化样式解耦为标准化主题包（`theme.json` + `theme.css`）；支持从应用打包的官方预设（如绝区零风格 `hollow-zero`）或通过 GitHub 社区主题商店在线发现、下载与零刷新热切换。详细后端任务见 `docs/plans/TASK_THEME_SYSTEM_BACKEND_FOR_GPT.md`。
+- **动态主题引擎与 GitHub 社区主题商店（后端已完成）**：前端视觉 tokens 与个性化样式解耦为标准化主题包（`theme.json` + `theme.css`）。主进程支持内置/用户主题扫描、文件夹与受限 ZIP 原子安装、活跃主题持久化、安全 CSS 读取、删除回退，以及带本地缓存和限流熔断的 GitHub Contents API 商店；渲染层的动态注入和商店 UI 由后续前端任务完成。
 
 ### 2.2 Electron 主进程
 
@@ -57,6 +57,7 @@ flowchart LR
 - `apps/desktop/src/main/pixiv-dom-adapter.ts`：幂等注入拦截占位层、“仅本次查看”和作品页下载按钮。宽泛的第一方 PR/BOOTH DOM 猜测已经移除，避免再次误伤普通作品。
 - `apps/desktop/src/main/thumbnail-service.ts`：独立的版本化缩略图批处理器。每次只串行处理小批资产，缓存命中直接回填路径；缓存文件缺失时自动重新排队。
 - `apps/desktop/src/main/saved-collection-view-ipc.ts`：分类组合 CRUD 的运行时校验与 IPC 边界，限制名称、条件数量、ID 长度及包含/排除冲突。
+- `apps/desktop/src/main/theme/`：主题清单/商店协议校验、CSS 与路径安全边界、ZIP 解包、原子安装管理、GitHub 商店缓存代理和主题 IPC；服务在首次主题请求时才扫描目录，不阻塞首屏窗口创建。
 - `apps/desktop/src/shared/pixiv-download.ts`：Pixiv 页面上下文、AJAX 响应和原图 URL 的纯函数校验。
 - `apps/desktop/src/shared/bounded-concurrency.ts`：下载任务使用的通用并发门。收藏作品按顺序处理，单作品内部原图最多四路；Pixiv JSON API 全局间隔至少 800 ms。
 - **有界重试**：429、网络异常和 5xx 最多重试两次，单次等待不超过 30 秒；仍失败时抛出批次级错误并停止，不把同一全局故障记成数百个作品失败。

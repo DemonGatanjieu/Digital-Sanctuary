@@ -118,6 +118,10 @@ try {
         excludedCollectionIds: savedView.excludedCollectionIds,
         limit: 60
       });
+      const installedThemes = await window.sanctuary.getInstalledThemes();
+      const activatedTheme = await window.sanctuary.setActiveTheme("builtin.hollow-zero");
+      const activeTheme = await window.sanctuary.getActiveTheme();
+      await window.sanctuary.setActiveTheme("default");
       return {
         cardCount: document.querySelectorAll(".work-library-card").length,
         complete: image.complete,
@@ -125,7 +129,10 @@ try {
         protocol: new URL(image.currentSrc).protocol,
         savedViewCount: (await window.sanctuary.listSavedCollectionViews()).length,
         combinationTotal: combination.total,
-        combinationTitles: combination.items.map((item) => item.title)
+        combinationTitles: combination.items.map((item) => item.title),
+        installedThemeIds: installedThemes.map((theme) => theme.id),
+        activatedThemeHasCss: activatedTheme.cssContent.includes("--ds-primary"),
+        activeThemeId: activeTheme.themeId
       };
     })()`);
     const failures = [];
@@ -135,6 +142,12 @@ try {
     if (result.savedViewCount !== 1) failures.push("saved collection view did not persist through IPC");
     if (result.combinationTotal !== 1 || result.combinationTitles[0] !== "A and B fixture") {
       failures.push("AND collection query was lost across the renderer IPC boundary");
+    }
+    if (!result.installedThemeIds.includes("default") || !result.installedThemeIds.includes("builtin.hollow-zero")) {
+      failures.push("bundled themes were not discovered through IPC");
+    }
+    if (!result.activatedThemeHasCss || result.activeThemeId !== "builtin.hollow-zero") {
+      failures.push("active theme CSS did not cross the renderer IPC boundary");
     }
     console.log(JSON.stringify({ ...result, status: failures.length ? "failed" : "passed", failures }, null, 2));
     if (failures.length) process.exitCode = 1;

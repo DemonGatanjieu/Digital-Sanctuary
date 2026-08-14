@@ -90,6 +90,9 @@ import { normalizeWindowState, type PersistedWindowState } from "./window-state.
 import { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import { registerAnalysisIpc } from "./analysis-ipc.js";
 import { registerSavedCollectionViewIpc } from "./saved-collection-view-ipc.js";
+import { ThemeManagerService } from "./theme/theme-manager.js";
+import { ThemeStoreService } from "./theme/theme-store.js";
+import { registerThemeIpc } from "./theme/theme-ipc.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -100,6 +103,8 @@ protocol.registerSchemesAsPrivileged([
 
 let database: LibraryDatabase | undefined;
 let vision: VisionClient | undefined;
+let themeManager: ThemeManagerService | undefined;
+let themeStore: ThemeStoreService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let exploreView: WebContentsView | undefined;
 let exploreBounds: ExploreBounds | undefined;
@@ -174,12 +179,31 @@ if (!hasSingleInstanceLock) {
   });
 
   app.whenReady().then(() => {
-    database = new LibraryDatabase(join(app.getPath("userData"), "library.db"));
+    const userDataPath = app.getPath("userData");
+    database = new LibraryDatabase(join(userDataPath, "library.db"));
     database.recoverInterruptedAnalysisJobs();
     if (process.env.SANCTUARY_BENCHMARK_LIBRARY === "1") {
       database.seedBenchmarkWorks(Number(process.env.SANCTUARY_BENCHMARK_WORKS ?? 10_000));
     }
     vision = new VisionClient(resolveVisionProcess());
+    themeManager = new ThemeManagerService({
+      bundledThemesPath: app.isPackaged
+        ? join(process.resourcesPath, "themes")
+        : resolve(moduleDirectory, "../../resources/themes"),
+      userThemesPath: join(userDataPath, "themes"),
+      readActiveThemeId: () => database?.getPreference<string>("active_theme_id") ?? "default",
+      writeActiveThemeId: (themeId) => database?.setPreference("active_theme_id", themeId),
+    });
+    const themeRepository = parseThemeRepository(process.env.SANCTUARY_THEME_REPOSITORY);
+    themeStore = new ThemeStoreService({
+      manager: themeManager,
+      cachePath: join(userDataPath, "theme-store-cache.json"),
+      ...(themeRepository ? { owner: themeRepository.owner, repository: themeRepository.repository } : {}),
+      ...(process.env.SANCTUARY_THEME_REF ? { ref: process.env.SANCTUARY_THEME_REF } : {}),
+      ...(process.env.SANCTUARY_THEME_GITHUB_TOKEN
+        ? { githubToken: process.env.SANCTUARY_THEME_GITHUB_TOKEN }
+        : {}),
+    });
     database.invalidateAssessmentsExcept(vision.engine);
     database.pruneRemoteImageReviews();
     registerImageProtocol();
@@ -368,9 +392,17 @@ function registerImageProtocol(): void {
 }
 
 function registerIpc(): void {
-  if (!database || !vision) throw new Error("Application services are unavailable");
+  if (!database || !vision || !themeManager || !themeStore) throw new Error("Application services are unavailable");
   registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler);
   registerSavedCollectionViewIpc(ipcMain, database);
+  registerThemeIpc({
+    ipc: ipcMain,
+    dialog,
+    manager: themeManager,
+    store: themeStore,
+    emitThemeChanged: (event) => mainWindow?.webContents.send("themes:changed", event),
+    emitDownloadProgress: (event) => mainWindow?.webContents.send("themes:download-progress", event),
+  });
   registerLibraryReadIpc(ipcMain, database, join(app.getPath("userData"), "thumbnails"), encodeLocalThumbnail);
   ipcMain.handle("library:create-backup", async (): Promise<string | null> => {
     if (!database || !mainWindow) throw new Error("Application is not ready");
@@ -2026,6 +2058,12 @@ async function classifyFailClosed(
       error: error instanceof Error ? error.message : "Vision engine failed"
     };
   }
+}
+
+function parseThemeRepository(value: string | undefined): { owner: string; repository: string } | null {
+  if (!value) return null;
+  const match = /^([A-Za-z0-9_.-]{1,100})\/([A-Za-z0-9_.-]{1,100})$/.exec(value.trim());
+  return match?.[1] && match[2] ? { owner: match[1], repository: match[2] } : null;
 }
 
 function resolveVisionProcess(): VisionProcessOptions {

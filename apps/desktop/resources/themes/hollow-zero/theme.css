@@ -1,0 +1,22 @@
+:root {
+  --ds-bg-app: #11100d;
+  --ds-bg-sidebar: #181610;
+  --ds-bg-card: #211e16;
+  --ds-bg-card-subtle: #29251a;
+  --ds-text-heading: #fff7d6;
+  --ds-text-body: #e8dfc2;
+  --ds-text-secondary: #b9ae8e;
+  --ds-text-muted: #887f68;
+  --ds-border-light: #443b24;
+  --ds-border-subtle: #302b1d;
+  --ds-primary: #ffd200;
+  --ds-primary-hover: #f3bd00;
+  --ds-primary-active: #d9a500;
+  --ds-primary-light: #3a3212;
+  --ds-primary-subtle: #29240f;
+  --ds-primary-border: #75611a;
+  --ds-primary-glow: rgba(255, 210, 0, 0.28);
+  --ds-gradient-primary: linear-gradient(135deg, #ffe24d 0%, #ffd200 58%, #e7ad00 100%);
+  --ds-gradient-accent: linear-gradient(135deg, #ffd200 0%, #ff7a18 100%);
+  --ds-shadow-glow: 0 0 26px rgba(255, 210, 0, 0.24);
+}
