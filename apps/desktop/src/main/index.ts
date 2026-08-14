@@ -14,6 +14,7 @@ import {
   nativeImage,
   protocol,
   screen,
+  session,
   shell,
   type Session,
   WebContentsView
@@ -95,10 +96,17 @@ import { ThemeStoreService } from "./theme/theme-store.js";
 import { registerThemeIpc } from "./theme/theme-ipc.js";
 import { VisionSecretStore } from "./vision/vision-secret-store.js";
 import { ExternalVisionService } from "./vision/external-vision-service.js";
+import { FontService } from "./typography/font-service.js";
+import { registerFontProtocol } from "./typography/font-protocol.js";
+import { registerTypographyIpc } from "./typography/typography-ipc.js";
 
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "sanctuary-image",
+    privileges: { secure: true, standard: true, supportFetchAPI: true }
+  },
+  {
+    scheme: "sanctuary-font",
     privileges: { secure: true, standard: true, supportFetchAPI: true }
   }
 ]);
@@ -108,6 +116,7 @@ let vision: VisionClient | undefined;
 let themeManager: ThemeManagerService | undefined;
 let themeStore: ThemeStoreService | undefined;
 let externalVisionService: ExternalVisionService | undefined;
+let fontService: FontService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let exploreView: WebContentsView | undefined;
 let exploreBounds: ExploreBounds | undefined;
@@ -210,6 +219,9 @@ if (!hasSingleInstanceLock) {
     externalVisionService = new ExternalVisionService(
       new VisionSecretStore(join(userDataPath, "secrets"))
     );
+    fontService = new FontService(userDataPath);
+    registerFontProtocol(session.defaultSession, fontService);
+    registerTypographyIpc(fontService, () => database, () => mainWindow);
     database.invalidateAssessmentsExcept(vision.engine);
     database.pruneRemoteImageReviews();
     registerImageProtocol();
