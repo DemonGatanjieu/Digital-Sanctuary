@@ -130,24 +130,24 @@ export function GalleryView({
             label="画廊布局"
             value={mode}
             options={[
-              { value: "flat", label: "平铺" },
-              { value: "collections", label: "分类" },
-              { value: "author-work", label: "作者 · 作品" }
+              { value: "flat", label: "画廊全景" },
+              { value: "collections", label: "相册画集" },
+              { value: "author-work", label: "画师馆藏" }
             ]}
             onChange={(nextMode) => nextMode === "flat" ? showAllWorks() : onModeChange(nextMode)}
           />
           {mode === "author-work" && (
             <div className="avatar-repair-control">
               <Button busy={repairingAvatars} busyLabel="正在补全头像…" disabled={artists.length === 0} onClick={onRepairArtistAvatars}>
-                {missingAvatarCount > 0 ? `补全作者头像 (${missingAvatarCount})` : "重新检查头像"}
+                {missingAvatarCount > 0 ? `补全画师头像 (${missingAvatarCount})` : "重新检查头像"}
               </Button>
               {avatarRepairMessage && <small>{avatarRepairMessage}</small>}
             </div>
           )}
           {mode === "collections" && (
-            <Button onClick={() => setIsCreatingSavedView(true)}>新建组合</Button>
+            <Button onClick={() => setIsCreatingSavedView(true)}>新建相册组合</Button>
           )}
-          <Button onClick={onCreateCollection}>新建分类</Button>
+          <Button onClick={onCreateCollection}>新建相册</Button>
           <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在审查…">导入图片</Button>
         </div>
       </header>
@@ -157,8 +157,8 @@ export function GalleryView({
       <section className="summary-row">
         <article><span>作品</span><strong>{workResult.total}</strong></article>
         <article><span>图片页</span><strong>{workResult.totalPages}</strong></article>
-        <article><span>作者</span><strong>{artists.length}</strong></article>
-        <article><span>分类</span><strong>{collections.length}</strong></article>
+        <article><span>画师</span><strong>{artists.length}</strong></article>
+        <article><span>相册</span><strong>{collections.length}</strong></article>
       </section>
 
       {workResult.total === 0 && !workQuery.search ? (

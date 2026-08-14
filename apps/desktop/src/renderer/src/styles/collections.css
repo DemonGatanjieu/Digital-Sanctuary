@@ -1,28 +1,71 @@
 /* ==========================================================================
-   Collections Grid & Cards
+   Albums & Artbooks Grid & Detail Presentation (画集相册与目录)
    ========================================================================== */
 
 .collections-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 22px;
+  gap: 24px;
 }
 
-.collection-card {
+/* Album Card Presentation with Book Spine & Shadow */
+.collection-card.album-card-book {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--ds-border-light);
-  border-radius: var(--ds-radius-xl);
-  background: #ffffff;
-  box-shadow: var(--ds-shadow-sm);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-bg-card);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
   cursor: pointer;
   transition: transform var(--ds-transition-normal), box-shadow var(--ds-transition-normal), border-color var(--ds-transition-normal);
 }
 
-.collection-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(14, 165, 233, 0.4);
+.collection-card.album-card-book:hover {
+  transform: translateY(-5px);
+  border-color: var(--ds-primary);
   box-shadow: var(--ds-shadow-lg);
+}
+
+.album-book-cover {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--ds-bg-card-subtle);
+}
+
+.album-book-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.collection-card:hover .album-book-cover img {
+  transform: scale(1.05);
+}
+
+.album-card-spine {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 8px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.45) 0%, rgba(255, 255, 255, 0.15) 60%, transparent 100%);
+  z-index: 2;
+}
+
+.album-card-tag {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: var(--ds-radius-sm);
 }
 
 .collection-edit-button {
@@ -49,36 +92,18 @@
   transform: scale(1.05);
 }
 
-.collection-cover {
-  position: relative;
-  aspect-ratio: 16 / 10;
-  overflow: hidden;
-  background: #edf2f7;
-}
-
-.collection-cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.4s ease;
-}
-
-.collection-card:hover .collection-cover img {
-  transform: scale(1.04);
-}
-
 .collection-cover-placeholder {
   display: grid;
   place-items: center;
   width: 100%;
   height: 100%;
   color: var(--ds-text-muted);
-  background: repeating-linear-gradient(135deg, #eef2f6, #eef2f6 12px, #f6f8fb 12px, #f6f8fb 24px);
+  background: repeating-linear-gradient(135deg, var(--ds-bg-app), var(--ds-bg-app) 12px, var(--ds-bg-card-subtle) 12px, var(--ds-bg-card-subtle) 24px);
 }
 
 .collection-cover-placeholder span {
   font-size: 32px;
-  color: #93c5fd;
+  color: var(--ds-primary);
 }
 
 .collection-info {
@@ -114,19 +139,313 @@
   overflow: hidden;
 }
 
-.collection-detail-page {
-  min-height: 400px;
+/* ==========================================================================
+   Album Hardcover Detail Presentation (精装画册封面与题记)
+   ========================================================================== */
+
+.album-detail-page {
+  min-height: 500px;
+  background: var(--ds-bg-app);
+}
+
+.album-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  color: var(--ds-primary);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  transition: transform var(--ds-transition-fast);
+}
+
+.album-back-btn:hover {
+  transform: translateX(-3px);
+}
+
+.album-hardcover-hero {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 32px;
+  padding: 32px;
+  background: var(--ds-bg-card);
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-xl);
+  box-shadow: var(--ds-shadow-md);
+  margin-bottom: 28px;
+  position: relative;
+  overflow: hidden;
+}
+
+.album-cover-column {
+  position: relative;
+}
+
+.album-cover-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: var(--ds-radius-md);
+  overflow: hidden;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  background: #111;
+}
+
+.album-cover-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.album-cover-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  font-size: 48px;
+  background: var(--ds-bg-card-subtle);
+}
+
+.album-book-spine {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 16px;
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.6) 0%, rgba(255, 255, 255, 0.2) 60%, transparent 100%);
+  z-index: 4;
+  border-top-left-radius: var(--ds-radius-md);
+  border-bottom-left-radius: var(--ds-radius-md);
+}
+
+.album-cover-ribbon {
+  position: absolute;
+  top: 14px;
+  right: -24px;
+  transform: rotate(45deg);
+  background: var(--ds-gradient-primary);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 28px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.1em;
+}
+
+.album-meta-column {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.album-title {
+  font-size: 28px;
+  font-weight: 850;
+  color: var(--ds-text-heading);
+  margin: 6px 0 12px;
+  letter-spacing: -0.02em;
+}
+
+.album-stats-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.album-stat-chip {
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--ds-primary);
+  background: var(--ds-primary-subtle);
+  border: 1px solid var(--ds-primary-border);
+  padding: 3px 10px;
+  border-radius: var(--ds-radius-full);
+}
+
+/* Epigraph & Foreword Box (题记卷首语) */
+.album-epigraph-box {
+  position: relative;
+  padding: 18px 24px;
+  background: var(--ds-bg-app);
+  border-left: 3px solid var(--ds-primary);
+  border-radius: 0 var(--ds-radius-md) var(--ds-radius-md) 0;
+  margin-bottom: 24px;
+}
+
+.epigraph-mark-open,
+.epigraph-mark-close {
+  font-size: 28px;
+  font-family: Georgia, serif;
+  color: var(--ds-primary);
+  opacity: 0.5;
+  line-height: 1;
+}
+
+.epigraph-text {
+  margin: 4px 0;
+  font-size: 14px;
+  color: var(--ds-text-body);
+  line-height: 1.6;
+  font-style: italic;
+}
+
+.album-no-desc {
+  font-size: 12px;
+  color: var(--ds-text-muted);
+  margin-bottom: 20px;
+}
+
+.album-view-switcher-row {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ==========================================================================
+   Table of Contents Mode (画册目录索引模式)
+   ========================================================================== */
+
+.album-toc-container {
+  background: var(--ds-bg-card);
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-lg);
+  overflow: hidden;
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.album-toc-header {
+  display: grid;
+  grid-template-columns: 100px 1fr 100px 140px;
+  padding: 14px 20px;
+  background: var(--ds-bg-card-subtle);
+  border-bottom: 1px solid var(--ds-border-light);
+  font-size: 11px;
+  font-weight: 750;
+  color: var(--ds-text-muted);
+  letter-spacing: 0.05em;
+}
+
+.album-toc-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.album-toc-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 100px 140px;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  cursor: pointer;
+  transition: background var(--ds-transition-fast), transform var(--ds-transition-fast);
+}
+
+.album-toc-row:hover {
+  background: var(--ds-primary-subtle);
+}
+
+.album-toc-row.is-cover {
+  background: var(--ds-bg-card-subtle);
+}
+
+.toc-index-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toc-number {
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ds-primary);
+}
+
+.toc-cover-tag {
+  font-size: 9px;
+  font-weight: 750;
+  color: #fff;
+  background: var(--ds-primary);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.toc-title-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-right: 16px;
+}
+
+.toc-title {
+  font-size: 14px;
+  color: var(--ds-text-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toc-artist {
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+}
+
+.toc-thumb-cell {
+  width: 64px;
+  height: 48px;
+  border-radius: var(--ds-radius-sm);
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.toc-thumb-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.album-toc-row:hover .toc-thumb-cell img {
+  transform: scale(1.1);
+}
+
+.toc-set-cover-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-card);
+  color: var(--ds-text-body);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--ds-transition-fast);
+}
+
+.toc-set-cover-btn:hover:not(:disabled) {
+  border-color: var(--ds-primary);
+  color: var(--ds-primary);
+  background: var(--ds-primary-subtle);
+}
+
+.toc-set-cover-btn.active,
+.toc-set-cover-btn:disabled {
+  color: var(--ds-success-text);
+  border-color: var(--ds-success-border);
+  background: var(--ds-success-light);
+  cursor: default;
 }
 
 .collection-detail-grid {
   padding: 24px;
-}
-
-.collection-detail-empty {
-  padding: 60px 20px;
-  color: var(--ds-text-muted);
-  text-align: center;
-  font-size: 14px;
 }
 
 .collection-artwork {
@@ -159,4 +478,21 @@
   border-color: var(--ds-success-border);
   background: var(--ds-success-light);
   cursor: default;
+}
+
+.album-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  background: var(--ds-bg-card);
+  border: 1px dashed var(--ds-border-light);
+  border-radius: var(--ds-radius-lg);
+  color: var(--ds-text-muted);
+  gap: 8px;
+}
+
+.album-empty-state span {
+  font-size: 40px;
 }

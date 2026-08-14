@@ -157,7 +157,7 @@ export function WorkLibrary({
         <section className="work-ambient-hero">
           <img className="work-ambient-backdrop" src={workImageUrl(featuredWork.coverAsset.thumbnailPath ?? featuredWork.coverAsset.path)} alt="" aria-hidden="true" />
           <div className="work-ambient-copy">
-            <span>{activeCollection ? "分类精选" : "最近保存"}</span>
+            <span>{activeCollection ? "相册精选" : "最近保存"}</span>
             <strong>{featuredWork.title}</strong>
             <small>{featuredWork.artistName ?? "本地作品"} · {featuredWork.pageCount} 页</small>
             <button type="button" onClick={() => void openWork(featuredWork)}>继续欣赏</button>
