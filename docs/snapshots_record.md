@@ -12,6 +12,8 @@
 | **v2-compass-chromatic-engine** | `f4c0539a9fb7ed668bea7abdbd2c2099e63f7c27` | 2026-08-14 | 罗盘手感物理引擎重构（1:1 绝对极坐标零延迟追踪、时间窗口滑动起飞飞轮惯性）与 360° 无极实时流光光谱变色引擎（随转动角度无缝流动变色）。 |
 | **v2-global-wholeness-polish** | `1cda0e8106ad9fbbdbd55bf9278384f7188e88b0` | 2026-08-14 | 全局联动体验统一（画廊卡片/多选/画师/相册全面打通影院级全景查看器与相册管理、罗盘扩大透明触控/拖拽热区 hit-slop）。 |
 | **audit-phase-1-baseline-and-routing** | `0387dbf08de08c1ccb76e0b9d0847ae643480117` | 2026-08-14 | 阶段 1 基线与路由闭环：修复 11 个 TS 类型检查错误、新增 npm run verify 门禁、修通相册卡片直达详情页与返回路由、修复组合视图契约。 |
+| **v2-compass-fixed-north-needle** | `caf6065127a1ff8d99f69bbf453af39032efb38d` | 2026-08-14 | 罗盘交互物理心智模型修正：中心指针始终固定垂直指向 12 点钟（正北基准 Reticle），外圈符文随转动在指针下方旋转对齐。 |
+
 
 
 
