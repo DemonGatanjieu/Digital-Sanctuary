@@ -24,6 +24,8 @@
 | **vision-phase-2-db-and-jobs** | `92a01c3695567e0c78366d4c9cb3c3d1133ac834` | 2026-08-15 | 实施 Phase 2：SQLite Migration 4 建立评估结果、多维分数值与外部请求审计表；实现精确缓存指纹；打通任务系统与技术画像封面资产分析链路。 |
 | **vision-phase-3-secrets-and-fake-provider** | `27dbc764a1890aad171cb6d414b5aaee7a188edb` | 2026-08-15 | 实施 Phase 3：实现 safeStorage 密钥安全存储与日志脱敏、图片预处理器、FakeVisionAdapter 及 ExternalVisionService 全链路。 |
 | **vision-phase-4-openai-adapter** | `403f418ae81b9aa8244657cb7f31e0559ee869f2` | 2026-08-15 | 实施 Phase 4：实现 OpenAI 原生与 OpenAI-compatible (Qwen/通义千问等) 视觉适配器，完成 401/429/400 安全过滤/Schema 校验等 Mock HTTP 契约测试。 |
+| **vision-phase-5-gemini-and-anthropic** | `ae75f784ceb1a6aad205694ca90479ec38554c31` | 2026-08-15 | 实施 Phase 5：实现 Gemini 1.5 与 Anthropic Claude 3.5 Sonnet 原生多模态视觉适配器，覆盖安全阻断/错误映射/Mock 契约测试。 |
+
 
 
 
