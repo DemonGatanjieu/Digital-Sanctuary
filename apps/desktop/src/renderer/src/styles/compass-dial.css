@@ -1,10 +1,10 @@
 /* ==========================================================================
-   Interactive Dynamic Compass / Astrolabe Dial (动力学星盘罗盘样式)
+   Interactive Dynamic Compass / Astrolabe Dial (动力学星盘罗盘样式 - 高对比清晰版)
    ========================================================================== */
 
 .compass-astrolabe-widget {
-  width: 180px;
-  height: 180px;
+  width: 168px;
+  height: 168px;
   position: relative;
   display: grid;
   place-items: center;
@@ -13,12 +13,17 @@
   touch-action: none;
   transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
   transform-style: preserve-3d;
-  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.25));
+  background: radial-gradient(circle, rgba(15, 23, 42, 0.82) 0%, rgba(10, 15, 28, 0.94) 100%);
+  backdrop-filter: blur(16px);
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), inset 0 0 20px rgba(0, 0, 0, 0.4);
 }
 
 .compass-astrolabe-widget.is-dragging {
   cursor: grabbing;
-  filter: drop-shadow(0 16px 36px var(--ds-primary-glow));
+  box-shadow: 0 16px 40px var(--ds-primary-glow, rgba(14, 165, 233, 0.45)), inset 0 0 24px rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .compass-astrolabe-widget.floating {
@@ -26,20 +31,16 @@
   bottom: 24px;
   right: 28px;
   z-index: 90;
-  background: var(--ds-bg-surface-glass);
-  backdrop-filter: blur(20px);
-  border-radius: var(--ds-radius-full);
   padding: 10px;
-  border: 1px solid var(--ds-border-glass);
 }
 
 /* Outer Glow Halo */
 .astrolabe-halo {
   position: absolute;
-  inset: -6px;
+  inset: -8px;
   border-radius: 50%;
-  border: 2px dashed;
-  opacity: 0.35;
+  border: 1.5px dashed;
+  opacity: 0.45;
   transition: border-color 0.3s ease, opacity 0.3s ease;
   pointer-events: none;
   animation: halo-spin 30s linear infinite;
@@ -64,56 +65,60 @@
 
 /* Ring 1: Outer Ring with ticks & Cardinal Runes */
 .astrolabe-ring.outer-ring {
-  border: 2px solid var(--ds-border-light);
-  background: radial-gradient(circle, transparent 65%, var(--ds-bg-card-subtle) 100%);
-  box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.1);
+  border: 1.5px solid rgba(255, 255, 255, 0.14);
 }
 
 .cardinal-rune {
   position: absolute;
-  transform-origin: center 68px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: var(--ds-text-muted);
-  transition: color 0.2s ease, transform 0.2s ease, text-shadow 0.2s ease;
+  transform-origin: center 54px;
+  font-size: 10.5px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  color: #94a3b8;
+  transition: all 0.2s ease;
   white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: var(--ds-radius-full);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .cardinal-rune.active {
-  color: var(--ds-text-heading);
-  font-weight: 800;
-  text-shadow: 0 0 10px var(--ds-primary-glow);
-  transform: scale(1.15) !important;
+  color: #ffffff;
+  font-weight: 850;
+  background: rgba(0, 0, 0, 0.85);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 12px var(--ds-primary-glow, rgba(14, 165, 233, 0.4));
+  transform: scale(1.18) !important;
 }
 
 /* Ring 2: Middle Differential Gear */
 .astrolabe-ring.mid-gear {
   inset: 22px;
-  border: 1.5px dashed var(--ds-border-light);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
   border-radius: 50%;
-  opacity: 0.7;
+  opacity: 0.8;
 }
 
 .astrolabe-matrix-grid {
   position: absolute;
   inset: 4px;
-  border: 1px dotted var(--ds-border-subtle);
+  border: 1px dotted rgba(255, 255, 255, 0.15);
   border-radius: 50%;
 }
 
 /* Ring 3: Inner Constellation HUD */
 .astrolabe-ring.inner-hud {
-  inset: 42px;
-  border: 1px solid var(--ds-primary-border);
+  inset: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 50%;
-  opacity: 0.6;
+  opacity: 0.75;
 }
 
 /* Top Fixed Target Alignment Arrow (12 o'clock Reticle) */
 .dial-target-reticle {
   position: absolute;
-  top: -12px;
+  top: -14px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -124,31 +129,31 @@
 .target-arrow-triangle {
   width: 0;
   height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 12px solid var(--ds-primary);
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 13px solid var(--ds-primary);
   transition: border-top-color 0.25s ease, filter 0.25s ease;
   animation: reticle-pulse 2s ease-in-out infinite alternate;
 }
 
 @keyframes reticle-pulse {
   from { transform: translateY(0); }
-  to { transform: translateY(2px); }
+  to { transform: translateY(2.5px); }
 }
 
 .target-beacon-dot {
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   margin-top: 2px;
-  box-shadow: 0 0 6px currentColor;
+  box-shadow: 0 0 8px currentColor;
   transition: background-color 0.25s ease;
 }
 
 /* Center Core & Glowing Dual-Needle */
 .astrolabe-core {
-  width: 46px;
-  height: 46px;
+  width: 44px;
+  height: 44px;
   position: relative;
   display: grid;
   place-items: center;
@@ -159,9 +164,9 @@
 .core-pointer-needle {
   position: absolute;
   width: 6px;
-  height: 140px;
-  top: -47px;
-  left: 20px;
+  height: 120px;
+  top: -38px;
+  left: 19px;
   transform-origin: center center;
   pointer-events: none;
   display: flex;
@@ -172,7 +177,7 @@
 
 .needle-arrow-north {
   width: 14px;
-  height: 28px;
+  height: 24px;
   clip-path: polygon(50% 0%, 0% 100%, 50% 75%, 100% 100%);
   border-radius: 2px;
   transition: background-color 0.25s ease, box-shadow 0.25s ease;
@@ -180,14 +185,14 @@
 
 .needle-spine {
   width: 2px;
-  height: 80px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.9) 100%);
+  height: 70px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.95) 100%);
 }
 
 .needle-tail-south {
   width: 10px;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.4);
+  height: 16px;
+  background: rgba(255, 255, 255, 0.45);
   clip-path: polygon(50% 100%, 0% 0%, 50% 25%, 100% 0%);
   border-radius: 2px;
 }
@@ -213,22 +218,22 @@
 /* Label HUD */
 .astrolabe-label {
   position: absolute;
-  bottom: -28px;
+  bottom: -24px;
   display: flex;
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  background: var(--ds-bg-surface-glass);
+  background: rgba(15, 23, 42, 0.88);
   backdrop-filter: blur(12px);
   padding: 3px 10px;
   border-radius: var(--ds-radius-full);
-  border: 1px solid var(--ds-border-light);
-  box-shadow: var(--ds-shadow-xs);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: var(--ds-shadow-sm);
   pointer-events: none;
 }
 
 .label-prefix {
-  color: var(--ds-text-muted);
+  color: #94a3b8;
   font-weight: 600;
   font-size: 9px;
   letter-spacing: 0.05em;

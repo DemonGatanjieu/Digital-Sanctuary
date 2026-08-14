@@ -496,3 +496,189 @@
 .album-empty-state span {
   font-size: 40px;
 }
+
+/* ==========================================================================
+   Add Works To Album Dialog Modal (相册挑选画作对话框)
+   ========================================================================== */
+
+.add-works-dialog {
+  width: 720px;
+  max-width: 92vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ds-bg-card);
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-xl);
+  box-shadow: var(--ds-shadow-xl);
+  overflow: hidden;
+}
+
+.dialog-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 24px;
+  background: var(--ds-bg-card-subtle);
+  border-bottom: 1px solid var(--ds-border-light);
+}
+
+.dialog-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 14px;
+  border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-border-light);
+  background: var(--ds-bg-card);
+  color: var(--ds-text-body);
+  font-size: 13px;
+}
+
+.dialog-search-input:focus {
+  outline: none;
+  border-color: var(--ds-primary);
+  box-shadow: 0 0 0 2px var(--ds-primary-light);
+}
+
+.dialog-bulk-btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-bulk-btns button {
+  padding: 6px 12px;
+  border-radius: var(--ds-radius-md);
+  border: 1px solid var(--ds-border-light);
+  background: var(--ds-bg-card);
+  color: var(--ds-text-body);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--ds-transition-fast);
+}
+
+.dialog-bulk-btns button:hover:not(:disabled) {
+  border-color: var(--ds-primary);
+  color: var(--ds-primary);
+  background: var(--ds-primary-subtle);
+}
+
+.dialog-work-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 14px;
+  padding: 20px 24px;
+  overflow-y: auto;
+  max-height: 480px;
+}
+
+.dialog-empty-hint {
+  grid-column: 1 / -1;
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--ds-text-muted);
+  font-size: 13.5px;
+}
+
+.dialog-work-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: var(--ds-radius-md);
+  border: 2px solid transparent;
+  background: var(--ds-bg-card-subtle);
+  transition: all var(--ds-transition-fast);
+}
+
+.dialog-work-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--ds-border-light);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.dialog-work-card.selected {
+  border-color: var(--ds-primary);
+  background: var(--ds-primary-subtle);
+  box-shadow: 0 0 12px var(--ds-primary-glow);
+}
+
+.dialog-work-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: var(--ds-radius-sm);
+  overflow: hidden;
+  background: #000;
+}
+
+.dialog-work-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dialog-check-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  border: 1.5px solid rgba(255, 255, 255, 0.8);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  transition: all var(--ds-transition-fast);
+}
+
+.dialog-check-badge.checked {
+  background: var(--ds-primary);
+  border-color: #fff;
+  box-shadow: 0 0 8px var(--ds-primary-glow);
+}
+
+.dialog-work-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ds-text-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-work-artist {
+  font-size: 10.5px;
+  color: var(--ds-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-footer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--ds-bg-card-subtle);
+  border-top: 1px solid var(--ds-border-light);
+}
+
+.dialog-footer-actions span {
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+}
+
+.dialog-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+

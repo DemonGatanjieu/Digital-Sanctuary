@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ArtworkRecord, CollectionRecord, SavedCollectionView } from "@sanctuary/domain";
 import { ArtworkCard, artworkImageUrl } from "./ArtworkCard";
 import { Button } from "./Button";
+import { DialogOverlay } from "./DialogOverlay";
 import { SegmentedControl } from "./SegmentedControl";
 
 export function CollectionDetailPage({
@@ -25,6 +26,7 @@ export function CollectionDetailPage({
   const coverArtwork = artworks.find((a) => a.id === collection.coverArtworkId) ?? items[0];
   const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
   const [viewMode, setViewMode] = useState<"toc" | "grid">("grid");
+  const [isPickingWorks, setIsPickingWorks] = useState(false);
 
   return (
     <section className="album-detail-page author-detail-page">
@@ -52,6 +54,9 @@ export function CollectionDetailPage({
           <div className="album-stats-badge-row">
             <span className="album-stat-chip">收录 {items.length} 部作品</span>
             <span className="album-stat-chip">共 {items.reduce((acc, a) => acc + (a.source ? 1 : 1), 0)} 幅画作</span>
+            <Button variant="primary" onClick={() => setIsPickingWorks(true)}>
+              + 从画廊添加作品
+            </Button>
           </div>
 
           {/* Epigraph & Foreword (题记与卷首引言) */}
@@ -85,7 +90,10 @@ export function CollectionDetailPage({
         <div className="collection-detail-empty album-empty-state">
           <span>📖</span>
           <p>这本相册尚未收录任何作品。</p>
-          <small>您可以在画廊中选中作品并点击“加入相册”进行收录。</small>
+          <small>您可以点击下方按钮直接从画廊挑选图片收录入册：</small>
+          <Button variant="primary" style={{ marginTop: 12 }} onClick={() => setIsPickingWorks(true)}>
+            + 立即挑选画廊作品
+          </Button>
         </div>
       ) : viewMode === "toc" ? (
         /* Table of Contents Mode (画册目录索引模式) */
@@ -156,7 +164,148 @@ export function CollectionDetailPage({
           ))}
         </div>
       )}
+
+      {/* Add Works from Library Modal Picker */}
+      {isPickingWorks && (
+        <AddWorksToAlbumDialog
+          collection={collection}
+          allArtworks={artworks}
+          onClose={() => setIsPickingWorks(false)}
+          onAdd={async (selectedArtworkIds) => {
+            for (const id of selectedArtworkIds) {
+              onAssign(id, collection.id);
+            }
+            setIsPickingWorks(false);
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+function AddWorksToAlbumDialog({
+  collection,
+  allArtworks,
+  onClose,
+  onAdd
+}: {
+  collection: CollectionRecord;
+  allArtworks: ArtworkRecord[];
+  onClose: () => void;
+  onAdd: (selectedArtworkIds: string[]) => Promise<void> | void;
+}) {
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [submitting, setSubmitting] = useState(false);
+
+  const filteredArtworks = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return allArtworks.filter((artwork) => {
+      if (artwork.collectionIds.includes(collection.id)) return false; // already in this album
+      if (!term) return true;
+      const titleMatch = (artwork.source?.title ?? artwork.fileName).toLowerCase().includes(term);
+      const artistMatch = (artwork.source?.authorName ?? "").toLowerCase().includes(term);
+      return titleMatch || artistMatch;
+    });
+  }, [allArtworks, collection.id, search]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(filteredArtworks.map((a) => a.id)));
+  };
+
+  const handleClearAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const handleConfirm = async () => {
+    if (selectedIds.size === 0) return;
+    setSubmitting(true);
+    try {
+      await onAdd([...selectedIds]);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <DialogOverlay busy={submitting} onClose={onClose}>
+      <div className="add-works-dialog" role="dialog" aria-label={`为相册《${collection.name}》挑选画作`}>
+        <header className="dialog-header">
+          <div>
+            <h3>从画廊挑选画作加入相册</h3>
+            <small>当前相册：《{collection.name}》</small>
+          </div>
+          <button type="button" className="dialog-close-button" onClick={onClose}>×</button>
+        </header>
+
+        <div className="dialog-toolbar-row">
+          <input
+            type="search"
+            className="dialog-search-input"
+            placeholder="搜索画作标题、作者…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <div className="dialog-bulk-btns">
+            <button type="button" onClick={handleSelectAll}>全选当前 ({filteredArtworks.length})</button>
+            <button type="button" onClick={handleClearAll} disabled={selectedIds.size === 0}>清空</button>
+          </div>
+        </div>
+
+        <div className="dialog-work-grid">
+          {filteredArtworks.length === 0 ? (
+            <div className="dialog-empty-hint">
+              {search ? "没有找到符合搜索条件的未收录画作" : "画廊中的所有作品都已收录到本相册中了！"}
+            </div>
+          ) : (
+            filteredArtworks.map((artwork) => {
+              const isSelected = selectedIds.has(artwork.id);
+              return (
+                <div
+                  key={artwork.id}
+                  className={`dialog-work-card ${isSelected ? "selected" : ""}`}
+                  onClick={() => toggleSelect(artwork.id)}
+                >
+                  <div className="dialog-work-thumb">
+                    <img src={artworkImageUrl(artwork)} alt="" loading="lazy" />
+                    <span className={`dialog-check-badge ${isSelected ? "checked" : ""}`}>
+                      {isSelected ? "✓" : ""}
+                    </span>
+                  </div>
+                  <strong className="dialog-work-title">{artwork.source?.title ?? artwork.fileName}</strong>
+                  <small className="dialog-work-artist">{artwork.source?.authorName ?? "本地画师"}</small>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <footer className="dialog-footer-actions">
+          <span>已选择 <strong>{selectedIds.size}</strong> 部画作</span>
+          <div className="dialog-actions-right">
+            <Button onClick={onClose} disabled={submitting}>取消</Button>
+            <Button
+              variant="primary"
+              disabled={selectedIds.size === 0 || submitting}
+              busy={submitting}
+              busyLabel="正在加入…"
+              onClick={() => void handleConfirm()}
+            >
+              确认加入相册 ({selectedIds.size})
+            </Button>
+          </div>
+        </footer>
+      </div>
+    </DialogOverlay>
   );
 }
 
