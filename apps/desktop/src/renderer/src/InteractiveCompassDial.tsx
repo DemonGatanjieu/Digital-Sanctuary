@@ -233,13 +233,39 @@ export function InteractiveCompassDial({
         <div className="hud-brackets" />
       </div>
 
-      {/* Center Astrolabe Core & Magnetic Pointer */}
+      {/* Top Fixed Target Alignment Arrow (12 o'clock Reference Reticle) */}
+      <div className="dial-target-reticle">
+        <div
+          className="target-arrow-triangle"
+          style={{
+            borderTopColor: activeSector.color,
+            filter: `drop-shadow(0 0 8px ${activeSector.color})`
+          }}
+        />
+        <div
+          className="target-beacon-dot"
+          style={{ backgroundColor: activeSector.color }}
+        />
+      </div>
+
+      {/* Center Astrolabe Core & Magnetic Pointer Needle */}
       <div className="astrolabe-core">
         <div
           className="core-pointer-needle"
           style={{ transform: `rotate(${rotation}deg)` }}
         >
-          <div className="needle-head" style={{ backgroundColor: activeSector.color }} />
+          {/* North Pointing Arrowhead */}
+          <div
+            className="needle-arrow-north"
+            style={{
+              backgroundColor: activeSector.color,
+              boxShadow: `0 0 14px ${activeSector.color}`
+            }}
+          />
+          {/* Needle Spine */}
+          <div className="needle-spine" />
+          {/* South Pointing Tail */}
+          <div className="needle-tail-south" />
         </div>
         <div
           className="core-gemstone"

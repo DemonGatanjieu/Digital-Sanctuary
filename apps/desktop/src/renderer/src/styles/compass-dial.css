@@ -110,7 +110,42 @@
   opacity: 0.6;
 }
 
-/* Center Core & Glowing Needle */
+/* Top Fixed Target Alignment Arrow (12 o'clock Reticle) */
+.dial-target-reticle {
+  position: absolute;
+  top: -12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.target-arrow-triangle {
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 12px solid var(--ds-primary);
+  transition: border-top-color 0.25s ease, filter 0.25s ease;
+  animation: reticle-pulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes reticle-pulse {
+  from { transform: translateY(0); }
+  to { transform: translateY(2px); }
+}
+
+.target-beacon-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  margin-top: 2px;
+  box-shadow: 0 0 6px currentColor;
+  transition: background-color 0.25s ease;
+}
+
+/* Center Core & Glowing Dual-Needle */
 .astrolabe-core {
   width: 46px;
   height: 46px;
@@ -123,35 +158,52 @@
 
 .core-pointer-needle {
   position: absolute;
-  width: 4px;
-  height: 72px;
-  bottom: 23px;
-  left: 21px;
-  transform-origin: bottom center;
+  width: 6px;
+  height: 140px;
+  top: -47px;
+  left: 20px;
+  transform-origin: center center;
   pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.needle-head {
-  width: 8px;
-  height: 20px;
-  margin-left: -2px;
-  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+.needle-arrow-north {
+  width: 14px;
+  height: 28px;
+  clip-path: polygon(50% 0%, 0% 100%, 50% 75%, 100% 100%);
   border-radius: 2px;
-  box-shadow: 0 0 12px currentColor;
-  transition: background-color 0.25s ease;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.needle-spine {
+  width: 2px;
+  height: 80px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.2) 50%, rgba(255, 255, 255, 0.9) 100%);
+}
+
+.needle-tail-south {
+  width: 10px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.4);
+  clip-path: polygon(50% 100%, 0% 0%, 50% 25%, 100% 0%);
+  border-radius: 2px;
 }
 
 .core-gemstone {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
-  border: 2px solid rgba(255, 255, 255, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.95);
   transition: background-color 0.25s ease, box-shadow 0.25s ease;
+  z-index: 3;
 }
 
 .gemstone-symbol {
