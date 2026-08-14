@@ -2,7 +2,7 @@
 
 ## 1. 任务背景与边界界定
 
-在 **AI 视觉多维雷达图与外部大模型评估体系**（参见 `TASK_AI_RADAR_AND_EXTERNAL_VISION_IMPLEMENTATION_PLAN.md`）落地之后，应用已具备：
+在 **AI 视觉多维雷达图与外部大模型评估体系**（参见 [`archive/2026-08-14-task-ai-radar-and-external-vision-implementation-plan.md`](./archive/2026-08-14-task-ai-radar-and-external-vision-implementation-plan.md)）落地之后，应用已具备：
 1. 本地确定性统计特征画像（Pillow/NumPy 6 维技术指标）；
 2. 外部多模态大模型（OpenAI / 通义千问 / Gemini / Claude）在显式任务下的多维艺术/角色主观评价雷达。
 

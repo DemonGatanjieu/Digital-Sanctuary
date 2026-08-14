@@ -1,5 +1,7 @@
 # 后端工程任务书：主题引擎（Theme Engine）与 GitHub 主题商店（Theme Store）后端实现
 
+> **归档说明（2026-08-15）**：主题后端、前端接入与视觉回归均已完成；本文件保留用于追溯，不再作为现行施工指令。
+
 > **面向执行者**：GPT / 后端工程 Agent
 > **任务目标**：为 Digital Sanctuary 实现安全、健壮、模块化的“动态主题引擎”与“基于 GitHub 的主题商店”的主进程（Main Process）、数据库（Database/Store）、IPC 边界与网络代理服务。
 

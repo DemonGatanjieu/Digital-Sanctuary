@@ -594,4 +594,5 @@ export function decideFilter(
 }
 
 export * from "./vision-suites.js";
+export * from "./typography.js";
 

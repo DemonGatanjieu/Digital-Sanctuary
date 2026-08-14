@@ -1,8 +1,8 @@
 # AI 雷达与外部视觉服务实施规划（修订版）
 
-> 状态：待实施  
+> 状态：已完成并归档（2026-08-15）  
 > 规划日期：2026-08-14  
-> 原始需求：`docs/plans/TASK_AI_RADAR_AND_EXTERNAL_VISION_FOR_GPT.md`  
+> 原始需求：`docs/plans/archive/2026-08-14-task-ai-radar-and-external-vision-original.md`  
 > 执行对象：Gemini（按阶段逐项实现，禁止一次性大改）
 
 ## 1. 评估结论
@@ -644,7 +644,7 @@ Gemini 每完成一个阶段都要运行 `npm run verify`，并单独提交。�
 
 可把下面内容直接交给 Gemini：
 
-> 请严格按 `docs/plans/TASK_AI_RADAR_AND_EXTERNAL_VISION_IMPLEMENTATION_PLAN.md` 分阶段实施。先只完成 Phase 0，运行 `npm run verify`，汇报修改文件、测试结果、未决问题后停止，等待验收。不要提前写 Phase 1 之后的代码，不要改动既有灯箱、3D 画册、主题系统和作品信任逻辑。每个后续 Phase 也遵循“一阶段、一验证、一提交”的节奏。
+> 历史执行指令：请严格按本归档计划分阶段实施。该任务现已完成，此段仅保留用于追溯。
 
 ---
 
@@ -659,4 +659,3 @@ Gemini 每完成一个阶段都要运行 `npm run verify`，并单独提交。�
 - Claude Vision：<https://platform.claude.com/docs/en/build-with-claude/vision>
 - Claude Structured Outputs：<https://platform.claude.com/docs/en/build-with-claude/structured-outputs>
 - Qwen OpenAI-compatible 多模态调用：<https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions>
-

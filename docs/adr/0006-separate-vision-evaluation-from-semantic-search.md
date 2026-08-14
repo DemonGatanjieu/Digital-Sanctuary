@@ -21,7 +21,7 @@
 我们决定将 **视觉画像评测系统** 与 **多模态语义搜索系统** 严格解耦并分阶段实施：
 
 1. **职责分离**：
-   - **视觉评估体系 (`TASK_AI_RADAR_AND_EXTERNAL_VISION_IMPLEMENTATION_PLAN.md`)**：聚焦于可解释的维度评分（0~100）及文本解读，数据存储于 SQLite 结构化表 (`vision_evaluation_results`, `vision_dimension_scores`)，用于画作卡片、雷达多边形呈现以及基于固定维度的范围过滤。
+   - **视觉评估体系 ([已归档实施计划](../plans/archive/2026-08-14-task-ai-radar-and-external-vision-implementation-plan.md))**：聚焦于可解释的维度评分（0~100）及文本解读，数据存储于 SQLite 结构化表 (`vision_evaluation_results`, `vision_dimension_scores`)，用于画作卡片、雷达多边形呈现以及基于固定维度的范围过滤。
    - **语义搜索体系 (`TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md`)**：聚焦于稠密特征向量（Dense Embeddings）的提取与余弦相似度检索，底库向量完全由本地轻量 CLIP/MobileCLIP 提取，绝不依赖昂贵且有隐私顾虑的外部大模型 API 进行全库预存。
 
 2. **外部大模型的角色定界**：
