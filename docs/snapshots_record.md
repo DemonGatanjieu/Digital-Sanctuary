@@ -16,6 +16,8 @@
 | **v2-compass-spring-physics-and-rule6** | `76a60c81edfeb770a43558d0e21a278f1b9293a5` | 2026-08-14 | 罗盘物理动效深度重构：引入最短路径物理弹簧柔和吸附（零角度突跳）、消除符文遮挡中心、在智能体规则库确立人类物理直觉铁律。 |
 | **v2-compass-revert-original-clean** | `bd23a0f179f0c6bc33a820a175c93706d75b9123` | 2026-08-14 | 罗盘状态完整回退到最早最简洁清爽的经典稳定版本。 |
 | **v2-compass-rune-origin-fix** | `c126b92fe8dc0cd70389b4ba0055237482ca185f` | 2026-08-14 | 彻底根治符文飞出圆盘的 CSS transform-origin 叠加问题，四个方位符文完美内嵌在外圈刻度星轨上。 |
+| **v2-photobook-3d-dual-spread-flip** | `1c3d3cfe399aebb08b56011be202c386cdc9be44` | 2026-08-14 | 拟真 3D 典藏画集双页对开翻页书台：左页目录篇目与交互缩略索引，右页哑光装裱展台，支持点击翻页/键盘/目录直达与丝带书签。 |
+
 
 
 
