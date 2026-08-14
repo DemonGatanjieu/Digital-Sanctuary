@@ -18,6 +18,8 @@
 | **v2-compass-rune-origin-fix** | `c126b92fe8dc0cd70389b4ba0055237482ca185f` | 2026-08-14 | 彻底根治符文飞出圆盘的 CSS transform-origin 叠加问题，四个方位符文完美内嵌在外圈刻度星轨上。 |
 | **v2-photobook-3d-dual-spread-flip** | `1c3d3cfe399aebb08b56011be202c386cdc9be44` | 2026-08-14 | 拟真 3D 典藏画集双页对开翻页书台：左页目录篇目与交互缩略索引，右页哑光装裱展台，支持点击翻页/键盘/目录直达与丝带书签。 |
 | **v2-in-game-fullscreen-album-theater** | `7ccfdfdb560eb7f6eabe907e830c2f2a00b81a14` | 2026-08-14 | 沉浸式游戏全屏相册剧场：默认点击相册直接展开为类游戏画册全屏 HUD，配有环境弥散光晕底色、游戏快捷键提示与 ESC 一键退出。 |
+| **task-ai-radar-and-external-vision** | `5c00745eb77662d78fc1025357e8bcecdf8960bb` | 2026-08-14 | 规划并输出 AI 多维视觉雷达图评估系统与外接 Vision API 后端任务书，涵盖 6 维视觉评分体系、动图/大图异常静默跳过策略与完整 IPC 契约。 |
+
 
 
 
