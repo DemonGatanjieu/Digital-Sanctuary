@@ -41,6 +41,7 @@ flowchart LR
 
 ### 2.1 前端 UI
 - 基于 React 19，不依赖厚重 UI 库；建立统一的 **Design Tokens 系统**（基于 CSS 变量的蔚蓝主题色盘、多层级精密阴影、亚克力毛玻璃光影与系统字体中英文排版规范）。
+- 渲染样式以 `styles.css` 作为只含有序 `@import` 的清单，实际规则位于 `renderer/src/styles/` 的 21 个职责模块中；`electron.vite.config.ts` 会在内存中按清单合成单一虚拟 CSS 模块，以兼顾源码边界、原有级联语义和大图库滚动性能。新增页面样式不得重新堆回清单文件，也不得绕过虚拟入口逐个导入。
 - 渲染层按应用壳、画廊、探索、设置、作者、分类和原图查看器拆分。按钮、分段菜单、通知与对话框使用共享组件；对话框统一提供焦点约束、滚动锁定、`Esc` 关闭和忙碌保护。
 - **画廊与卡片沉浸感**：顶部采用影院级 Ambient Hero 动态氛围横幅；作品卡片支持多页作品相纸堆叠（Stack Effect）视觉与悬浮升降微交互；大图查看器提供深邃暗调舞台与悬浮控制台。
 - **分类组合与组合视图（Saved Collection Views）**：分类页支持将多个普通分类组合为保存视图；支持多选包含/排除、实时防抖匹配数量与封面预览、拼贴卡片及画廊顶部组合条件摘要栏。
@@ -54,6 +55,7 @@ flowchart LR
 - `apps/desktop/src/main/explore-policy.ts`：可单元测试的 URL、权限、广告和资源策略。
 - `apps/desktop/src/main/pixiv-dom-adapter.ts`：幂等注入拦截占位层、“仅本次查看”和作品页下载按钮。宽泛的第一方 PR/BOOTH DOM 猜测已经移除，避免再次误伤普通作品。
 - `apps/desktop/src/main/thumbnail-service.ts`：独立的版本化缩略图批处理器。每次只串行处理小批资产，缓存命中直接回填路径；缓存文件缺失时自动重新排队。
+- `apps/desktop/src/main/saved-collection-view-ipc.ts`：分类组合 CRUD 的运行时校验与 IPC 边界，限制名称、条件数量、ID 长度及包含/排除冲突。
 - `apps/desktop/src/shared/pixiv-download.ts`：Pixiv 页面上下文、AJAX 响应和原图 URL 的纯函数校验。
 - `apps/desktop/src/shared/bounded-concurrency.ts`：下载任务使用的通用并发门。收藏作品按顺序处理，单作品内部原图最多四路；Pixiv JSON API 全局间隔至少 800 ms。
 - **有界重试**：429、网络异常和 5xx 最多重试两次，单次等待不超过 30 秒；仍失败时抛出批次级错误并停止，不把同一全局故障记成数百个作品失败。
@@ -68,7 +70,7 @@ flowchart LR
 - `services/vision/python/`：WD SwinV2 Tagger v3 推理实现。
 - `packages/domain/`：元素组、阈值、标签映射、SavedCollectionView 和 `allow / blur / hide` 决策。
 - `packages/protocol/`：桌面端与视觉子进程之间的协议。
-- `packages/database/`：本地图库、自定义画廊分类（含封面绑定）、分类组合视图（`saved_collection_views` 表，版本 3 迁移）、独立画师表（含头像快照）、Pixiv 作品来源、元素规则设置和远程审查缓存。
+- `packages/database/`：本地图库、自定义画廊分类（含封面绑定）、分类组合视图（`saved_collection_views` 表，版本 3 迁移）、独立画师表（含头像快照）、Pixiv 作品来源、元素规则设置和远程审查缓存。组合视图的 schema、CRUD、唯一名称约束和损坏 JSON 降级集中在 `saved-collection-view-store.ts`。
 - 开发环境检测到 `.venv-gpu` 时优先请求 CUDA，初始化失败回退 CPU。RTX 4050 基准中单图中位数约由 463 ms 降至 72 ms；provider 选择不改变模型版本和缓存语义。
 
 ## 3. 当前探索请求流
@@ -129,6 +131,7 @@ flowchart LR
 
 - `window-state.ts`：多显示器窗口状态校验与安全收敛；
 - `library-ipc.ts`：作品查询、详情读取和缩略图批任务 IPC；
+- `saved-collection-view-ipc.ts` / `packages/database/src/saved-collection-view-store.ts`：分类组合输入校验、IPC 注册与 SQLite 持久化；
 - `analysis-ipc.ts` / `analysis-job-runner.ts`：显式分析 API 与严格串行、可取消的执行器；
 - `explore-policy.ts`、`explore-review-queue.ts`、`pixiv-dom-adapter.ts`：导航/广告策略、审查队列和远程 DOM 适配；
 - `shared/pixiv-download.ts` / `shared/bounded-concurrency.ts`：Pixiv 响应解析、下载状态和并发原语；

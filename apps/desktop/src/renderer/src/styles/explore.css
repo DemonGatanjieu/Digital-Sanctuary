@@ -1,0 +1,176 @@
+/* ==========================================================================
+   Explore Mode Browser View & Radar HUD
+   ========================================================================== */
+
+.explore-page {
+  display: flex;
+  min-height: 0;
+  height: 100vh;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.browser-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ds-border-light);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--ds-shadow-xs);
+  z-index: 5;
+}
+
+.browser-toolbar > button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-text-body);
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--ds-transition-fast);
+}
+
+.browser-toolbar > button:hover:not(:disabled) {
+  border-color: var(--ds-primary-border);
+  color: var(--ds-primary);
+  background: var(--ds-primary-subtle);
+  transform: translateY(-1px);
+}
+
+.browser-toolbar > button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.browser-toolbar > .login-button,
+.browser-toolbar > .account-setup-button {
+  display: block;
+  width: auto;
+  padding: 0 14px;
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.browser-toolbar > .login-button {
+  color: #fff;
+  border: 0;
+  background: var(--ds-gradient-primary);
+  box-shadow: 0 4px 12px var(--ds-primary-glow);
+}
+
+.browser-toolbar > .account-setup-button {
+  color: var(--ds-primary);
+  border-color: var(--ds-primary-border);
+  background: var(--ds-primary-subtle);
+}
+
+.address-bar {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  grid-template-columns: auto minmax(100px, auto) 1fr;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  background: #ffffff;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.address-bar span {
+  color: var(--ds-success-text);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.address-bar strong,
+.address-bar small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.address-bar strong {
+  max-width: 260px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ds-text-heading);
+}
+
+.address-bar small {
+  color: var(--ds-text-muted);
+  font-size: 10.5px;
+}
+
+/* Shield Radar HUD */
+.shield-status {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--ds-success-border);
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-success-text);
+  background: var(--ds-success-light);
+  font-size: 10.5px;
+  font-weight: 650;
+  white-space: nowrap;
+  box-shadow: var(--ds-shadow-xs);
+}
+
+.auth-hint {
+  flex: 0 0 auto;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--ds-primary-border);
+  color: var(--ds-primary-hover);
+  background: var(--ds-primary-subtle);
+  font-size: 11.5px;
+  font-weight: 550;
+  text-align: center;
+}
+
+.explore-surface {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  background: transparent;
+}
+
+.explore-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  color: var(--ds-text-muted);
+}
+
+.explore-placeholder span {
+  color: var(--ds-primary);
+  font-size: 34px;
+}
+
+.explore-placeholder strong {
+  color: var(--ds-text-body);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.explore-placeholder small {
+  font-size: 11px;
+}

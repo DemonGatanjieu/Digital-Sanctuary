@@ -1,9 +1,42 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
+import type { Plugin } from "vite";
 
 const desktopRoot = fileURLToPath(new URL(".", import.meta.url));
+const rendererStylesEntry = resolve(desktopRoot, "src/renderer/src/styles.css");
+const rendererStylesDirectory = resolve(desktopRoot, "src/renderer/src/styles");
+
+function rendererStylesPlugin(): Plugin {
+  const publicId = "virtual:sanctuary-styles.css";
+  const resolvedId = `\0${publicId}`;
+  return {
+    name: "sanctuary-renderer-styles",
+    resolveId(id) {
+      return id === publicId ? resolvedId : null;
+    },
+    load(id) {
+      if (id !== resolvedId) return null;
+      this.addWatchFile(rendererStylesEntry);
+      const entry = readFileSync(rendererStylesEntry, "utf8");
+      const modules = [...entry.matchAll(/@import "\.\/styles\/([^\"]+)";/g)].flatMap(
+        (match) => (match[1] ? [match[1]] : []),
+      );
+      if (modules.length === 0) {
+        throw new Error("Renderer style manifest does not import any modules");
+      }
+      return modules
+        .map((moduleName) => {
+          const modulePath = resolve(rendererStylesDirectory, moduleName);
+          this.addWatchFile(modulePath);
+          return readFileSync(modulePath, "utf8");
+        })
+        .join("");
+    },
+  };
+}
 
 const workspacePackages = [
   "@sanctuary/database",
@@ -52,7 +85,7 @@ export default defineConfig({
     }
   },
   renderer: {
-    plugins: [react()],
+    plugins: [rendererStylesPlugin(), react()],
     resolve: { alias },
     root: resolve(desktopRoot, "src/renderer"),
     build: {

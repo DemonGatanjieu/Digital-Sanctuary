@@ -1,0 +1,92 @@
+/* ==========================================================================
+   Digital Sanctuary - Design System & Modern Aesthetic Stylesheet
+   ========================================================================== */
+
+:root {
+  /* Core Color Tokens (Modern Anime & Sanctuary Palette) */
+  --ds-bg-app: #f4f7fb;
+  --ds-bg-sidebar: #ffffff;
+  --ds-bg-card: #ffffff;
+  --ds-bg-card-subtle: #f8fafc;
+  --ds-bg-surface-glass: rgba(255, 255, 255, 0.78);
+  --ds-bg-overlay: rgba(15, 23, 42, 0.72);
+  --ds-bg-lightbox: rgba(10, 14, 22, 0.96);
+
+  /* Primary Accent & Semantic Gradients */
+  --ds-primary: #0284c7;
+  --ds-primary-hover: #0369a1;
+  --ds-primary-active: #075985;
+  --ds-primary-light: #e0f2fe;
+  --ds-primary-subtle: #f0f9ff;
+  --ds-primary-border: #bae6fd;
+  --ds-primary-glow: rgba(2, 132, 199, 0.22);
+  --ds-gradient-primary: linear-gradient(135deg, #0ea5e9 0%, #0284c7 60%, #0369a1 100%);
+  --ds-gradient-accent: linear-gradient(135deg, #38bdf8 0%, #6366f1 100%);
+  --ds-gradient-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.75) 100%);
+
+  /* Status Colors */
+  --ds-success: #10b981;
+  --ds-success-light: #ecfdf5;
+  --ds-success-border: #a7f3d0;
+  --ds-success-text: #047857;
+
+  --ds-warning: #f59e0b;
+  --ds-warning-light: #fffbeb;
+  --ds-warning-border: #fde68a;
+  --ds-warning-text: #b45309;
+
+  --ds-danger: #f43f5e;
+  --ds-danger-hover: #e11d48;
+  --ds-danger-light: #fff1f2;
+  --ds-danger-border: #fecdd3;
+  --ds-danger-text: #be123c;
+
+  --ds-purple: #8b5cf6;
+  --ds-purple-light: #f5f3ff;
+  --ds-purple-border: #ddd6fe;
+  --ds-purple-text: #6d28d9;
+
+  /* Neutral Text & Border Tokens */
+  --ds-text-heading: #0f172a;
+  --ds-text-body: #334155;
+  --ds-text-secondary: #64748b;
+  --ds-text-muted: #94a3b8;
+  --ds-text-inverse: #ffffff;
+
+  --ds-border-light: #e2e8f0;
+  --ds-border-subtle: #f1f5f9;
+  --ds-border-glass: rgba(255, 255, 255, 0.85);
+
+  /* Shadows & Elevations */
+  --ds-shadow-xs: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  --ds-shadow-sm: 0 2px 6px -1px rgba(15, 23, 42, 0.06), 0 1px 4px -1px rgba(15, 23, 42, 0.03);
+  --ds-shadow-md: 0 8px 20px -3px rgba(15, 23, 42, 0.08), 0 3px 8px -2px rgba(15, 23, 42, 0.04);
+  --ds-shadow-lg: 0 16px 36px -4px rgba(15, 23, 42, 0.12), 0 6px 14px -3px rgba(15, 23, 42, 0.06);
+  --ds-shadow-xl: 0 24px 48px -6px rgba(15, 23, 42, 0.16), 0 10px 20px -4px rgba(15, 23, 42, 0.08);
+  --ds-shadow-glow: 0 0 24px var(--ds-primary-glow);
+
+  /* Radius Tokens */
+  --ds-radius-sm: 8px;
+  --ds-radius-md: 12px;
+  --ds-radius-lg: 18px;
+  --ds-radius-xl: 24px;
+  --ds-radius-full: 9999px;
+
+  /* Animation & Spring Transitions */
+  --ds-ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ds-ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ds-transition-fast: 0.15s var(--ds-ease-smooth);
+  --ds-transition-normal: 0.25s var(--ds-ease-spring);
+  --ds-transition-slow: 0.4s var(--ds-ease-spring);
+
+  /* Glassmorphism settings */
+  --ds-glass-blur: 24px;
+  --ds-glass-bg: rgba(255, 255, 255, 0.72);
+  --ds-glass-border: rgba(255, 255, 255, 0.85);
+
+  /* System Font Stack with Optimized Chinese & English Typography */
+  font-family: "PingFang SC", "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", sans-serif;
+  font-synthesis: none;
+  color: var(--ds-text-body);
+  background: var(--ds-bg-app);
+}

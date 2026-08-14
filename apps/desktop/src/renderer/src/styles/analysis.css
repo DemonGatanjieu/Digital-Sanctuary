@@ -1,0 +1,348 @@
+/* ==========================================================================
+   Explicit Model Organization (Analysis View)
+   ========================================================================== */
+
+.analysis-heading {
+  align-items: center;
+}
+
+.analysis-engine-pill {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 8px 14px;
+  border: 1px solid var(--ds-primary-border);
+  border-radius: var(--ds-radius-md);
+  background: #ffffff;
+  box-shadow: var(--ds-shadow-xs);
+}
+
+.analysis-engine-pill span {
+  color: var(--ds-primary);
+  font-size: 9.5px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.analysis-engine-pill strong {
+  color: var(--ds-text-heading);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.analysis-scope-card {
+  margin-top: 4px;
+  padding: 24px 28px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-xl);
+  background: #ffffff;
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.analysis-scope-card > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.analysis-scope-card h2 {
+  margin: 4px 0 0;
+  color: var(--ds-text-heading);
+  font-size: 20px;
+  font-weight: 750;
+}
+
+.analysis-scope-card > header small {
+  color: var(--ds-text-muted);
+  font-size: 10px;
+}
+
+.analysis-scope-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.analysis-scope-options label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 80px;
+  padding: 14px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-bg-card-subtle);
+  cursor: pointer;
+  transition: all var(--ds-transition-fast);
+}
+
+.analysis-scope-options label:has(input:checked) {
+  border-color: var(--ds-primary);
+  background: var(--ds-primary-subtle);
+  box-shadow: 0 4px 12px var(--ds-primary-glow);
+}
+
+.analysis-scope-options label:has(input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.analysis-scope-options input {
+  margin-top: 2px;
+  accent-color: var(--ds-primary);
+}
+
+.analysis-scope-options span {
+  display: grid;
+  gap: 4px;
+}
+
+.analysis-scope-options strong {
+  color: var(--ds-text-heading);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.analysis-scope-options small {
+  color: var(--ds-text-secondary);
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.analysis-scope-card > select {
+  width: min(420px, 100%);
+  min-height: 38px;
+  margin-top: 14px;
+  padding: 0 12px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-text-heading);
+  background: #ffffff;
+  font-size: 12px;
+}
+
+.analysis-scope-card > footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.analysis-preview-card {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 18px 22px;
+  border: 1px solid var(--ds-primary-border);
+  border-radius: var(--ds-radius-lg);
+  background: linear-gradient(110deg, var(--ds-primary-subtle), #ffffff);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.analysis-preview-card > div {
+  display: grid;
+  gap: 2px;
+}
+
+.analysis-preview-card span {
+  color: var(--ds-text-secondary);
+  font-size: 10px;
+  font-weight: 550;
+}
+
+.analysis-preview-card strong {
+  color: var(--ds-primary);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.analysis-preview-card p {
+  grid-column: 1 / -2;
+  margin: 0;
+  color: var(--ds-text-secondary);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.analysis-job-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.analysis-empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 48px 20px;
+  border: 1px dashed var(--ds-border-light);
+  border-radius: var(--ds-radius-xl);
+  color: var(--ds-text-muted);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.analysis-empty strong {
+  color: var(--ds-text-body);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.analysis-empty span {
+  font-size: 11px;
+}
+
+.analysis-job-card {
+  padding: 20px 24px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-xl);
+  background: #ffffff;
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.analysis-job-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.analysis-job-card > header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.analysis-job-card > header strong {
+  color: var(--ds-text-heading);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.analysis-job-card > header small {
+  color: var(--ds-text-muted);
+  font-size: 9.5px;
+}
+
+.analysis-status {
+  width: max-content;
+  padding: 3px 8px;
+  border-radius: var(--ds-radius-sm);
+  color: var(--ds-text-secondary);
+  background: #e2e8f0;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.analysis-status.running { color: var(--ds-primary); background: var(--ds-primary-subtle); }
+.analysis-status.completed { color: var(--ds-success-text); background: var(--ds-success-light); }
+.analysis-status.failed, .analysis-status.cancelled { color: var(--ds-danger-text); background: var(--ds-danger-light); }
+
+.analysis-progress {
+  height: 6px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e2e8f0;
+}
+
+.analysis-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ds-gradient-primary);
+  transition: width 0.2s ease;
+}
+
+.analysis-job-metrics {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  color: var(--ds-text-muted);
+  font-size: 9.5px;
+  font-weight: 550;
+}
+
+.analysis-suggestions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
+.analysis-suggestions > div,
+.analysis-suggestions > p,
+.analysis-suggestions > .ui-button {
+  grid-column: 1 / -1;
+}
+
+.analysis-suggestions > div {
+  display: grid;
+  gap: 3px;
+}
+
+.analysis-suggestions > div strong {
+  color: var(--ds-text-heading);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.analysis-suggestions > div small,
+.analysis-suggestions > p {
+  margin: 0;
+  color: var(--ds-text-muted);
+  font-size: 9.5px;
+}
+
+.analysis-suggestions label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-card-subtle);
+  cursor: pointer;
+  transition: all var(--ds-transition-fast);
+}
+
+.analysis-suggestions label:has(input:checked) {
+  border-color: var(--ds-primary-border);
+  background: var(--ds-primary-subtle);
+}
+
+.analysis-suggestions input {
+  accent-color: var(--ds-primary);
+}
+
+.analysis-suggestions label span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.analysis-suggestions label strong {
+  overflow: hidden;
+  color: var(--ds-text-heading);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-suggestions label small {
+  color: var(--ds-text-muted);
+  font-size: 8.5px;
+}
+
+.analysis-suggestions > .ui-button {
+  justify-self: end;
+  margin-top: 6px;
+}

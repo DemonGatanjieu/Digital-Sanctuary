@@ -1,0 +1,53 @@
+/* ==========================================================================
+   Display Profile Invariants (Quality / Balanced / Efficient)
+   ========================================================================== */
+
+.app-shell[data-display-profile="balanced"] .work-ambient-backdrop {
+  opacity: 0.12;
+  filter: none;
+}
+
+.app-shell[data-display-profile="balanced"] .work-ambient-hero {
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.app-shell[data-display-profile="efficient"] .work-ambient-hero,
+.app-shell[data-ambient-artwork="false"] .work-ambient-hero {
+  display: none;
+}
+
+.app-shell[data-display-profile="efficient"] .work-library-card,
+.app-shell[data-display-profile="efficient"] .collection-card,
+.app-shell[data-display-profile="efficient"] .author-browser-card,
+.app-shell[data-display-profile="efficient"] .summary-row article {
+  box-shadow: none;
+  transition: none;
+}
+
+.app-shell[data-display-profile="efficient"] .work-library-card:hover,
+.app-shell[data-display-profile="efficient"] .collection-card:hover,
+.app-shell[data-display-profile="efficient"] .author-browser-card:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.app-shell[data-display-profile="efficient"] .sidebar,
+.app-shell[data-display-profile="efficient"] .engine-card,
+.app-shell[data-display-profile="efficient"] .browser-toolbar {
+  backdrop-filter: none;
+}
+
+.app-shell[data-reduced-motion="true"] *,
+.app-shell[data-display-profile="efficient"] * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artwork-lightbox,
+  .lightbox-stage > img.loaded,
+  .lightbox-loader {
+    animation-duration: 0.01ms;
+  }
+}

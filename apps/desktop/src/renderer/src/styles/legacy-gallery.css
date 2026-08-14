@@ -1,0 +1,135 @@
+/* ==========================================================================
+   Legacy Flat Cards & Preview Badges
+   ========================================================================== */
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 22px;
+}
+
+.art-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-lg);
+  background: #ffffff;
+  box-shadow: var(--ds-shadow-sm);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 380px;
+  transition: all var(--ds-transition-normal);
+}
+
+.art-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(14, 165, 233, 0.4);
+  box-shadow: var(--ds-shadow-lg);
+}
+
+.art-preview {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: #edf2f7;
+}
+
+.art-preview-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: zoom-in;
+}
+
+.art-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.35s var(--ds-ease-spring);
+}
+
+.art-card:hover .art-preview img:not(.blurred) {
+  transform: scale(1.04);
+}
+
+.art-preview img[data-lazy-state="waiting"] {
+  background: linear-gradient(135deg, #eef2f5, #f8fafb 48%, #edf2f5);
+}
+
+.art-preview img.blurred {
+  filter: blur(32px) saturate(0.6);
+  transform: scale(1.15);
+}
+
+.shield {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  height: 100%;
+  gap: 8px;
+  color: var(--ds-text-muted);
+  background: repeating-linear-gradient(135deg, #edf0f3, #edf0f3 12px, #f5f6f8 12px, #f5f6f8 24px);
+}
+
+.shield span {
+  color: var(--ds-primary);
+  font-size: 30px;
+}
+
+.shield strong {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.decision-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px 9px;
+  border-radius: var(--ds-radius-full);
+  font-size: 9.5px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.decision-badge.allow { color: var(--ds-success-text); background: rgba(236, 253, 245, 0.92); border: 1px solid var(--ds-success-border); }
+.decision-badge.blur { color: var(--ds-warning-text); background: rgba(255, 251, 235, 0.92); border: 1px solid var(--ds-warning-border); }
+.decision-badge.hide { color: var(--ds-danger-text); background: rgba(255, 241, 242, 0.92); border: 1px solid var(--ds-danger-border); }
+
+.art-meta {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+}
+
+.art-meta > strong {
+  overflow: hidden;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ds-text-heading);
+}
+
+.art-meta small {
+  color: var(--ds-text-secondary);
+  font-size: 10.5px;
+}
+
+.art-meta select {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-sm);
+  color: var(--ds-text-body);
+  background: var(--ds-bg-card-subtle);
+  font-size: 10.5px;
+  font-weight: 550;
+  cursor: pointer;
+}

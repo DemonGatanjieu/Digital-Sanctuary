@@ -33,7 +33,6 @@ import {
   type CustomElementGroup,
   type LibraryPreferences,
   type RuleSandboxResult,
-  type SavedCollectionViewDraft,
   type VisionAssessment,
   type WorkDeletionPreview,
   type WorkDeletionResult
@@ -90,6 +89,7 @@ import { registerLibraryReadIpc } from "./library-ipc.js";
 import { normalizeWindowState, type PersistedWindowState } from "./window-state.js";
 import { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import { registerAnalysisIpc } from "./analysis-ipc.js";
+import { registerSavedCollectionViewIpc } from "./saved-collection-view-ipc.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -282,38 +282,6 @@ function parseCollectionDraft(value: unknown): { name: string; description: stri
   return { name, description };
 }
 
-function parseSavedCollectionViewDraft(value: unknown): SavedCollectionViewDraft | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as Partial<Record<keyof SavedCollectionViewDraft, unknown>>;
-  if (
-    typeof candidate.name !== "string" ||
-    (candidate.matchMode !== "all" && candidate.matchMode !== "any")
-  ) return null;
-  const name = candidate.name.trim();
-  const includedCollectionIds = parseSavedViewCollectionIds(candidate.includedCollectionIds);
-  const excludedCollectionIds = parseSavedViewCollectionIds(candidate.excludedCollectionIds);
-  if (
-    !name ||
-    name.length > 80 ||
-    !includedCollectionIds ||
-    !excludedCollectionIds ||
-    (includedCollectionIds.length === 0 && excludedCollectionIds.length === 0)
-  ) return null;
-  const included = new Set(includedCollectionIds);
-  return {
-    name,
-    matchMode: candidate.matchMode,
-    includedCollectionIds,
-    excludedCollectionIds: excludedCollectionIds.filter((id) => !included.has(id))
-  };
-}
-
-function parseSavedViewCollectionIds(value: unknown): string[] | null {
-  if (!Array.isArray(value) || value.length > 50) return null;
-  if (value.length === 0) return [];
-  return parseWorkIds(value, 50);
-}
-
 function parseAppearancePreferences(value: unknown): AppearancePreferences | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<AppearancePreferences>;
@@ -402,6 +370,7 @@ function registerImageProtocol(): void {
 function registerIpc(): void {
   if (!database || !vision) throw new Error("Application services are unavailable");
   registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler);
+  registerSavedCollectionViewIpc(ipcMain, database);
   registerLibraryReadIpc(ipcMain, database, join(app.getPath("userData"), "thumbnails"), encodeLocalThumbnail);
   ipcMain.handle("library:create-backup", async (): Promise<string | null> => {
     if (!database || !mainWindow) throw new Error("Application is not ready");
@@ -458,23 +427,6 @@ function registerIpc(): void {
     return deleteConfirmedWorks(preview.workIds);
   });
   ipcMain.handle("collections:list", () => database?.listCollections() ?? []);
-  ipcMain.handle("saved-collection-views:list", () => database?.listSavedCollectionViews() ?? []);
-  ipcMain.handle("saved-collection-views:create", (_event, value: unknown) => {
-    const draft = parseSavedCollectionViewDraft(value);
-    if (!database || !draft) throw new Error("Invalid saved collection view");
-    return database.createSavedCollectionView(draft);
-  });
-  ipcMain.handle("saved-collection-views:update", (_event, value: unknown, draftValue: unknown) => {
-    const id = parseWorkId(value);
-    const draft = parseSavedCollectionViewDraft(draftValue);
-    if (!database || !id || !draft) throw new Error("Invalid saved collection view update");
-    return database.updateSavedCollectionView(id, draft);
-  });
-  ipcMain.handle("saved-collection-views:delete", (_event, value: unknown) => {
-    const id = parseWorkId(value);
-    if (!database || !id) throw new Error("Invalid saved collection view id");
-    return database.deleteSavedCollectionView(id);
-  });
   ipcMain.handle("artists:list", () => database?.listArtists() ?? []);
   ipcMain.handle("artists:repair-avatars", () => repairMissingArtistAvatars());
 

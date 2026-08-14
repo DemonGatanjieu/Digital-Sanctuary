@@ -85,13 +85,20 @@ child.stderr.on("data", (chunk) => { stderr += String(chunk); });
 
 try {
   const target = await waitForRenderer(port, 15_000);
+  await new Promise((resolveTask) => setTimeout(resolveTask, 500));
   const cdp = await connectCdp(target.webSocketDebuggerUrl);
   try {
     const result = await cdp.evaluate(`(async () => {
       const started = performance.now();
       let image;
-      while (!(image = document.querySelector(".work-library-card img")) || !image.currentSrc) {
-        if (performance.now() - started > 10000) throw new Error("library image did not render");
+      while (!(image = document.querySelector(".work-ambient-cover")) || !image.currentSrc) {
+        if (performance.now() - started > 10000) {
+          const summary = document.body?.innerText.replace(/\s+/g, " ").slice(0, 500) ?? "";
+          const cards = document.querySelectorAll(".work-library-card").length;
+          throw new Error(
+            "library image did not render (cards=" + cards + ", url=" + location.href + ", body=" + summary + ")"
+          );
+        }
         await new Promise((resolve) => setTimeout(resolve, 25));
       }
       if (!image.complete) await new Promise((resolve) => {
@@ -157,7 +164,12 @@ async function waitForRenderer(debugPort, timeout) {
       const response = await fetch(`http://127.0.0.1:${debugPort}/json/list`);
       if (response.ok) {
         const targets = await response.json();
-        const target = targets.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
+        const target = targets.find(
+          (candidate) =>
+            candidate.type === "page" &&
+            candidate.webSocketDebuggerUrl &&
+            candidate.url?.replaceAll("\\", "/").includes("/renderer/index.html")
+        );
         if (target) return target;
       }
     } catch {}

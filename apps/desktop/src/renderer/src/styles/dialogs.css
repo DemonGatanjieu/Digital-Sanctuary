@@ -1,0 +1,165 @@
+/* ==========================================================================
+   Dialog Overlays & Modal Windows
+   ========================================================================== */
+
+.dialog-overlay {
+  position: fixed;
+  z-index: 1120;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--ds-bg-overlay);
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.2s var(--ds-ease-spring);
+}
+
+.dialog-surface {
+  padding: 28px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-xl);
+  color: var(--ds-text-body);
+  background: #ffffff;
+  box-shadow: var(--ds-shadow-xl);
+  animation: scaleIn 0.25s var(--ds-ease-spring);
+}
+
+.collection-editor-dialog {
+  width: min(540px, 92vw);
+}
+
+.collection-editor-dialog h2 {
+  margin: 4px 0 20px;
+  font-size: 22px;
+  font-weight: 750;
+}
+
+.collection-editor-dialog > label {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  margin-top: 14px;
+  color: var(--ds-text-body);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.collection-editor-dialog input,
+.collection-editor-dialog textarea {
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-text-heading);
+  background: var(--ds-bg-card-subtle);
+  font-size: 12.5px;
+  resize: vertical;
+  transition: all var(--ds-transition-fast);
+}
+
+.collection-editor-dialog input:focus,
+.collection-editor-dialog textarea:focus {
+  outline: none;
+  border-color: var(--ds-primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+}
+
+.collection-editor-dialog label small {
+  color: var(--ds-text-muted);
+  font-size: 9.5px;
+  font-weight: 400;
+}
+
+.collection-editor-note {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-text-secondary);
+  background: var(--ds-bg-card-subtle);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.collection-editor-dialog footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.collection-editor-dialog footer > div {
+  display: flex;
+  gap: 8px;
+}
+
+.collection-delete-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--ds-danger-border);
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-danger-text);
+  background: var(--ds-danger-light);
+  font-size: 10.5px;
+}
+
+.bookmark-dialog {
+  width: min(540px, 92vw);
+}
+
+.bookmark-dialog h2 {
+  margin: 4px 0 18px;
+  font-size: 22px;
+  font-weight: 750;
+}
+
+.bookmark-dialog-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: flex-end;
+  gap: 2px 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--ds-primary-border);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-primary-subtle);
+}
+
+.bookmark-dialog-summary strong {
+  grid-row: 1 / 3;
+  color: var(--ds-primary);
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.bookmark-dialog-summary span {
+  color: var(--ds-text-heading);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bookmark-dialog-summary small {
+  color: var(--ds-text-muted);
+  font-size: 10px;
+}
+
+.bookmark-dialog ul {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0;
+  padding-left: 20px;
+  color: var(--ds-text-secondary);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.bookmark-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}

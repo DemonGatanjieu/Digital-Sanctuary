@@ -16,7 +16,6 @@ import type {
   ArtworkSource,
   SavedCollectionView,
   SavedCollectionViewDraft,
-  SavedCollectionViewQuery,
   VisionAssessment,
   WorkAssetRecord,
   WorkListItem,
@@ -26,18 +25,12 @@ import type {
   WorkRecord,
   WorkType
 } from "@sanctuary/domain";
+import { SavedCollectionViewStore } from "./saved-collection-view-store.js";
 import {
   DEFAULT_ELEMENT_FILTER_SETTINGS,
   isElementFilterSetting
 } from "@sanctuary/domain";
 
-interface SavedCollectionViewRow {
-  id: string;
-  name: string;
-  query_json: string;
-  created_at: string;
-  updated_at: string;
-}
 interface ArtworkRow {
   id: string;
   path: string;
@@ -203,10 +196,12 @@ export interface AnalysisQueueItem {
 export class LibraryDatabase {
   readonly #database: DatabaseSync;
   readonly #databasePath: string;
+  readonly #savedCollectionViews: SavedCollectionViewStore;
 
   constructor(databasePath: string) {
     this.#databasePath = databasePath;
     this.#database = new DatabaseSync(databasePath);
+    this.#savedCollectionViews = new SavedCollectionViewStore(this.#database);
     this.#database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     this.#backupBeforeWorkMigration();
     this.#migrate();
@@ -848,79 +843,23 @@ export class LibraryDatabase {
   }
 
   listSavedCollectionViews(): SavedCollectionView[] {
-    const rows = this.#database
-      .prepare("SELECT id, name, query_json, created_at, updated_at FROM saved_collection_views ORDER BY created_at DESC")
-      .all() as unknown as SavedCollectionViewRow[];
-    return rows.map(mapSavedCollectionView);
+    return this.#savedCollectionViews.list();
   }
 
   getSavedCollectionView(id: string): SavedCollectionView | null {
-    const row = this.#database
-      .prepare("SELECT id, name, query_json, created_at, updated_at FROM saved_collection_views WHERE id = ?")
-      .get(id) as SavedCollectionViewRow | undefined;
-    return row ? mapSavedCollectionView(row) : null;
+    return this.#savedCollectionViews.get(id);
   }
 
   createSavedCollectionView(draft: SavedCollectionViewDraft): SavedCollectionView {
-    const name = draft.name.trim();
-    if (!name) throw new Error("Saved collection view name is required");
-    const existing = this.#database
-      .prepare("SELECT id FROM saved_collection_views WHERE lower(name) = lower(?)")
-      .get(name) as { id: string } | undefined;
-    if (existing) throw new Error(`Saved collection view "${name}" already exists`);
-    const id = randomUUID();
-    const now = new Date().toISOString();
-    const query: SavedCollectionViewQuery = {
-      matchMode: draft.matchMode === "all" ? "all" : "any",
-      includedCollectionIds: Array.isArray(draft.includedCollectionIds)
-        ? [...new Set(draft.includedCollectionIds.filter((item): item is string => typeof item === "string" && Boolean(item)))]
-        : [],
-      excludedCollectionIds: Array.isArray(draft.excludedCollectionIds)
-        ? [...new Set(draft.excludedCollectionIds.filter((item): item is string => typeof item === "string" && Boolean(item)))]
-        : []
-    };
-    this.#database
-      .prepare(
-        "INSERT INTO saved_collection_views (id, name, query_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
-      )
-      .run(id, name, JSON.stringify(query), now, now);
-    const saved = this.getSavedCollectionView(id);
-    if (!saved) throw new Error("Failed to create saved collection view");
-    return saved;
+    return this.#savedCollectionViews.create(draft);
   }
 
   updateSavedCollectionView(id: string, draft: SavedCollectionViewDraft): SavedCollectionView | null {
-    const name = draft.name.trim();
-    if (!name) throw new Error("Saved collection view name is required");
-    const existing = this.#database
-      .prepare("SELECT id FROM saved_collection_views WHERE lower(name) = lower(?) AND id != ?")
-      .get(name, id) as { id: string } | undefined;
-    if (existing) throw new Error(`Saved collection view "${name}" already exists`);
-    const current = this.getSavedCollectionView(id);
-    if (!current) return null;
-    const now = new Date().toISOString();
-    const query: SavedCollectionViewQuery = {
-      matchMode: draft.matchMode === "all" ? "all" : "any",
-      includedCollectionIds: Array.isArray(draft.includedCollectionIds)
-        ? [...new Set(draft.includedCollectionIds.filter((item): item is string => typeof item === "string" && Boolean(item)))]
-        : [],
-      excludedCollectionIds: Array.isArray(draft.excludedCollectionIds)
-        ? [...new Set(draft.excludedCollectionIds.filter((item): item is string => typeof item === "string" && Boolean(item)))]
-        : []
-    };
-    this.#database
-      .prepare(
-        "UPDATE saved_collection_views SET name = ?, query_json = ?, updated_at = ? WHERE id = ?"
-      )
-      .run(name, JSON.stringify(query), now, id);
-    return this.getSavedCollectionView(id);
+    return this.#savedCollectionViews.update(id, draft);
   }
 
   deleteSavedCollectionView(id: string): boolean {
-    const result = this.#database
-      .prepare("DELETE FROM saved_collection_views WHERE id = ?")
-      .run(id);
-    return Number(result.changes) > 0;
+    return this.#savedCollectionViews.delete(id);
   }
 
   addArtworkToCollection(artworkId: string, collectionId: string): void {
@@ -1421,23 +1360,9 @@ export class LibraryDatabase {
     `);
     this.#ensureWorkSchema();
     this.#migrateLegacyArtworksToWorks();
-    this.#ensureSavedCollectionViewSchema();
+    this.#savedCollectionViews.ensureSchema();
     this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)").run(new Date().toISOString());
     this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, ?)").run(new Date().toISOString());
-  }
-
-  #ensureSavedCollectionViewSchema(): void {
-    this.#database.exec(`
-      CREATE TABLE IF NOT EXISTS saved_collection_views (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        query_json TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_saved_collection_views_created_at
-        ON saved_collection_views(created_at DESC);
-    `);
   }
 
   #ensureCollectionColumns(): void {
@@ -1913,26 +1838,4 @@ function isWorkType(value: unknown): value is WorkType {
 function clampInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) return fallback;
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-function mapSavedCollectionView(row: SavedCollectionViewRow): SavedCollectionView {
-  let query: Partial<SavedCollectionViewQuery> = {};
-  try {
-    query = JSON.parse(row.query_json) as Partial<SavedCollectionViewQuery>;
-  } catch {
-    query = {};
-  }
-  return {
-    id: row.id,
-    name: row.name,
-    matchMode: query.matchMode === "all" ? "all" : "any",
-    includedCollectionIds: Array.isArray(query.includedCollectionIds)
-      ? query.includedCollectionIds.filter((id): id is string => typeof id === "string")
-      : [],
-    excludedCollectionIds: Array.isArray(query.excludedCollectionIds)
-      ? query.excludedCollectionIds.filter((id): id is string => typeof id === "string")
-      : [],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
-  };
 }

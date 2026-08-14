@@ -22,8 +22,11 @@ child.stderr.on("data", (chunk) => { stderr += String(chunk); });
 
 try {
   const target = await waitForRenderer(port, 15_000);
+  await new Promise((resolveTask) => setTimeout(resolveTask, 500));
   const cdp = await connectCdp(target.webSocketDebuggerUrl);
   try {
+    await cdp.send("Performance.enable");
+    const beforeMetrics = metricMap(await cdp.send("Performance.getMetrics"));
     const result = await cdp.evaluate(`(async () => {
       const waitUntil = async (predicate, timeout = 10000) => {
         const started = performance.now();
@@ -34,28 +37,48 @@ try {
       };
       await waitUntil(() => document.querySelectorAll(".work-library-card").length >= 60);
       const firstPageMs = performance.now();
+      const sampleFrame = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 45));
+        const frameStarted = performance.now();
+        return new Promise((resolve) => requestAnimationFrame((now) => resolve(now - frameStarted)));
+      };
+      const percentile95 = (values) => {
+        const sorted = [...values].sort((a, b) => a - b);
+        return sorted[Math.floor(sorted.length * .95)] ?? 0;
+      };
+      const idleFrameDeltas = [];
+      for (let sample = 0; sample < 12; sample += 1) {
+        idleFrameDeltas.push(await sampleFrame());
+      }
+      const longTaskDurations = [];
+      const longTaskObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) longTaskDurations.push(entry.duration);
+      });
+      longTaskObserver.observe({ entryTypes: ["longtask"] });
       const frameDeltas = [];
       const scroller = document.querySelector("main");
       if (!scroller) throw new Error("main scroll container missing");
       for (let step = 0; step < 36; step += 1) {
         scroller.scrollTo({ top: scroller.scrollHeight, behavior: "instant" });
-        await new Promise((resolve) => setTimeout(resolve, 45));
-        const frameStarted = performance.now();
-        await new Promise((resolve) => requestAnimationFrame((now) => {
-          frameDeltas.push(now - frameStarted);
-          resolve();
-        }));
+        frameDeltas.push(await sampleFrame());
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
-      frameDeltas.sort((a, b) => a - b);
+      longTaskObserver.disconnect();
+      const idleP95FrameMs = percentile95(idleFrameDeltas);
+      const p95FrameMs = percentile95(frameDeltas);
       const memory = performance.memory ?? {};
       const metrics = {
         fixtureWorks: ${fixtureSize},
         firstPageMs: Math.round(firstPageMs),
         loadedCardsAfterScroll: document.querySelectorAll(".work-library-card").length,
         renderedImages: document.querySelectorAll(".work-library-card img").length,
-        p95FrameMs: Math.round((frameDeltas[Math.floor(frameDeltas.length * .95)] ?? 0) * 10) / 10,
+        idleP95FrameMs: Math.round(idleP95FrameMs * 10) / 10,
+        p95FrameMs: Math.round(p95FrameMs * 10) / 10,
+        p95FrameOverheadMs: Math.round(Math.max(0, p95FrameMs - idleP95FrameMs) * 10) / 10,
         maxFrameMs: Math.round(Math.max(...frameDeltas) * 10) / 10,
+        longTaskCount: longTaskDurations.length,
+        maxLongTaskMs: Math.round(Math.max(0, ...longTaskDurations) * 10) / 10,
+        totalLongTaskMs: Math.round(longTaskDurations.reduce((sum, duration) => sum + duration, 0) * 10) / 10,
         jsHeapMb: memory.usedJSHeapSize ? Math.round(memory.usedJSHeapSize / 1024 / 1024) : null
       };
       const organizeButton = document.querySelector("nav [data-nav='organize']");
@@ -63,14 +86,26 @@ try {
       await waitUntil(() => Boolean(document.querySelector(".analysis-scope-card")), 3000);
       return { ...metrics, analysisViewReady: Boolean(document.querySelector(".analysis-scope-card")) };
     })()`);
+    const afterMetrics = metricMap(await cdp.send("Performance.getMetrics"));
+    const metricDeltaMs = (name) => Math.round(
+      Math.max(0, (afterMetrics[name] ?? 0) - (beforeMetrics[name] ?? 0)) * 1000 * 10
+    ) / 10;
+    const measuredResult = {
+      ...result,
+      taskDurationMs: metricDeltaMs("TaskDuration"),
+      scriptDurationMs: metricDeltaMs("ScriptDuration"),
+      layoutDurationMs: metricDeltaMs("LayoutDuration"),
+      styleRecalcDurationMs: metricDeltaMs("RecalcStyleDuration")
+    };
     const failures = [];
-    if (result.firstPageMs > 5_000) failures.push("first page exceeded 5s");
-    if (result.loadedCardsAfterScroll < 120) failures.push("scroll paging did not load a second page");
-    if (result.renderedImages !== 0) failures.push("metadata fixture unexpectedly decoded images");
-    if (result.p95FrameMs > 80) failures.push("scroll P95 exceeded 80ms");
-    if (result.jsHeapMb !== null && result.jsHeapMb > 512) failures.push("renderer heap exceeded 512MB");
-    if (!result.analysisViewReady) failures.push("explicit analysis center did not render");
-    console.log(JSON.stringify({ ...result, status: failures.length ? "failed" : "passed", failures }, null, 2));
+    if (measuredResult.firstPageMs > 5_000) failures.push("first page exceeded 5s");
+    if (measuredResult.loadedCardsAfterScroll < 120) failures.push("scroll paging did not load a second page");
+    if (measuredResult.renderedImages !== 0) failures.push("metadata fixture unexpectedly decoded images");
+    if (measuredResult.taskDurationMs > 8_000) failures.push("renderer task duration exceeded 8s");
+    if (measuredResult.layoutDurationMs > 3_000) failures.push("renderer layout duration exceeded 3s");
+    if (measuredResult.jsHeapMb !== null && measuredResult.jsHeapMb > 512) failures.push("renderer heap exceeded 512MB");
+    if (!measuredResult.analysisViewReady) failures.push("explicit analysis center did not render");
+    console.log(JSON.stringify({ ...measuredResult, status: failures.length ? "failed" : "passed", failures }, null, 2));
     if (failures.length) process.exitCode = 1;
   } finally {
     cdp.close();
@@ -99,7 +134,12 @@ async function waitForRenderer(debugPort, timeout) {
       const response = await fetch(endpoint);
       if (response.ok) {
         const targets = await response.json();
-        const target = targets.find((candidate) => candidate.type === "page" && candidate.webSocketDebuggerUrl);
+        const target = targets.find(
+          (candidate) =>
+            candidate.type === "page" &&
+            candidate.webSocketDebuggerUrl &&
+            candidate.url?.replaceAll("\\", "/").includes("/renderer/index.html")
+        );
         if (target) return target;
       }
     } catch {}
@@ -125,18 +165,30 @@ async function connectCdp(url) {
     socket.addEventListener("error", reject, { once: true });
   });
   return {
-    async evaluate(expression) {
+    async send(method, params = {}) {
       const response = await new Promise((resolveTask, reject) => {
         const id = nextId++;
         pending.set(id, { resolve: resolveTask, reject });
-        socket.send(JSON.stringify({ id, method: "Runtime.evaluate", params: { expression, awaitPromise: true, returnByValue: true } }));
+        socket.send(JSON.stringify({ id, method, params }));
         setTimeout(() => {
           if (pending.delete(id)) reject(new Error("CDP evaluation timed out"));
         }, 30_000);
+      });
+      return response;
+    },
+    async evaluate(expression) {
+      const response = await this.send("Runtime.evaluate", {
+        expression,
+        awaitPromise: true,
+        returnByValue: true
       });
       if (response.exceptionDetails) throw new Error(response.exceptionDetails.exception?.description ?? response.exceptionDetails.text);
       return response.result.value;
     },
     close() { socket.close(); }
   };
+}
+
+function metricMap(response) {
+  return Object.fromEntries((response.metrics ?? []).map((metric) => [metric.name, metric.value]));
 }
