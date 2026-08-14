@@ -14,6 +14,8 @@
 | **audit-phase-1-baseline-and-routing** | `0387dbf08de08c1ccb76e0b9d0847ae643480117` | 2026-08-14 | 阶段 1 基线与路由闭环：修复 11 个 TS 类型检查错误、新增 npm run verify 门禁、修通相册卡片直达详情页与返回路由、修复组合视图契约。 |
 | **v2-compass-fixed-north-needle** | `caf6065127a1ff8d99f69bbf453af39032efb38d` | 2026-08-14 | 罗盘交互物理心智模型修正：中心指针始终固定垂直指向 12 点钟（正北基准 Reticle），外圈符文随转动在指针下方旋转对齐。 |
 | **v2-compass-spring-physics-and-rule6** | `76a60c81edfeb770a43558d0e21a278f1b9293a5` | 2026-08-14 | 罗盘物理动效深度重构：引入最短路径物理弹簧柔和吸附（零角度突跳）、消除符文遮挡中心、在智能体规则库确立人类物理直觉铁律。 |
+| **v2-compass-revert-original-clean** | `bd23a0f179f0c6bc33a820a175c93706d75b9123` | 2026-08-14 | 罗盘状态完整回退到最早最简洁清爽的经典稳定版本。 |
+
 
 
 
