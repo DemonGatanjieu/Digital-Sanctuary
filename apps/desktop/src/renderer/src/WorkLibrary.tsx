@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type {
   AppearancePreferences,
   CollectionRecord,
+  VisionEvaluationResult,
   WorkListItem,
   WorkDeletionPreview,
   WorkQuery,
@@ -13,6 +14,7 @@ import { DialogOverlay } from "./DialogOverlay";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
 import { InteractiveCompassDial } from "./InteractiveCompassDial";
+import { VisionRadarChart } from "./VisionRadarChart";
 
 
 export function WorkLibrary({
@@ -565,6 +567,8 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
   const [isPanning, setIsPanning] = useState(false);
   const [hudVisible, setHudVisible] = useState(true);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [showRadar, setShowRadar] = useState(false);
+  const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
 
   const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const hudTimer = useRef<number | null>(null);
@@ -575,6 +579,9 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
     setPan({ x: 0, y: 0 });
     setImageLoaded(false);
     setHudVisible(true);
+    if (window.sanctuary?.listVisionEvaluationsForWork) {
+      window.sanctuary.listVisionEvaluationsForWork(work.id).then(setEvaluations).catch(() => setEvaluations([]));
+    }
   }, [pageIndex, work.id]);
 
   useEffect(() => {
@@ -620,33 +627,25 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
   }, [onClose, resetHudTimer, work.assets.length]);
 
   const handleWheel = (e: React.WheelEvent) => {
-    resetHudTimer();
     e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.15 : -0.15;
-    setZoom((current) => {
-      const nextZoom = Math.min(5, Math.max(0.4, current + delta));
-      if (nextZoom <= 1) setPan({ x: 0, y: 0 });
-      return Number(nextZoom.toFixed(2));
-    });
+    resetHudTimer();
+    const delta = e.deltaY < 0 ? 0.2 : -0.2;
+    setZoom((current) => Math.max(0.5, Math.min(5, Number((current + delta).toFixed(2)))));
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    resetHudTimer();
-    if (zoom > 1) {
-      setIsPanning(true);
-      panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    }
+    if (zoom <= 1) return;
+    setIsPanning(true);
+    panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    resetHudTimer();
-    if (isPanning && zoom > 1) {
-      setPan({
-        x: e.clientX - panStart.current.x,
-        y: e.clientY - panStart.current.y
-      });
-    }
+    if (!isPanning) return;
+    setPan({
+      x: e.clientX - panStart.current.x,
+      y: e.clientY - panStart.current.y
+    });
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -688,9 +687,38 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
           <button type="button" className={`cinema-btn-fit ${zoom === 1 ? "active" : ""}`} title="自适应 / 2x 缩放切换" onClick={handleDoubleClick}>
             {zoom === 1 ? "1:1 原图" : "自适应全貌"}
           </button>
+          <button
+            type="button"
+            className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
+            title="切换 AI 视觉雷达图画像"
+            onClick={() => setShowRadar((v) => !v)}
+          >
+            ✦ 雷达画像
+          </button>
           <button type="button" className="cinema-btn-close" aria-label="关闭大图" title="关闭大图 (Esc)" onClick={onClose}>✕</button>
         </div>
       </header>
+
+      {showRadar && (
+        <aside className="cinema-radar-drawer" role="complementary" aria-label="画作多维视觉雷达图">
+          <div className="radar-drawer-header">
+            <h3>多维视觉画像</h3>
+            <button type="button" className="radar-drawer-close" onClick={() => setShowRadar(false)} aria-label="关闭雷达图">✕</button>
+          </div>
+          {evaluations.length === 0 ? (
+            <div className="radar-drawer-empty">
+              <p>暂无多维视觉画像数据</p>
+              <p className="hint">可在画廊或模型整理中对该作品执行深度视觉评估</p>
+            </div>
+          ) : (
+            <div className="radar-drawer-content">
+              {evaluations.map((ev) => (
+                <VisionRadarChart key={ev.id} evaluation={ev} size={260} />
+              ))}
+            </div>
+          )}
+        </aside>
+      )}
 
       <div
         className={`cinema-stage-viewport ${isPanning ? "panning" : ""}`}

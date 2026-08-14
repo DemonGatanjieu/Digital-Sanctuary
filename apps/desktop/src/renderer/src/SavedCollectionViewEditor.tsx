@@ -185,7 +185,7 @@ export function SavedCollectionViewEditor({
         <header className="dialog-header">
           <div>
             <p className="eyebrow">SAVED COLLECTION VIEW</p>
-            <h2 id={titleId}>{editingView ? "编辑分类组合" : "新建分类组合"}</h2>
+            <h2 id={titleId}>{editingView ? "编辑相册组合" : "新建相册组合"}</h2>
           </div>
           <button type="button" className="dialog-close" onClick={onClose} aria-label="关闭">
             ✕
@@ -197,7 +197,7 @@ export function SavedCollectionViewEditor({
 
           {(missingIncludedCount > 0 || missingExcludedCount > 0) && (
             <div className="app-notice app-notice-warning">
-              此组合包含 {missingIncludedCount + missingExcludedCount} 个已被删除的分类，已自动忽略其筛选作用。
+              此组合包含 {missingIncludedCount + missingExcludedCount} 个已被删除的相册，已自动忽略其筛选作用。
             </div>
           )}
 
@@ -233,14 +233,14 @@ export function SavedCollectionViewEditor({
             </div>
             <p className="saved-view-mode-desc">
               {matchMode === "all"
-                ? "作品必须同时包含所有选定的“包含”分类，且不含任何“排除”分类。"
-                : "作品包含任意一个“包含”分类即可（或留空代表全库），且不含任何“排除”分类。"}
+                ? "作品必须同时包含所有选定的“包含”相册，且不含任何“排除”相册。"
+                : "作品包含任意一个“包含”相册即可（或留空代表全库），且不含任何“排除”相册。"}
             </p>
           </div>
 
           <div className="saved-view-form-group">
             <div className="saved-view-collections-header">
-              <label>选择分类 ({collections.length})</label>
+              <label>选择相册 ({collections.length})</label>
               {(includedIds.size > 0 || excludedIds.size > 0) && (
                 <button type="button" className="btn-link" onClick={clearAllSelections}>
                   清除全部选择
@@ -250,7 +250,7 @@ export function SavedCollectionViewEditor({
 
             <div className="saved-view-collections-list">
               {collections.length === 0 ? (
-                <div className="empty-hint">当前还没有创建任何分类。</div>
+                <div className="empty-hint">当前还没有创建任何相册。</div>
               ) : (
                 collections.map((col) => {
                   const isInc = includedIds.has(col.id);

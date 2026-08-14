@@ -685,6 +685,14 @@ try {
     })()`);
   }, "W3", "default");
 
+  await auditScenario("07_lightbox_radar_open", async () => {
+    await cdp.evaluate(`(() => {
+      const radarBtn = Array.from(document.querySelectorAll('.cinema-btn-fit, button')).find(el => el.textContent.includes('雷达'));
+      radarBtn?.click();
+    })()`);
+    await new Promise((r) => setTimeout(r, 600));
+  }, "W3", "default");
+
   // Close lightbox
   await cdp.evaluate(`(() => {
     const closeBtn = document.querySelector('.cinema-btn-close');

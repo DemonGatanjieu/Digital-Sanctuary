@@ -28,3 +28,11 @@
   .address-bar small { display: none; }
   .address-bar { grid-template-columns: auto 1fr; }
 }
+
+@media (max-width: 980px) {
+  .app-shell { grid-template-columns: 190px 1fr; }
+  main { padding: 20px 20px 40px; }
+  .work-ambient-hero { grid-template-columns: minmax(0, 1fr) 150px; }
+  .topbar { gap: 12px; }
+  .header-actions { gap: 6px; }
+}

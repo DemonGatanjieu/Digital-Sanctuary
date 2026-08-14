@@ -42,8 +42,8 @@ export function CollectionEditor({
           if (name.trim()) void onSave({ name: name.trim(), description: description.trim() });
         }}
       >
-        <p className="eyebrow">{collection ? "EDIT COLLECTION" : "NEW COLLECTION"}</p>
-        <h2 id="collection-editor-title">{collection ? "编辑分类" : "新建分类"}</h2>
+        <p className="eyebrow">{collection ? "EDIT ALBUM" : "NEW ALBUM"}</p>
+        <h2 id="collection-editor-title">{collection ? "编辑相册" : "新建相册"}</h2>
         <label>
           <span>名称</span>
           <input ref={nameRef} value={name} maxLength={80} placeholder="例如：背景与氛围" onChange={(event) => setName(event.target.value)} />
@@ -51,19 +51,19 @@ export function CollectionEditor({
         </label>
         <label>
           <span>介绍</span>
-          <textarea value={description} maxLength={500} rows={4} placeholder="可选：记录这个分类收集什么样的作品" onChange={(event) => setDescription(event.target.value)} />
+          <textarea value={description} maxLength={500} rows={4} placeholder="可选：记录这部相册收集什么样的典藏作品或题记引言" onChange={(event) => setDescription(event.target.value)} />
           <small>{description.length} / 500</small>
         </label>
-        <div className="collection-editor-note">分类只保存组织关系；编辑或删除分类都不会删除图片文件。</div>
+        <div className="collection-editor-note">相册只保存组织关系与典藏索引；编辑或删除相册均不会删除本地图片文件。</div>
         {confirmDelete && (
           <div className="collection-delete-confirm">
-            <span>确认删除“{collection?.name}”分类？其中作品会保留在画廊。</span>
+            <span>确认删除“{collection?.name}”相册？其中作品会保留在画廊。</span>
             <Button variant="danger" size="small" disabled={saving} onClick={() => onDelete && void onDelete()}>确认删除</Button>
           </div>
         )}
         <footer>
           <div>
-            {onDelete && !confirmDelete && <Button variant="danger-soft" disabled={saving} onClick={() => setConfirmDelete(true)}>删除分类</Button>}
+            {onDelete && !confirmDelete && <Button variant="danger-soft" disabled={saving} onClick={() => setConfirmDelete(true)}>删除相册</Button>}
           </div>
           <div>
             <Button disabled={saving} onClick={onClose}>取消</Button>
