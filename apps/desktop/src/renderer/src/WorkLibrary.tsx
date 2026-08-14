@@ -291,9 +291,9 @@ export function WorkLibrary({
               onToggleSelection={(shiftKey) => toggleSelection(work.id, shiftKey)}
               onAssign={async (collectionId) => {
                 await onAssignCollection(work.id, collectionId);
-                const collectionName = collections.find((item) => item.id === collectionId)?.name ?? "分类";
+                const collectionName = collections.find((item) => item.id === collectionId)?.name ?? "相册";
                 setNotice({
-                  message: `已把《${work.title}》加入“${collectionName}”。`,
+                  message: `已把《${work.title}》加入相册“${collectionName}”。`,
                   undo: async () => {
                     await window.sanctuary.removeWorkFromCollection(work.id, collectionId);
                     await onLibraryChanged();
@@ -316,7 +316,7 @@ export function WorkLibrary({
                 await window.sanctuary.removeWorkFromCollection(work.id, activeCollection.id);
                 await onLibraryChanged();
                 setNotice({
-                  message: `已把《${work.title}》移出“${activeCollection.name}”。`,
+                  message: `已把《${work.title}》移出相册“${activeCollection.name}”。`,
                   undo: async () => {
                     await window.sanctuary.addWorkToCollection(work.id, activeCollection.id);
                     await onLibraryChanged();
@@ -345,6 +345,7 @@ export function WorkLibrary({
             onChange={async (event) => {
               const collectionId = event.target.value;
               if (!collectionId) return;
+              const albumName = collections.find((c) => c.id === collectionId)?.name ?? "相册";
               try {
                 await Promise.all([...selectedIds].map((workId) =>
                   window.sanctuary.addWorkToCollection(workId, collectionId)
@@ -352,7 +353,7 @@ export function WorkLibrary({
                 await onLibraryChanged();
                 const affectedIds = [...selectedIds];
                 setNotice({
-                  message: `已把 ${affectedIds.length} 个作品加入分类。`,
+                  message: `已把 ${affectedIds.length} 个作品批量加入相册《${albumName}》。`,
                   undo: async () => {
                     await Promise.all(affectedIds.map((workId) =>
                       window.sanctuary.removeWorkFromCollection(workId, collectionId)
@@ -365,7 +366,7 @@ export function WorkLibrary({
               }
             }}
           >
-            <option value="">加入分类…</option>
+            <option value="">加入相册…</option>
             {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
           </select>
           <button
@@ -504,7 +505,7 @@ function WorkCard({
           <time dateTime={work.savedAt}>{formatDate(work.savedAt)}</time>
           <select
             value=""
-            aria-label={`把《${work.title}》加入分类`}
+            aria-label={`把《${work.title}》加入相册`}
             disabled={assigning || collections.length === 0}
             onChange={async (event) => {
               const collectionId = event.target.value;
@@ -517,7 +518,7 @@ function WorkCard({
               }
             }}
           >
-            <option value="">{assigning ? "正在加入…" : "加入分类…"}</option>
+            <option value="">{assigning ? "正在加入…" : "加入相册…"}</option>
             {collections.map((collection) => (
               <option key={collection.id} value={collection.id}>
                 {work.collectionIds.includes(collection.id) ? "✓ " : ""}{collection.name}
@@ -525,7 +526,7 @@ function WorkCard({
             ))}
           </select>
         </div>
-        {onRemoveFromCollection && <button type="button" className="work-remove-from-collection" onClick={() => void onRemoveFromCollection()}>移出当前分类</button>}
+        {onRemoveFromCollection && <button type="button" className="work-remove-from-collection" onClick={() => void onRemoveFromCollection()}>移出当前相册</button>}
       </div>
     </article>
   );
@@ -559,59 +560,186 @@ function LazyWorkImage({ path }: { path: string }) {
 
 function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void }) {
   const [pageIndex, setPageIndex] = useState(0);
-  const [actualSize, setActualSize] = useState(false);
-  const closeRef = useRef<HTMLButtonElement>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [hudVisible, setHudVisible] = useState(true);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const hudTimer = useRef<number | null>(null);
   const page = work.assets[pageIndex];
 
   useEffect(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+    setImageLoaded(false);
+    setHudVisible(true);
+  }, [pageIndex, work.id]);
+
+  useEffect(() => {
     document.body.classList.add("lightbox-open");
-    closeRef.current?.focus({ preventScroll: true });
     return () => document.body.classList.remove("lightbox-open");
   }, []);
 
+  const resetHudTimer = useCallback(() => {
+    setHudVisible(true);
+    if (hudTimer.current) window.clearTimeout(hudTimer.current);
+    hudTimer.current = window.setTimeout(() => {
+      if (!isPanning) setHudVisible(false);
+    }, 3200);
+  }, [isPanning]);
+
+  useEffect(() => {
+    resetHudTimer();
+    return () => {
+      if (hudTimer.current) window.clearTimeout(hudTimer.current);
+    };
+  }, [resetHudTimer]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      resetHudTimer();
       if (event.key === "Escape") onClose();
-      if (event.key === "ArrowLeft") setPageIndex((value) => Math.max(0, value - 1));
-      if (event.key === "ArrowRight") setPageIndex((value) => Math.min(work.assets.length - 1, value + 1));
-      if (event.key === "0") setActualSize(false);
-      if (event.key === "1") setActualSize(true);
+      else if (event.key === "ArrowLeft") setPageIndex((value) => Math.max(0, value - 1));
+      else if (event.key === "ArrowRight") setPageIndex((value) => Math.min(work.assets.length - 1, value + 1));
+      else if (event.key === "0" || event.key === "r" || event.key === "R") {
+        setZoom(1);
+        setPan({ x: 0, y: 0 });
+      } else if (event.key === "1") {
+        setZoom((z) => (z === 1 ? 2 : 1));
+        setPan({ x: 0, y: 0 });
+      } else if (event.key === "+" || event.key === "=") {
+        setZoom((z) => Math.min(5, Number((z + 0.25).toFixed(2))));
+      } else if (event.key === "-" || event.key === "_") {
+        setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))));
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, work.assets.length]);
+  }, [onClose, resetHudTimer, work.assets.length]);
+
+  const handleWheel = (e: React.WheelEvent) => {
+    resetHudTimer();
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.15 : -0.15;
+    setZoom((current) => {
+      const nextZoom = Math.min(5, Math.max(0.4, current + delta));
+      if (nextZoom <= 1) setPan({ x: 0, y: 0 });
+      return Number(nextZoom.toFixed(2));
+    });
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    resetHudTimer();
+    if (zoom > 1) {
+      setIsPanning(true);
+      panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    resetHudTimer();
+    if (isPanning && zoom > 1) {
+      setPan({
+        x: e.clientX - panStart.current.x,
+        y: e.clientY - panStart.current.y
+      });
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (isPanning) {
+      setIsPanning(false);
+      (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+    }
+  };
+
+  const handleDoubleClick = () => {
+    setZoom((current) => {
+      setPan({ x: 0, y: 0 });
+      return current === 1 ? 2 : 1;
+    });
+  };
 
   if (!page) return null;
+
   return createPortal(
-    <div className="artwork-lightbox work-lightbox" role="dialog" aria-modal="true" aria-label={work.title}>
-      <header className="lightbox-toolbar">
-        <div className="lightbox-heading">
+    <div
+      className={`cinema-lightbox-theater ${hudVisible ? "hud-visible" : "hud-hidden"}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={work.title}
+      onMouseMove={resetHudTimer}
+    >
+      <header className="cinema-hud-island">
+        <div className="cinema-heading-group">
           <strong>{work.title}</strong>
-          <small>{work.artistName ?? "本地作品"} · {work.pageCount} 页</small>
+          <small>{work.artistName ?? "本地作品"} {work.assets.length > 1 ? `· 第 ${pageIndex + 1}/${work.assets.length} 页` : ""}</small>
         </div>
-        <div className="lightbox-actions">
-          <button type="button" className={actualSize ? "active" : ""} onClick={() => setActualSize((value) => !value)}>
-            {actualSize ? "适应窗口" : "1:1 原图"}
+
+        <div className="cinema-controls-group">
+          <div className="zoom-capsule">
+            <button type="button" title="缩小 (-)" onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}>-</button>
+            <span className="zoom-readout" title="重置缩放 (0)" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}>{Math.round(zoom * 100)}%</span>
+            <button type="button" title="放大 (+)" onClick={() => setZoom((z) => Math.min(5, Number((z + 0.25).toFixed(2))))}>+</button>
+          </div>
+          <button type="button" className={`cinema-btn-fit ${zoom === 1 ? "active" : ""}`} title="自适应 / 2x 缩放切换" onClick={handleDoubleClick}>
+            {zoom === 1 ? "1:1 原图" : "自适应全貌"}
           </button>
-          <button ref={closeRef} type="button" className="lightbox-close" aria-label="关闭大图" onClick={onClose}>×</button>
+          <button type="button" className="cinema-btn-close" aria-label="关闭大图" title="关闭大图 (Esc)" onClick={onClose}>✕</button>
         </div>
       </header>
-      <button className="lightbox-nav previous" type="button" aria-label="上一页" disabled={pageIndex === 0} onClick={() => setPageIndex((value) => value - 1)}>‹</button>
-      <div className={`lightbox-stage ${actualSize ? "actual-size" : "fit-window"}`} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-        <img src={workImageUrl(page.path)} alt="" draggable={false} onClick={() => setActualSize((value) => !value)} />
+
+      <div
+        className={`cinema-stage-viewport ${isPanning ? "panning" : ""}`}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onDoubleClick={handleDoubleClick}
+      >
+        <img
+          key={page.id}
+          src={workImageUrl(page.path)}
+          alt={work.title}
+          className={`cinema-image-entity ${imageLoaded ? "loaded" : "loading"}`}
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "zoom-in"
+          }}
+          decoding="async"
+          draggable={false}
+          onLoad={() => setImageLoaded(true)}
+        />
       </div>
-      <button className="lightbox-nav next" type="button" aria-label="下一页" disabled={pageIndex >= work.assets.length - 1} onClick={() => setPageIndex((value) => value + 1)}>›</button>
-      <footer className="lightbox-footer work-lightbox-footer">
-        <span>{pageIndex + 1} / {work.assets.length}</span>
-        <div className="work-page-strip">
-          {work.assets.map((asset, index) => (
-            <button key={asset.id} type="button" className={index === pageIndex ? "active" : ""} aria-label={`第 ${index + 1} 页`} onClick={() => setPageIndex(index)}>
-              <img src={workImageUrl(asset.thumbnailPath ?? asset.path)} alt="" loading="lazy" />
-            </button>
-          ))}
+
+      {pageIndex > 0 && (
+        <button type="button" className="cinema-nav-arrow prev" aria-label="上一页" onClick={() => setPageIndex((v) => v - 1)}>‹</button>
+      )}
+      {pageIndex < work.assets.length - 1 && (
+        <button type="button" className="cinema-nav-arrow next" aria-label="下一页" onClick={() => setPageIndex((v) => v + 1)}>›</button>
+      )}
+
+      {work.assets.length > 1 && (
+        <div className="cinema-bottom-filmstrip">
+          <div className="filmstrip-track">
+            {work.assets.map((asset, idx) => (
+              <button
+                key={asset.id}
+                type="button"
+                className={`filmstrip-thumb-btn ${idx === pageIndex ? "active" : ""}`}
+                title={`第 ${idx + 1} 页`}
+                onClick={() => setPageIndex(idx)}
+              >
+                <img src={workImageUrl(asset.thumbnailPath ?? asset.path)} alt="" loading="lazy" />
+                <span className="thumb-page-badge">{idx + 1}</span>
+              </button>
+            ))}
+          </div>
         </div>
-        <span>← → 翻页 · Esc 关闭</span>
-      </footer>
+      )}
     </div>,
     document.body
   );

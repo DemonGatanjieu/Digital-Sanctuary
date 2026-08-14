@@ -56,11 +56,11 @@ export function ArtworkCard({
         <strong title={artwork.fileName}>{artwork.fileName}</strong>
         <small title={detail}>{detail}</small>
         <select
-          aria-label="加入分类"
+          aria-label="加入相册"
           defaultValue=""
           onChange={(event) => onAssign(artwork.id, event.target.value)}
         >
-          <option value="">加入分类…</option>
+          <option value="">加入相册…</option>
           {collections.map((collection) => (
             <option key={collection.id} value={collection.id}>
               {artwork.collectionIds.includes(collection.id) ? "✓ " : ""}{collection.name}
