@@ -23,7 +23,12 @@ import type {
   WorkQuery,
   WorkQueryResult,
   WorkRecord,
-  WorkType
+  WorkType,
+  VisionEvaluationResult,
+  VisionEvaluationKind,
+  VisionEvaluationStatus,
+  VisionEvaluationScope,
+  VisionDimensionScore
 } from "@sanctuary/domain";
 import { SavedCollectionViewStore } from "./saved-collection-view-store.js";
 import {
@@ -183,6 +188,36 @@ interface AnalysisJobRow {
   started_at: string | null;
   completed_at: string | null;
 }
+
+interface VisionEvaluationResultRow {
+  id: string;
+  work_id: string;
+  asset_id: string;
+  scope: string;
+  kind: string;
+  suite_id: string;
+  suite_version: number;
+  status: string;
+  reason_code: string | null;
+  summary: string | null;
+  provider_id: string | null;
+  model_id: string | null;
+  evaluator_version: string;
+  prompt_version: string | null;
+  preprocessing_fingerprint: string;
+  asset_version: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface VisionDimensionScoreRow {
+  result_id: string;
+  dimension_key: string;
+  label: string;
+  score: number;
+  explanation: string | null;
+}
+
 
 export interface AnalysisQueueItem {
   id: string;
@@ -1058,15 +1093,25 @@ export class LibraryDatabase {
     const workIds = this.#workIdsForAnalysisScope(scope);
     if (workIds.length === 0) return { scope, workCount: 0, assetCount: 0, cachedAssetCount: 0 };
     const placeholders = workIds.map(() => "?").join(",");
-    const row = this.#database.prepare(
-      `SELECT COUNT(*) AS asset_count,
-              COALESCE(SUM(CASE WHEN ar.asset_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS cached_count
-         FROM assets a
-         LEFT JOIN analysis_asset_results ar
-           ON ar.asset_id = a.id AND ar.engine = ? AND ar.asset_updated_at = a.updated_at
-        WHERE a.work_id IN (${placeholders})
-          AND a.media_type = 'image' AND a.file_state = 'available'`
-    ).get(engine, ...workIds) as { asset_count: number; cached_count: number };
+    const isVisionSuite = engine.startsWith("technical_visual_") || engine.startsWith("fine_art_") || engine.startsWith("character_presence_");
+    const wherePage = isVisionSuite ? " AND a.page_index = 0" : "";
+    const query = isVisionSuite
+      ? `SELECT COUNT(*) AS asset_count,
+                COALESCE(SUM(CASE WHEN vr.asset_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS cached_count
+           FROM assets a
+           LEFT JOIN vision_evaluation_results vr
+             ON vr.asset_id = a.id AND vr.suite_id = ? AND vr.asset_version = a.updated_at AND vr.status = 'success'
+          WHERE a.work_id IN (${placeholders})
+            AND a.media_type = 'image' AND a.file_state = 'available'${wherePage}`
+      : `SELECT COUNT(*) AS asset_count,
+                COALESCE(SUM(CASE WHEN ar.asset_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS cached_count
+           FROM assets a
+           LEFT JOIN analysis_asset_results ar
+             ON ar.asset_id = a.id AND ar.engine = ? AND ar.asset_updated_at = a.updated_at
+          WHERE a.work_id IN (${placeholders})
+            AND a.media_type = 'image' AND a.file_state = 'available'${wherePage}`;
+
+    const row = this.#database.prepare(query).get(engine, ...workIds) as { asset_count: number; cached_count: number };
     return {
       scope,
       workCount: workIds.length,
@@ -1079,6 +1124,9 @@ export class LibraryDatabase {
     const workIds = this.#workIdsForAnalysisScope(scope);
     const jobId = randomUUID();
     const now = new Date().toISOString();
+    const isVisionSuite = engine.startsWith("technical_visual_") || engine.startsWith("fine_art_") || engine.startsWith("character_presence_");
+    const pageCondition = isVisionSuite ? " AND page_index = 0" : "";
+
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       this.#database.prepare(
@@ -1097,7 +1145,7 @@ export class LibraryDatabase {
       if (workIds.length > 0) {
         const placeholders = workIds.map(() => "?").join(",");
         const assets = this.#database.prepare(
-          `SELECT id FROM assets WHERE work_id IN (${placeholders}) AND media_type = 'image' AND file_state = 'available' ORDER BY work_id, page_index`
+          `SELECT id FROM assets WHERE work_id IN (${placeholders}) AND media_type = 'image' AND file_state = 'available'${pageCondition} ORDER BY work_id, page_index`
         ).all(...workIds) as unknown as Array<{ id: string }>;
         for (const asset of assets) insertItem.run(randomUUID(), jobId, now, now, asset.id);
       }
@@ -1214,6 +1262,174 @@ export class LibraryDatabase {
       "UPDATE analysis_jobs SET status = ?, error = ?, completed_at = ? WHERE id = ?"
     ).run(status, error?.slice(0, 500) ?? null, new Date().toISOString(), jobId);
   }
+
+  saveVisionEvaluationResult(result: VisionEvaluationResult): void {
+    const now = new Date().toISOString();
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      this.#database.prepare(
+        `INSERT INTO vision_evaluation_results
+           (id, work_id, asset_id, scope, kind, suite_id, suite_version,
+            status, reason_code, summary, provider_id, model_id,
+            evaluator_version, prompt_version, preprocessing_fingerprint,
+            asset_version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           status = excluded.status,
+           reason_code = excluded.reason_code,
+           summary = excluded.summary,
+           updated_at = excluded.updated_at`
+      ).run(
+        result.id,
+        result.workId,
+        result.assetId,
+        result.scope,
+        result.kind,
+        result.suiteId,
+        result.suiteVersion,
+        result.status,
+        result.reasonCode ?? null,
+        result.summary ?? null,
+        result.providerId ?? null,
+        result.modelId ?? null,
+        result.evaluatorVersion,
+        result.promptVersion ?? null,
+        result.preprocessingFingerprint,
+        result.assetVersion,
+        result.createdAt || now,
+        result.updatedAt || now
+      );
+
+      this.#database.prepare("DELETE FROM vision_dimension_scores WHERE result_id = ?").run(result.id);
+      const insertDim = this.#database.prepare(
+        `INSERT INTO vision_dimension_scores (result_id, dimension_key, label, score, explanation)
+         VALUES (?, ?, ?, ?, ?)`
+      );
+      for (const dim of result.dimensions) {
+        insertDim.run(result.id, dim.key, dim.label, dim.score, dim.explanation ?? null);
+      }
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  getVisionEvaluationResult(workId: string, suiteId: string, version = 1): VisionEvaluationResult | null {
+    const row = this.#database.prepare(
+      `SELECT * FROM vision_evaluation_results
+        WHERE work_id = ? AND suite_id = ? AND suite_version = ?
+        ORDER BY created_at DESC LIMIT 1`
+    ).get(workId, suiteId, version) as VisionEvaluationResultRow | undefined;
+    if (!row) return null;
+    return this.#mapVisionEvaluationResult(row);
+  }
+
+  getCachedVisionEvaluation(
+    assetId: string,
+    kind: VisionEvaluationKind,
+    suiteId: string,
+    suiteVersion: number,
+    preprocessingFingerprint: string,
+    assetVersion: string
+  ): VisionEvaluationResult | null {
+    const row = this.#database.prepare(
+      `SELECT * FROM vision_evaluation_results
+        WHERE asset_id = ? AND kind = ? AND suite_id = ? AND suite_version = ?
+          AND preprocessing_fingerprint = ? AND asset_version = ? AND status = 'success'
+        ORDER BY created_at DESC LIMIT 1`
+    ).get(assetId, kind, suiteId, suiteVersion, preprocessingFingerprint, assetVersion) as VisionEvaluationResultRow | undefined;
+    if (!row) return null;
+    return this.#mapVisionEvaluationResult(row);
+  }
+
+  listVisionEvaluationsForWork(workId: string): VisionEvaluationResult[] {
+    const rows = this.#database.prepare(
+      `SELECT * FROM vision_evaluation_results
+        WHERE work_id = ?
+        ORDER BY created_at DESC`
+    ).all(workId) as unknown as VisionEvaluationResultRow[];
+    return rows.map((row) => this.#mapVisionEvaluationResult(row));
+  }
+
+  queryWorksByVisionScore(dimensionKey: string, minScore: number, maxScore: number, suiteId?: string): string[] {
+    const query = suiteId
+      ? `SELECT DISTINCT r.work_id
+           FROM vision_dimension_scores s
+           JOIN vision_evaluation_results r ON r.id = s.result_id
+          WHERE s.dimension_key = ? AND s.score BETWEEN ? AND ? AND r.suite_id = ?`
+      : `SELECT DISTINCT r.work_id
+           FROM vision_dimension_scores s
+           JOIN vision_evaluation_results r ON r.id = s.result_id
+          WHERE s.dimension_key = ? AND s.score BETWEEN ? AND ?`;
+    const params = suiteId ? [dimensionKey, minScore, maxScore, suiteId] : [dimensionKey, minScore, maxScore];
+    const rows = this.#database.prepare(query).all(...params) as unknown as Array<{ work_id: string }>;
+    return rows.map((r) => r.work_id);
+  }
+
+  recordExternalVisionRequest(req: {
+    id: string;
+    resultId?: string | null;
+    providerId: string;
+    modelId: string;
+    status: string;
+    reasonCode?: string | null;
+    latencyMs?: number | null;
+    attemptCount?: number;
+  }): void {
+    this.#database.prepare(
+      `INSERT INTO external_vision_requests
+         (id, result_id, provider_id, model_id, status, reason_code, latency_ms, attempt_count, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      req.id,
+      req.resultId ?? null,
+      req.providerId,
+      req.modelId,
+      req.status,
+      req.reasonCode ?? null,
+      req.latencyMs ?? null,
+      req.attemptCount ?? 1,
+      new Date().toISOString()
+    );
+  }
+
+  #mapVisionEvaluationResult(row: VisionEvaluationResultRow): VisionEvaluationResult {
+    const dimRows = this.#database.prepare(
+      `SELECT dimension_key, label, score, explanation
+         FROM vision_dimension_scores
+        WHERE result_id = ?
+        ORDER BY rowid`
+    ).all(row.id) as unknown as VisionDimensionScoreRow[];
+
+    return {
+      id: row.id,
+      workId: row.work_id,
+      assetId: row.asset_id,
+      scope: row.scope as VisionEvaluationScope,
+      kind: row.kind as VisionEvaluationKind,
+      suiteId: row.suite_id,
+      suiteVersion: Number(row.suite_version),
+      status: row.status as VisionEvaluationStatus,
+      reasonCode: row.reason_code ?? undefined,
+      dimensions: dimRows.map((d) => ({
+        key: d.dimension_key,
+        label: d.label,
+        score: Number(d.score),
+        explanation: d.explanation ?? undefined
+      })),
+      summary: row.summary ?? undefined,
+      providerId: row.provider_id ?? undefined,
+      modelId: row.model_id ?? undefined,
+      evaluatorVersion: row.evaluator_version,
+      promptVersion: row.prompt_version ?? undefined,
+      preprocessingFingerprint: row.preprocessing_fingerprint,
+      assetVersion: row.asset_version,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
 
   #workIdsForAnalysisScope(scope: AnalysisScope): string[] {
     if (scope.type === "all") {
@@ -1363,6 +1579,7 @@ export class LibraryDatabase {
     this.#savedCollectionViews.ensureSchema();
     this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)").run(new Date().toISOString());
     this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, ?)").run(new Date().toISOString());
+    this.#ensureVisionSchema();
   }
 
   #ensureCollectionColumns(): void {
@@ -1537,6 +1754,58 @@ export class LibraryDatabase {
       CREATE INDEX IF NOT EXISTS idx_collection_works_work ON collection_works(work_id);
     `);
   }
+
+  #ensureVisionSchema(): void {
+    this.#database.exec(`
+      CREATE TABLE IF NOT EXISTS vision_evaluation_results (
+        id TEXT PRIMARY KEY,
+        work_id TEXT NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+        asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        scope TEXT NOT NULL CHECK (scope IN ('cover_asset')),
+        kind TEXT NOT NULL CHECK (kind IN ('local_technical_profile', 'external_fixed_suite', 'external_adaptive_highlights')),
+        suite_id TEXT NOT NULL,
+        suite_version INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        reason_code TEXT,
+        summary TEXT,
+        provider_id TEXT,
+        model_id TEXT,
+        evaluator_version TEXT NOT NULL,
+        prompt_version TEXT,
+        preprocessing_fingerprint TEXT NOT NULL,
+        asset_version TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS vision_dimension_scores (
+        result_id TEXT NOT NULL REFERENCES vision_evaluation_results(id) ON DELETE CASCADE,
+        dimension_key TEXT NOT NULL,
+        label TEXT NOT NULL,
+        score REAL NOT NULL CHECK(score >= 0 AND score <= 100),
+        explanation TEXT,
+        PRIMARY KEY (result_id, dimension_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS external_vision_requests (
+        id TEXT PRIMARY KEY,
+        result_id TEXT,
+        provider_id TEXT NOT NULL,
+        model_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        reason_code TEXT,
+        latency_ms INTEGER,
+        attempt_count INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_vision_eval_work ON vision_evaluation_results(work_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_vision_eval_asset_cache ON vision_evaluation_results(asset_id, kind, suite_id, suite_version, preprocessing_fingerprint, asset_version);
+      CREATE INDEX IF NOT EXISTS idx_vision_dim_query ON vision_dimension_scores(dimension_key, score);
+    `);
+    this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)").run(new Date().toISOString());
+  }
+
 
   #migrateLegacyArtworksToWorks(): void {
     const applied = this.#database

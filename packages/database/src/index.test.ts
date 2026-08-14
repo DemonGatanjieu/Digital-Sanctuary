@@ -7,13 +7,13 @@ import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
-  it("records schema version 3 and creates a portable SQLite backup", () => {
+  it("records schema version 4 and creates a portable SQLite backup", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-backup-"));
     const databasePath = join(directory, "library.db");
     const backupPath = join(directory, "library-backup.db");
     const database = new LibraryDatabase(databasePath);
     try {
-      expect(database.schemaVersion()).toBe(3);
+      expect(database.schemaVersion()).toBe(4);
       database.createCollection("Backup fixture");
       expect(database.backupTo(backupPath)).toBe(backupPath);
       const backup = new DatabaseSync(backupPath, { readOnly: true });
@@ -650,4 +650,121 @@ describe("LibraryDatabase", () => {
       database.close();
     }
   });
+
+  it("stores, caches, queries, and audits vision evaluations and technical profiles", () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-vision-db-"));
+    const img1 = join(directory, "img1.png");
+    const img2 = join(directory, "img2.png");
+    writeFileSync(img1, "content1");
+    writeFileSync(img2, "content2");
+
+    const database = new LibraryDatabase(":memory:");
+    try {
+      database.importArtwork(img1);
+      database.importArtwork(img2);
+      const [work1, work2] = database.listWorks();
+      const asset1 = work1!.assets[0]!;
+      const asset2 = work2!.assets[0]!;
+
+      // 1. Preview and Create analysis job for technical_visual_v1
+      const preview = database.previewAnalysisScope({ type: "all" }, "technical_visual_v1");
+      expect(preview.workCount).toBe(2);
+      expect(preview.assetCount).toBe(2);
+      expect(preview.cachedAssetCount).toBe(0);
+
+      const job = database.createAnalysisJob({ type: "all" }, "technical_visual_v1");
+      expect(job.totalItems).toBe(2);
+
+      // 2. Save evaluation results
+      database.saveVisionEvaluationResult({
+        id: "eval-1",
+        workId: work1!.id,
+        assetId: asset1.id,
+        scope: "cover_asset",
+        kind: "local_technical_profile",
+        suiteId: "technical_visual_v1",
+        suiteVersion: 1,
+        status: "success",
+        dimensions: [
+          { key: "colorfulness", label: "色彩丰富度", score: 85.5 },
+          { key: "tonal_range", label: "明暗跨度", score: 70.0 }
+        ],
+        evaluatorVersion: "0.1.0",
+        preprocessingFingerprint: "none",
+        assetVersion: asset1.updatedAt,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      });
+
+      database.saveVisionEvaluationResult({
+        id: "eval-2",
+        workId: work2!.id,
+        assetId: asset2.id,
+        scope: "cover_asset",
+        kind: "local_technical_profile",
+        suiteId: "technical_visual_v1",
+        suiteVersion: 1,
+        status: "success",
+        dimensions: [
+          { key: "colorfulness", label: "色彩丰富度", score: 35.0 },
+          { key: "tonal_range", label: "明暗跨度", score: 40.0 }
+        ],
+        evaluatorVersion: "0.1.0",
+        preprocessingFingerprint: "none",
+        assetVersion: asset2.updatedAt,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z"
+      });
+
+      // 3. Cache retrieval and hit
+      const cached = database.getCachedVisionEvaluation(
+        asset1.id,
+        "local_technical_profile",
+        "technical_visual_v1",
+        1,
+        "none",
+        asset1.updatedAt
+      );
+      expect(cached).not.toBeNull();
+      expect(cached?.dimensions).toHaveLength(2);
+      expect(cached?.dimensions[0]?.score).toBe(85.5);
+
+      // Cache miss on different asset version
+      const staleCheck = database.getCachedVisionEvaluation(
+        asset1.id,
+        "local_technical_profile",
+        "technical_visual_v1",
+        1,
+        "none",
+        "stale-timestamp"
+      );
+      expect(staleCheck).toBeNull();
+
+      // 4. Query works by vision dimension score
+      const vibrantWorks = database.queryWorksByVisionScore("colorfulness", 80, 100);
+      expect(vibrantWorks).toEqual([work1!.id]);
+
+      const allTonal = database.queryWorksByVisionScore("tonal_range", 30, 80);
+      expect(allTonal).toHaveLength(2);
+
+      // 5. List evaluations for work
+      const evals = database.listVisionEvaluationsForWork(work1!.id);
+      expect(evals).toHaveLength(1);
+      expect(evals[0]?.id).toBe("eval-1");
+
+      // 6. External request audit log
+      database.recordExternalVisionRequest({
+        id: "req-1",
+        resultId: "eval-1",
+        providerId: "openai",
+        modelId: "gpt-4o",
+        status: "success",
+        latencyMs: 340
+      });
+    } finally {
+      database.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });
+
