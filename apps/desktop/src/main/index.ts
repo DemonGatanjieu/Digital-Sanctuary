@@ -93,6 +93,8 @@ import { registerSavedCollectionViewIpc } from "./saved-collection-view-ipc.js";
 import { ThemeManagerService } from "./theme/theme-manager.js";
 import { ThemeStoreService } from "./theme/theme-store.js";
 import { registerThemeIpc } from "./theme/theme-ipc.js";
+import { VisionSecretStore } from "./vision/vision-secret-store.js";
+import { ExternalVisionService } from "./vision/external-vision-service.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -105,6 +107,7 @@ let database: LibraryDatabase | undefined;
 let vision: VisionClient | undefined;
 let themeManager: ThemeManagerService | undefined;
 let themeStore: ThemeStoreService | undefined;
+let externalVisionService: ExternalVisionService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let exploreView: WebContentsView | undefined;
 let exploreBounds: ExploreBounds | undefined;
@@ -204,6 +207,9 @@ if (!hasSingleInstanceLock) {
         ? { githubToken: process.env.SANCTUARY_THEME_GITHUB_TOKEN }
         : {}),
     });
+    externalVisionService = new ExternalVisionService(
+      new VisionSecretStore(join(userDataPath, "secrets"))
+    );
     database.invalidateAssessmentsExcept(vision.engine);
     database.pruneRemoteImageReviews();
     registerImageProtocol();
@@ -399,7 +405,7 @@ function registerImageProtocol(): void {
 
 function registerIpc(): void {
   if (!database || !vision || !themeManager || !themeStore) throw new Error("Application services are unavailable");
-  registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler);
+  registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService);
   registerSavedCollectionViewIpc(ipcMain, database);
   registerThemeIpc({
     ipc: ipcMain,

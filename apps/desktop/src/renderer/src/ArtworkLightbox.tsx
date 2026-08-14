@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-import type { ArtworkRecord } from "@sanctuary/domain";
+import type { ArtworkRecord, VisionEvaluationResult } from "@sanctuary/domain";
 import { artworkImageUrl } from "./ArtworkCard";
+import { VisionRadarChart } from "./VisionRadarChart";
 
 export function ArtworkLightbox({
   artwork,
@@ -25,6 +26,8 @@ export function ArtworkLightbox({
   const [imageLoaded, setImageLoaded] = useState<boolean>(false);
   const [imageFailed, setImageFailed] = useState<boolean>(false);
   const [hudVisible, setHudVisible] = useState<boolean>(true);
+  const [showRadar, setShowRadar] = useState<boolean>(false);
+  const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
 
   const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const hudTimer = useRef<number | null>(null);
@@ -38,6 +41,9 @@ export function ArtworkLightbox({
     setImageLoaded(false);
     setImageFailed(false);
     setHudVisible(true);
+    if (window.sanctuary?.listVisionEvaluationsForWork) {
+      window.sanctuary.listVisionEvaluationsForWork(artwork.id).then(setEvaluations).catch(() => setEvaluations([]));
+    }
   }, [artwork.id]);
 
   // Lock body scroll
@@ -197,6 +203,15 @@ export function ArtworkLightbox({
 
           <button
             type="button"
+            className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
+            title="查看多维视觉雷达图画像"
+            onClick={() => setShowRadar((prev) => !prev)}
+          >
+            📊 雷达画像 {evaluations.length > 0 ? `(${evaluations.length})` : ""}
+          </button>
+
+          <button
+            type="button"
             className="cinema-btn-close"
             aria-label="关闭全屏大图"
             title="关闭大图 (Esc)"
@@ -206,6 +221,36 @@ export function ArtworkLightbox({
           </button>
         </div>
       </header>
+
+      {/* Radar Overlay Drawer */}
+      {showRadar && (
+        <aside className="cinema-radar-drawer" aria-label="画作多维画像面板">
+          <div className="radar-drawer-header">
+            <h3>画作多维视觉雷达画像</h3>
+            <button
+              type="button"
+              className="radar-drawer-close"
+              onClick={() => setShowRadar(false)}
+            >
+              ✕
+            </button>
+          </div>
+          <div className="radar-drawer-content">
+            {evaluations.length === 0 ? (
+              <div className="radar-drawer-empty">
+                <p>该画作尚未生成视觉雷达评估。</p>
+                <p className="hint">前往“任务中心”选择技术画像或专业套件即可一键生成。</p>
+              </div>
+            ) : (
+              evaluations.map((ev) => (
+                <div key={ev.id} className="radar-drawer-item">
+                  <VisionRadarChart evaluation={ev} size={260} />
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
+      )}
 
       {/* Main Full-Aspect Canvas Stage */}
       <div

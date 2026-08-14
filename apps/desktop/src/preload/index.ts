@@ -23,7 +23,9 @@ import type {
   WorkQueryResult,
   WorkRecord,
   WorkDeletionPreview,
-  WorkDeletionResult
+  WorkDeletionResult,
+  ExternalVisionPublicConfig,
+  VisionEvaluationResult
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -114,12 +116,17 @@ export interface SanctuaryApi {
   onDownloadProgress(listener: (event: ThemeDownloadProgress) => void): () => void;
   onThemeChanged(listener: (event: ThemeChangedEvent) => void): () => void;
   testFilterImage(): Promise<RuleSandboxResult | null>;
-  previewAnalysis(scope: AnalysisScope): Promise<AnalysisScopePreview>;
-  createAnalysisJob(scope: AnalysisScope): Promise<AnalysisJob>;
+  previewAnalysis(scope: AnalysisScope, engine?: string): Promise<AnalysisScopePreview>;
+  createAnalysisJob(scope: AnalysisScope, engine?: string): Promise<AnalysisJob>;
   listAnalysisJobs(): Promise<AnalysisJob[]>;
   startAnalysisJob(jobId: string): Promise<AnalysisJob>;
   cancelAnalysisJob(jobId: string): Promise<AnalysisJob>;
   applyAnalysisSuggestions(jobId: string, suggestionIds: string[]): Promise<AnalysisApplyResult>;
+  getExternalVisionConfig(providerId: string): Promise<ExternalVisionPublicConfig>;
+  saveExternalVisionConfig(config: ExternalVisionPublicConfig, newApiKey?: string): Promise<ExternalVisionPublicConfig>;
+  deleteExternalVisionApiKey(providerId: string): Promise<void>;
+  testExternalVisionConnection(providerId: string): Promise<{ success: boolean; latencyMs: number; error?: string }>;
+  listVisionEvaluationsForWork(workId: string): Promise<VisionEvaluationResult[]>;
   showExplore(bounds: ExploreBounds): Promise<ExploreState>;
   setExploreBounds(bounds: ExploreBounds): Promise<boolean>;
   hideExplore(): Promise<void>;
@@ -236,10 +243,10 @@ const api: SanctuaryApi = {
   },
   testFilterImage: () =>
     ipcRenderer.invoke("filters:test-image") as Promise<RuleSandboxResult | null>,
-  previewAnalysis: (scope) =>
-    ipcRenderer.invoke("analysis:preview", scope) as Promise<AnalysisScopePreview>,
-  createAnalysisJob: (scope) =>
-    ipcRenderer.invoke("analysis:create", scope) as Promise<AnalysisJob>,
+  previewAnalysis: (scope, engine) =>
+    ipcRenderer.invoke("analysis:preview", scope, engine) as Promise<AnalysisScopePreview>,
+  createAnalysisJob: (scope, engine) =>
+    ipcRenderer.invoke("analysis:create", scope, engine) as Promise<AnalysisJob>,
   listAnalysisJobs: () =>
     ipcRenderer.invoke("analysis:list") as Promise<AnalysisJob[]>,
   startAnalysisJob: (jobId) =>
@@ -248,6 +255,16 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("analysis:cancel", jobId) as Promise<AnalysisJob>,
   applyAnalysisSuggestions: (jobId, suggestionIds) =>
     ipcRenderer.invoke("analysis:apply-suggestions", { jobId, suggestionIds }) as Promise<AnalysisApplyResult>,
+  getExternalVisionConfig: (providerId) =>
+    ipcRenderer.invoke("vision:get-config", providerId) as Promise<ExternalVisionPublicConfig>,
+  saveExternalVisionConfig: (config, newApiKey) =>
+    ipcRenderer.invoke("vision:save-config", config, newApiKey) as Promise<ExternalVisionPublicConfig>,
+  deleteExternalVisionApiKey: (providerId) =>
+    ipcRenderer.invoke("vision:delete-key", providerId) as Promise<void>,
+  testExternalVisionConnection: (providerId) =>
+    ipcRenderer.invoke("vision:test-connection", providerId) as Promise<{ success: boolean; latencyMs: number; error?: string }>,
+  listVisionEvaluationsForWork: (workId) =>
+    ipcRenderer.invoke("vision:list-evaluations", workId) as Promise<VisionEvaluationResult[]>,
   showExplore: (bounds) =>
     ipcRenderer.invoke("explore:show", bounds) as Promise<ExploreState>,
   setExploreBounds: (bounds) =>
