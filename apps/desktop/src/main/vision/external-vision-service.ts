@@ -8,6 +8,7 @@ import { VisionSecretStore } from "./vision-secret-store.js";
 import { type PreparedVisionImage } from "./vision-image-preprocessor.js";
 import type { ExternalVisionAdapter, ExternalVisionAdapterResult } from "./adapters/types.js";
 import { FakeVisionAdapter } from "./adapters/fake-adapter.js";
+import { OpenAiVisionAdapter } from "./adapters/openai-adapter.js";
 
 export class ExternalVisionService {
   readonly #secretStore: VisionSecretStore;
@@ -17,14 +18,27 @@ export class ExternalVisionService {
   constructor(secretStore: VisionSecretStore) {
     this.#secretStore = secretStore;
 
-    // Register fake adapter by default for offline/test environments
+    // Register adapters
     this.registerAdapter(new FakeVisionAdapter());
+    this.registerAdapter(new OpenAiVisionAdapter("openai", false));
+    this.registerAdapter(new OpenAiVisionAdapter("openai_compatible", true));
 
     // Default configuration for OpenAI
     this.#configs.set("openai", {
       id: "openai",
       provider: "openai",
       model: "gpt-4o-mini",
+      hasApiKey: false,
+      enabled: false,
+      maxConcurrency: 1,
+      maxLongEdge: 1568
+    });
+
+    this.#configs.set("openai_compatible", {
+      id: "openai_compatible",
+      provider: "openai_compatible",
+      model: "qwen-vl-plus",
+      endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       hasApiKey: false,
       enabled: false,
       maxConcurrency: 1,
