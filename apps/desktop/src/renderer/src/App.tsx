@@ -93,6 +93,15 @@ export function App() {
   }, [galleryMode, workQuery]);
 
   useEffect(() => {
+    // 动态主题热注入
+    window.sanctuary.getActiveTheme()
+      .then((active) => applyThemeCss(active.cssContent))
+      .catch(showError);
+
+    const unsubTheme = window.sanctuary.onThemeChanged((event) => {
+      applyThemeCss(event.cssContent);
+    });
+
     void Promise.all([
       window.sanctuary.listCollections(),
       window.sanctuary.listSavedCollectionViews(),
@@ -121,6 +130,10 @@ export function App() {
         }));
       })
       .catch(showError);
+
+    return () => {
+      unsubTheme();
+    };
   }, []);
 
   useEffect(() => {
@@ -503,6 +516,14 @@ export function App() {
   );
 }
 
+function applyThemeCss(cssContent: string): void {
+  const style =
+    document.querySelector<HTMLStyleElement>("#ds-dynamic-theme") ??
+    document.head.appendChild(document.createElement("style"));
+  style.id = "ds-dynamic-theme";
+  style.textContent = cssContent;
+}
+
 function waitForRendererIdle(): Promise<void> {
   return new Promise((resolveTask) => {
     if ("requestIdleCallback" in window) {
@@ -512,3 +533,4 @@ function waitForRendererIdle(): Promise<void> {
     globalThis.setTimeout(resolveTask, 80);
   });
 }
+

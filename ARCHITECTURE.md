@@ -47,7 +47,7 @@ flowchart LR
 - **分类组合与组合视图（Saved Collection Views）**：分类页支持将多个普通分类组合为保存视图；支持多选包含/排除、实时防抖匹配数量与封面预览、拼贴卡片及画廊顶部组合条件摘要栏。
 - **探索防线雷达 HUD**：将审查统计重构为彩色状态芯片组（放行绿 / 拦截红 / 广告黄 / 缓存紫 / 审查中蓝），提供清晰直观的实时吞吐监控。
 - **三档性能与显示策略**：持久化精致（Quality）、均衡（Balanced）、省电（Efficient）三档，支持 reduced motion 优雅退化；大图库渐进分页与 `content-visibility` 跳过屏幕外绘制，当前 10,000 作品基准首屏约 564 ms、JS 堆约 22 MB。
-- **动态主题引擎与 GitHub 社区主题商店（后端已完成）**：前端视觉 tokens 与个性化样式解耦为标准化主题包（`theme.json` + `theme.css`）。主进程支持内置/用户主题扫描、文件夹与受限 ZIP 原子安装、活跃主题持久化、安全 CSS 读取、删除回退，以及带本地缓存和限流熔断的 GitHub Contents API 商店；渲染层的动态注入和商店 UI 由后续前端任务完成。
+- **动态主题引擎与 GitHub 社区主题商店（全栈完成）**：前端视觉 tokens 与个性化样式解耦为标准化主题包（`theme.json` + `theme.css`）。主进程支持内置/用户主题扫描、文件夹与受限 ZIP 原子安装、活跃主题持久化、安全 CSS 读取、删除回退，以及带本地缓存和限流熔断的 GitHub Contents API 商店；渲染层实现 `<style id="ds-dynamic-theme">` 零刷新无缝热注入、官方预设主题（庇护所默认蔚蓝、绝区零 Hollow Zero 潮酷暗调）、`ThemeSettingsSection` 主题切换与社区商店瀑布流展示。
 
 ### 2.2 Electron 主进程
 
