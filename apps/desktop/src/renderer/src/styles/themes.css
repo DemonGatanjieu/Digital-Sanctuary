@@ -171,7 +171,7 @@
 .theme-version {
   font-size: 11px;
   color: var(--ds-text-muted);
-  font-family: monospace;
+  font-family: var(--ds-font-mono);
   background: var(--ds-bg-app);
   padding: 1px 6px;
   border-radius: var(--ds-radius-sm);

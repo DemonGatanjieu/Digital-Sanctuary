@@ -314,7 +314,7 @@
 .epigraph-mark-open,
 .epigraph-mark-close {
   font-size: 28px;
-  font-family: Georgia, serif;
+  font-family: var(--ds-font-editorial);
   color: var(--ds-primary);
   opacity: 0.5;
   line-height: 1;
@@ -395,7 +395,7 @@
 }
 
 .toc-number {
-  font-family: monospace;
+  font-family: var(--ds-font-mono);
   font-size: 14px;
   font-weight: 800;
   color: var(--ds-primary);
@@ -810,7 +810,7 @@
 .page-corner-num {
   font-size: 12px;
   font-weight: 800;
-  font-family: Georgia, serif;
+  font-family: var(--ds-font-editorial);
   color: var(--ds-text-muted);
 }
 
@@ -878,7 +878,7 @@
 .toc-item-badge {
   font-size: 11px;
   font-weight: 800;
-  font-family: monospace;
+  font-family: var(--ds-font-mono);
   color: var(--ds-primary);
   min-width: 28px;
 }
@@ -945,7 +945,7 @@
 .book-page-counter {
   font-size: 12px;
   font-weight: 750;
-  font-family: Georgia, serif;
+  font-family: var(--ds-font-editorial);
   color: var(--ds-text-secondary);
 }
 
@@ -1358,7 +1358,7 @@
 }
 
 .verso-epigraph-quote .quote-mark {
-  font-family: Georgia, serif;
+  font-family: var(--ds-font-editorial);
   font-size: 18px;
   color: var(--ds-primary);
   opacity: 0.6;
@@ -1404,7 +1404,7 @@
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #fff;
-  font-family: monospace;
+  font-family: var(--ds-font-mono);
   font-size: 10.5px;
   font-weight: 750;
   padding: 2px 6px;

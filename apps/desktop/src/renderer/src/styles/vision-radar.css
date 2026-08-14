@@ -50,8 +50,8 @@
 }
 
 .vision-radar-provider {
-  color: var(--text-muted, #94a3b8);
-  font-family: monospace;
+  color: var(--ds-text-muted, #94a3b8);
+  font-family: var(--ds-font-mono);
 }
 
 .vision-radar-svg {

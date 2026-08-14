@@ -84,8 +84,30 @@
   --ds-glass-bg: rgba(255, 255, 255, 0.72);
   --ds-glass-border: rgba(255, 255, 255, 0.85);
 
-  /* System Font Stack with Optimized Chinese & English Typography */
-  font-family: "PingFang SC", "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "Microsoft YaHei UI", sans-serif;
+  /* Semantic Typography Tokens (Four Slots & Refined Hierarchy) */
+  --ds-font-body: "Segoe UI Variable Text", "Microsoft YaHei UI", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  --ds-font-display: var(--ds-font-body);
+  --ds-font-editorial: "Songti SC", "SimSun", "Georgia", "Times New Roman", serif;
+  --ds-font-mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+
+  /* Typography Weight, Line-height, Tracking & Text Shadows */
+  --ds-weight-regular: 400;
+  --ds-weight-medium: 550;
+  --ds-weight-semibold: 650;
+  --ds-weight-bold: 750;
+
+  --ds-leading-tight: 1.2;
+  --ds-leading-body: 1.55;
+  --ds-leading-relaxed: 1.75;
+
+  --ds-tracking-tight: -0.015em;
+  --ds-tracking-normal: 0;
+  --ds-tracking-label: 0.06em;
+
+  --ds-text-shadow-on-image: 0 1px 3px rgba(0, 0, 0, 0.42);
+
+  /* Root typography assignment */
+  font-family: var(--ds-font-body);
   font-synthesis: none;
   color: var(--ds-text-body);
   background: var(--ds-bg-app);
