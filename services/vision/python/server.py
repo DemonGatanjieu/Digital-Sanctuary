@@ -4,14 +4,15 @@ import json
 import sys
 from typing import Any
 
-from engine import WdTaggerVisionEngine
+from technical_profile import compute_technical_profile
 
 
 PROTOCOL_VERSION = 1
 
 
 def main() -> None:
-    engine = WdTaggerVisionEngine()
+    wd_engine = None
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -21,15 +22,34 @@ def main() -> None:
             request = json.loads(line)
             validate_request(request)
             request_id = request["id"]
-            assessment = engine.classify(request["payload"]["imagePath"])
-            write_response(
-                {
-                    "version": PROTOCOL_VERSION,
-                    "id": request_id,
-                    "type": "classify-image-result",
-                    "payload": assessment,
-                }
-            )
+            req_type = request["type"]
+            image_path = request["payload"]["imagePath"]
+
+            if req_type == "classify-image":
+                if wd_engine is None:
+                    from engine import WdTaggerVisionEngine
+                    wd_engine = WdTaggerVisionEngine()
+                assessment = wd_engine.classify(image_path)
+                write_response(
+                    {
+                        "version": PROTOCOL_VERSION,
+                        "id": request_id,
+                        "type": "classify-image-result",
+                        "payload": assessment,
+                    }
+                )
+            elif req_type == "compute-technical-profile":
+                result = compute_technical_profile(image_path)
+                write_response(
+                    {
+                        "version": PROTOCOL_VERSION,
+                        "id": request_id,
+                        "type": "compute-technical-profile-result",
+                        "payload": result,
+                    }
+                )
+            else:
+                raise ValueError(f"Unknown vision request type: {req_type}")
         except Exception as error:
             write_response(
                 {
@@ -49,8 +69,9 @@ def validate_request(request: Any) -> None:
         raise ValueError("Vision request must be an object")
     if request.get("version") != PROTOCOL_VERSION:
         raise ValueError("Unsupported vision protocol version")
-    if request.get("type") != "classify-image":
-        raise ValueError("Unsupported vision request type")
+    req_type = request.get("type")
+    if req_type not in ("classify-image", "compute-technical-profile"):
+        raise ValueError(f"Unsupported vision request type: {req_type}")
     if not isinstance(request.get("id"), str):
         raise ValueError("Vision request id is required")
     payload = request.get("payload")

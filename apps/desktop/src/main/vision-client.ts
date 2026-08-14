@@ -5,11 +5,13 @@ import type { VisionAssessment } from "@sanctuary/domain";
 import {
   VISION_PROTOCOL_VERSION,
   isVisionResponse,
-  type ClassifyImageRequest
+  type ClassifyImageRequest,
+  type ComputeTechnicalProfileRequest,
+  type TechnicalProfilePayload
 } from "@sanctuary/protocol";
 
 interface PendingRequest {
-  resolve: (assessment: VisionAssessment) => void;
+  resolve: (payload: any) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -79,6 +81,25 @@ export class VisionClient {
     });
   }
 
+  computeTechnicalProfile(imagePath: string, timeoutMs = 10_000): Promise<TechnicalProfilePayload> {
+    const id = randomUUID();
+    const request: ComputeTechnicalProfileRequest = {
+      version: VISION_PROTOCOL_VERSION,
+      id,
+      type: "compute-technical-profile",
+      payload: { imagePath }
+    };
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.#pending.delete(id);
+        reject(new Error("Technical profile request timed out"));
+      }, timeoutMs);
+      this.#pending.set(id, { resolve, reject, timer });
+      this.#child.stdin.write(`${JSON.stringify(request)}\n`);
+    });
+  }
+
   close(): void {
     this.#available = false;
     this.#rejectAll(new Error("Vision client closed"));
@@ -95,10 +116,12 @@ export class VisionClient {
       this.#pending.delete(response.id);
       if (response.type === "error") {
         pending.reject(new Error(response.payload.message));
-      } else {
+      } else if (response.type === "classify-image-result") {
         if (response.payload.executionProvider) {
           this.executionProvider = response.payload.executionProvider;
         }
+        pending.resolve(response.payload);
+      } else if (response.type === "compute-technical-profile-result") {
         pending.resolve(response.payload);
       }
     } catch (error) {

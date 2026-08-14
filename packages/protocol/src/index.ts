@@ -1,4 +1,4 @@
-import type { VisionAssessment } from "@sanctuary/domain";
+import type { VisionAssessment, VisionDimensionScore } from "@sanctuary/domain";
 
 export const VISION_PROTOCOL_VERSION = 1 as const;
 
@@ -18,6 +18,33 @@ export interface ClassifyImageResponse {
   payload: VisionAssessment;
 }
 
+export interface TechnicalProfilePayload {
+  status: "success" | "unsupported" | "error";
+  suiteId: "technical_visual_v1";
+  suiteVersion: 1;
+  evaluatorVersion: string;
+  dimensions: VisionDimensionScore[];
+  elapsedMs: number;
+  reasonCode?: string;
+  error?: string;
+}
+
+export interface ComputeTechnicalProfileRequest {
+  version: typeof VISION_PROTOCOL_VERSION;
+  id: string;
+  type: "compute-technical-profile";
+  payload: {
+    imagePath: string;
+  };
+}
+
+export interface ComputeTechnicalProfileResponse {
+  version: typeof VISION_PROTOCOL_VERSION;
+  id: string;
+  type: "compute-technical-profile-result";
+  payload: TechnicalProfilePayload;
+}
+
 export interface VisionErrorResponse {
   version: typeof VISION_PROTOCOL_VERSION;
   id: string;
@@ -28,22 +55,32 @@ export interface VisionErrorResponse {
   };
 }
 
-export type VisionRequest = ClassifyImageRequest;
-export type VisionResponse = ClassifyImageResponse | VisionErrorResponse;
+export type VisionRequest =
+  | ClassifyImageRequest
+  | ComputeTechnicalProfileRequest;
+
+export type VisionResponse =
+  | ClassifyImageResponse
+  | ComputeTechnicalProfileResponse
+  | VisionErrorResponse;
 
 export function isVisionRequest(value: unknown): value is VisionRequest {
   if (!isRecord(value) || value.version !== VISION_PROTOCOL_VERSION) return false;
-  if (typeof value.id !== "string" || value.type !== "classify-image") return false;
+  if (typeof value.id !== "string") return false;
+  if (value.type !== "classify-image" && value.type !== "compute-technical-profile") return false;
   return isRecord(value.payload) && typeof value.payload.imagePath === "string";
 }
 
 export function isVisionResponse(value: unknown): value is VisionResponse {
   if (!isRecord(value) || value.version !== VISION_PROTOCOL_VERSION) return false;
   if (typeof value.id !== "string" || !isRecord(value.payload)) return false;
-  return value.type === "classify-image-result" || value.type === "error";
+  return (
+    value.type === "classify-image-result" ||
+    value.type === "compute-technical-profile-result" ||
+    value.type === "error"
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
-
