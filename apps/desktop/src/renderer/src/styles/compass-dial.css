@@ -71,13 +71,14 @@
 
 .cardinal-rune {
   position: absolute;
-  transform-origin: center 68px;
+  transform-origin: center center;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--ds-text-muted);
-  transition: color 0.2s ease, transform 0.2s ease, text-shadow 0.2s ease;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .cardinal-rune.active {

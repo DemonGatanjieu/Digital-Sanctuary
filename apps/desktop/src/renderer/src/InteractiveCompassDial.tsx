@@ -209,7 +209,7 @@ export function InteractiveCompassDial({
             key={sector.id}
             className={`cardinal-rune ${activeSectorId === sector.id ? "active" : ""}`}
             style={{
-              transform: `rotate(${sector.angle}deg) translateY(-68px)`
+              transform: `rotate(${sector.angle}deg) translateY(-56px)`
             }}
           >
             <span>{sector.symbol}</span>
