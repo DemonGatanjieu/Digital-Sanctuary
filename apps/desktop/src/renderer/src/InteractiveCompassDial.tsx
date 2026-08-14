@@ -45,6 +45,15 @@ function getDynamicDialColor(rotation: number): { color: string; glow: string; b
   return { color, glow, bgPlate, hue: roundedHue };
 }
 
+// Calculate the shortest continuous angular target for snap
+function getShortestSnapRotation(currentRotation: number, targetSectorAngle: number): number {
+  const ideal = -targetSectorAngle;
+  let diff = (ideal - currentRotation) % 360;
+  while (diff > 180) diff -= 360;
+  while (diff < -180) diff += 360;
+  return currentRotation + diff;
+}
+
 export function InteractiveCompassDial({
   mode = "hero",
   className = "",
@@ -57,6 +66,9 @@ export function InteractiveCompassDial({
   const [tilt, setTilt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Physics tracking state refs
+  const currentRotationRef = useRef<number>(0);
+  currentRotationRef.current = rotation;
+
   const dragStartCursorAngle = useRef<number>(0);
   const dragStartDialRotation = useRef<number>(0);
   const velocityHistory = useRef<Array<{ angle: number; time: number }>>([]);
@@ -97,9 +109,8 @@ export function InteractiveCompassDial({
     return degrees;
   }, []);
 
-  const identifySector = useCallback((currentRotation: number): SectorInfo => {
-    // When wheel is rotated by R, the sector at the 12 o'clock top is (-R) mod 360
-    const normalizedAtTop = ((-currentRotation % 360) + 360) % 360;
+  const identifySector = useCallback((currentRotationValue: number): SectorInfo => {
+    const normalizedAtTop = ((-currentRotationValue % 360) + 360) % 360;
     const fallback = SECTORS[0] ?? { id: "default", name: "蔚蓝晨曦", angle: 0, symbol: "N · 晨曦", baseColor: "#0284c7" };
     let closest: SectorInfo = fallback;
     let minDiff = 360;
@@ -114,33 +125,56 @@ export function InteractiveCompassDial({
     return closest;
   }, []);
 
-  // Smooth inertial momentum animation loop
-  const startMomentumLoop = useCallback(() => {
+  // Continuous smooth physical spring settling loop
+  const startSpringSettleLoop = useCallback((initialVelocity: number) => {
     if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
+
+    let v = initialVelocity;
+    let targetRotation: number | null = null;
 
     const step = () => {
       if (isInteracting.current) return;
 
-      velocity.current *= 0.955; // high-fidelity momentum damping
-      if (Math.abs(velocity.current) > 0.04) {
-        setRotation((prev) => {
-          const next = prev + velocity.current;
-          const currentSector = identifySector(next);
-          setActiveSectorId(currentSector.id);
-          return next;
-        });
+      const current = currentRotationRef.current;
+
+      // Phase 1: High speed momentum coast
+      if (Math.abs(v) > 0.3) {
+        v *= 0.94; // damping friction
+        const next = current + v;
+        setRotation(next);
+        const sector = identifySector(next);
+        setActiveSectorId(sector.id);
         animFrameId.current = requestAnimationFrame(step);
-      } else {
-        velocity.current = 0;
-        // Snap smoothly to nearest sector and trigger theme switch
-        setRotation((prev) => {
-          const currentSector = identifySector(prev);
-          void window.sanctuary.setActiveTheme(currentSector.id);
-          onThemeSwitch?.(currentSector.id);
-          return -currentSector.angle;
-        });
+        return;
       }
+
+      // Phase 2: Damped harmonic spring pull towards the nearest sector alignment
+      if (targetRotation === null) {
+        const nearestSector = identifySector(current);
+        targetRotation = getShortestSnapRotation(current, nearestSector.angle);
+      }
+
+      const distance = targetRotation - current;
+      const springForce = distance * 0.18; // spring stiffness
+      v = (v + springForce) * 0.78; // spring damping
+
+      if (Math.abs(distance) < 0.08 && Math.abs(v) < 0.08) {
+        // Settled completely
+        setRotation(targetRotation);
+        const finalSector = identifySector(targetRotation);
+        setActiveSectorId(finalSector.id);
+        void window.sanctuary.setActiveTheme(finalSector.id);
+        onThemeSwitch?.(finalSector.id);
+        return;
+      }
+
+      const next = current + v;
+      setRotation(next);
+      const sector = identifySector(next);
+      setActiveSectorId(sector.id);
+      animFrameId.current = requestAnimationFrame(step);
     };
+
     animFrameId.current = requestAnimationFrame(step);
   }, [identifySector, onThemeSwitch]);
 
@@ -164,7 +198,7 @@ export function InteractiveCompassDial({
       const rect = dialRef.current.getBoundingClientRect();
       const cx = (e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2);
       const cy = (e.clientY - (rect.top + rect.height / 2)) / (rect.height / 2);
-      setTilt({ x: -cy * 12, y: cx * 12 });
+      setTilt({ x: -cy * 10, y: cx * 10 });
     }
 
     if (!isDragging) return;
@@ -177,7 +211,7 @@ export function InteractiveCompassDial({
     history.push({ angle: currentCursorAngle, time: now });
     if (history.length > 5) history.shift();
 
-    // Shortest angular delta
+    // Shortest angular delta for direct 1:1 tracking
     let delta = currentCursorAngle - dragStartCursorAngle.current;
     while (delta < -180) delta += 360;
     while (delta > 180) delta -= 360;
@@ -197,7 +231,8 @@ export function InteractiveCompassDial({
     setIsDragging(false);
     (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
 
-    // Calculate instantaneous release velocity from history
+    // Calculate instantaneous release velocity
+    let releaseVelocity = 0;
     const history = velocityHistory.current;
     if (history.length >= 2) {
       const oldest = history[0];
@@ -207,12 +242,11 @@ export function InteractiveCompassDial({
         let angleDiff = newest.angle - oldest.angle;
         while (angleDiff < -180) angleDiff += 360;
         while (angleDiff > 180) angleDiff -= 360;
-        // Convert to degrees per frame (~16ms)
-        velocity.current = (angleDiff / timeSpan) * 16;
+        releaseVelocity = (angleDiff / timeSpan) * 16;
       }
     }
 
-    startMomentumLoop();
+    startSpringSettleLoop(releaseVelocity);
   };
 
   const handlePointerLeave = () => {
@@ -220,7 +254,7 @@ export function InteractiveCompassDial({
     if (isDragging) {
       isInteracting.current = false;
       setIsDragging(false);
-      startMomentumLoop();
+      startSpringSettleLoop(0);
     }
   };
 
@@ -252,7 +286,7 @@ export function InteractiveCompassDial({
         }}
       />
 
-      {/* Ring 1: Outer Rune & Degree Ticks (Rotates with user drag) */}
+      {/* Ring 1: Outer Rune & Degree Ticks (Rotates with user drag on perimeter track) */}
       <div
         className="astrolabe-ring outer-ring"
         style={{ transform: `rotate(${rotation}deg)` }}
@@ -267,7 +301,7 @@ export function InteractiveCompassDial({
               style={{
                 transform: `rotate(${sector.angle}deg) translateY(-54px)`,
                 borderColor: isActive ? dynamicColor.color : undefined,
-                boxShadow: isActive ? `0 0 12px ${dynamicColor.glow}` : undefined
+                boxShadow: isActive ? `0 0 14px ${dynamicColor.glow}` : undefined
               }}
             >
               <span style={{ color: isActive ? dynamicColor.color : undefined }}>
