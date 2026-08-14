@@ -20,6 +20,7 @@
 - P8：已完成。窗口状态、画廊读取 IPC、分析 IPC/串行执行器已拆成独立模块并有单测，探索/下载继续使用已分离的策略、解析和并发模块；此阶段建立 SQLite schema v2，设置页可创建一致性备份并有离线恢复手册。Windows NSIS 安装包包含 SVG 品牌图标、CPU WD Tagger、自包含 Python 运行时和模型；隔离安装、启动、导航可访问性状态、真实推理、卸载与清理均由 `npm.cmd run smoke:installer` 通过。
 - P9：已完成。UI/UX 现代化二次元极简设计系统重构：建立完整 Design Tokens 规范，落地影院级 Ambient Hero 氛围横幅、多页作品相纸堆叠（Stack Effect）视觉、悬浮操作胶囊、大图悬浮控制台与探索防线雷达 HUD 芯片组；10,000 作品基准在全新设计系统下平稳通过。
 - P10：已完成。分类组合与组合视图（Saved Collection Views）：数据库升级至版本 3，支持包含（AND / OR）、排除（NOT）复杂查询与实时防抖预览；支持组合卡片拼贴、临时查看、持久化保存与画廊顶部组合条件摘要栏；10 个组合查询与持久化验收场景全部通过。
+- P11：进行中（规划中）。动态主题引擎与 GitHub 社区主题商店：建立标准 ThemeManifest 与 CSS 注入架构，支持用户从 GitHub 社区仓库发现、下载与无缝热切换丰富视觉主题（如 Hollow Zero 绝区零风格、Cyber Deck 赛博风格）。详见 `docs/plans/TASK_THEME_SYSTEM_BACKEND_FOR_GPT.md`。
 
 ## P0：设计冻结与回归基线
 
