@@ -43,27 +43,42 @@
 
 ## 2. 核心数据结构与协议规范 (`packages/domain` & `packages/protocol`)
 
-### 2.1 多维雷达图属性评分规范 (`ArtworkRadarScore`)
+### 2.1 多套预设维度集与 AI 自决高光维度规范 (`ArtworkRadarEvaluation`)
+
+系统支持**多套预设评估模式**以及 **AI 模型自主提炼的高光维度体系**：
 
 ```typescript
-export interface ArtworkRadarScore {
-  /** 色彩丰富度 (0-100)：色相多样性、对比色调和度与饱和度动态范围 */
-  colorRichness: number;
-  /** 构图张力 (0-100)：黄金分割、透视景深、视线引导与主体平衡感 */
-  composition: number;
-  /** 细节刻画 (0-100)：线条精细度、笔触层次与微观纹理丰富度 */
-  detailFidelity: number;
-  /** 光影氛围 (0-100)：明暗对比、体积光/全局光照质感与环境氛围深度 */
-  lightAtmosphere: number;
-  /** 情感表现 (0-100)：角色神态张力、场景叙事性与视觉冲击力 */
-  expression: number;
-  /** 风格特异性 (0-100)：艺术辨识度、笔法个性与风格化程度 */
-  styleDistinctiveness: number;
+export type RadarPresetSuiteId = 
+  | "fine_art"               // 专业美术造诣 (色彩/构图/细节/光影/意境/辨识度)
+  | "character_allure"       // 角色魅力特化 (魅惑瑟瑟度/萌力值/气场压迫感/表情生动/服饰精细/动势张力)
+  | "scenery_atmosphere"     // 场景氛围沉浸 (宏大感/治愈感/孤独诗意/光感质感/奇幻张力/沉浸深度)
+  | "ai_adaptive_highlights" // AI 模型自决 (由大模型自主从全量属性库中挑选该作品得分最高的 5-6 项特质);
+
+export interface RadarDimensionItem {
+  /** 维度唯一 Key，如 "allure_sensuality", "moe_cuteness", "color_richness" */
+  key: string;
+  /** 维度中文显示名称，如 "魅惑度 (涩气值)", "萌力指数", "色彩绚丽度" */
+  label: string;
+  /** 维度图标或 Emoji，如 "💖", "🌸", "🎨" */
+  icon?: string;
+  /** 评分 (0-100)，标准化分值 */
+  score: number;
+  /** 一句话评述理由 (可选) */
+  comment?: string;
+}
+
+export interface ArtworkRadarEvaluation {
+  artworkId: string;
+  suiteId: RadarPresetSuiteId;
+  suiteName: string;
+  /** 维度评分列表 (5-8 个轴，构成多边形雷达图) */
+  dimensions: RadarDimensionItem[];
   /** 综合加权总评 (0-100) */
   overallScore: number;
+  /** AI 生成的一句话个性化总评 (如 "极致的逆光线条勾勒出极具诱惑力的人体张力与魅惑神态") */
+  summaryVerdict?: string;
   /** 评估方式："local" | "cloud_ai" | "hybrid" */
   evalMethod: "local" | "cloud_ai" | "hybrid";
-  /** 评估完成时间戳 */
   evaluatedAt: string;
 }
 ```
