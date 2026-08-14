@@ -26,6 +26,8 @@
 | **vision-phase-4-openai-adapter** | `403f418ae81b9aa8244657cb7f31e0559ee869f2` | 2026-08-15 | 实施 Phase 4：实现 OpenAI 原生与 OpenAI-compatible (Qwen/通义千问等) 视觉适配器，完成 401/429/400 安全过滤/Schema 校验等 Mock HTTP 契约测试。 |
 | **vision-phase-5-gemini-and-anthropic** | `ae75f784ceb1a6aad205694ca90479ec38554c31` | 2026-08-15 | 实施 Phase 5：实现 Gemini 1.5 与 Anthropic Claude 3.5 Sonnet 原生多模态视觉适配器，覆盖安全阻断/错误映射/Mock 契约测试。 |
 | **vision-phase-6-ui-and-radar** | `05e42f520fe22cc2cc9e1fdb2728575ce107ef5f` | 2026-08-15 | 实施 Phase 6：实现交互式 SVG 多维雷达图组件、设置页外部模型密钥与连通性测试面板、大图画作雷达图侧边抽屉与精准 IPC 调度。 |
+| **vision-phase-7-semantic-search-adr** | `5e686e5f84acac60eae835f24c1434d103bcc9db` | 2026-08-15 | 实施 Phase 7：建立多模态向量语义搜索架构任务书与 ADR 0006，完成视觉多维画像与语义向量搜索的架构解耦与演进定界。 |
+
 
 
 
