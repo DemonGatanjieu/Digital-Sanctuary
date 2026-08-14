@@ -1072,4 +1072,293 @@
   color: var(--ds-text-muted);
 }
 
+/* ==========================================================================
+   Full-Screen Game Artbook Theater (沉浸式全屏游戏画册剧场)
+   ========================================================================== */
+
+.album-fullscreen-theater {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: flex;
+  flex-direction: column;
+  background: #080c14;
+  overflow: hidden;
+  animation: theater-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes theater-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Ambient Blurred Art Backdrop */
+.theater-ambient-backdrop {
+  position: absolute;
+  inset: -60px;
+  background-size: cover;
+  background-position: center;
+  filter: blur(80px) brightness(0.22) saturate(1.4);
+  transform: scale(1.12);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.theater-ambient-overlay {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 45%, rgba(15, 23, 42, 0.45) 0%, rgba(6, 9, 16, 0.94) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Top Game HUD Header */
+.theater-hud-header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  background: rgba(11, 16, 28, 0.7);
+  backdrop-filter: blur(24px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+.theater-hud-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.theater-game-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--ds-text-heading);
+  padding: 6px 14px;
+  border-radius: var(--ds-radius-full);
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: all var(--ds-transition-fast);
+}
+
+.theater-game-back-btn:hover {
+  background: var(--ds-primary);
+  border-color: var(--ds-primary);
+  color: #fff;
+  box-shadow: 0 0 14px var(--ds-primary-glow);
+  transform: translateX(-2px);
+}
+
+.theater-game-back-btn .key-badge {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+
+.theater-album-title-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.theater-sub-tag {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: var(--ds-primary);
+}
+
+.theater-album-title {
+  font-size: 18px;
+  font-weight: 850;
+  color: #fff;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.theater-hud-center {
+  display: flex;
+  align-items: center;
+}
+
+.theater-hud-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.theater-action-pill {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--ds-text-heading);
+  padding: 6px 16px;
+  border-radius: var(--ds-radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--ds-transition-fast);
+}
+
+.theater-action-pill:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.theater-action-pill.primary {
+  background: var(--ds-gradient-primary);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 0 12px var(--ds-primary-glow);
+}
+
+.theater-action-pill.primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+/* Main Stage Canvas */
+.theater-stage-canvas {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 32px;
+  overflow: hidden;
+}
+
+.theater-stage-canvas .photobook-stage-deck {
+  margin: 0 auto;
+  max-width: 1280px;
+}
+
+.theater-stage-canvas .photobook-double-spread {
+  min-height: 600px;
+  max-height: calc(100vh - 180px);
+}
+
+.theater-empty-state {
+  text-align: center;
+  color: var(--ds-text-muted);
+  max-width: 480px;
+  padding: 40px;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(20px);
+  border-radius: var(--ds-radius-lg);
+  border: 1px solid var(--ds-border-glass);
+}
+
+.theater-empty-book-icon {
+  font-size: 56px;
+  margin-bottom: 12px;
+}
+
+.theater-empty-state h2 {
+  font-size: 22px;
+  color: var(--ds-text-heading);
+  margin-bottom: 8px;
+}
+
+.theater-toc-scroll-box,
+.theater-grid-scroll-box {
+  width: 100%;
+  max-width: 1280px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  padding: 10px 16px;
+}
+
+/* Epigraph Quote inside Verso Left Page */
+.verso-epigraph-quote {
+  position: relative;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 2.5px solid var(--ds-primary);
+  border-radius: 0 var(--ds-radius-sm) var(--ds-radius-sm) 0;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  display: flex;
+  gap: 4px;
+}
+
+.verso-epigraph-quote .quote-mark {
+  font-family: Georgia, serif;
+  font-size: 18px;
+  color: var(--ds-primary);
+  opacity: 0.6;
+  line-height: 1;
+}
+
+.verso-epigraph-quote p {
+  margin: 0;
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--ds-text-secondary);
+  line-height: 1.5;
+}
+
+/* Bottom Game Hotkey Legend Bar */
+.theater-hud-footer {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 32px;
+  background: rgba(11, 16, 28, 0.7);
+  backdrop-filter: blur(24px);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.game-key-prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.key-prompt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--ds-text-secondary);
+}
+
+.key-prompt kbd {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-family: monospace;
+  font-size: 10.5px;
+  font-weight: 750;
+  padding: 2px 6px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.theater-footer-stats {
+  font-size: 12px;
+  color: var(--ds-text-muted);
+}
+
+.theater-footer-stats strong {
+  color: var(--ds-primary);
+}
+
+
 

@@ -30,161 +30,173 @@ export function CollectionDetailPage({
   const [viewMode, setViewMode] = useState<"flip" | "grid" | "toc">("flip");
   const [isPickingWorks, setIsPickingWorks] = useState(false);
 
+  // Global ESC key listener to exit full-screen game artbook
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !isPickingWorks) {
+        e.preventDefault();
+        onBack();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPickingWorks, onBack]);
+
   return (
-    <section className="album-detail-page author-detail-page">
-      <div className="album-nav-bar">
-        <button className="author-back album-back-btn" onClick={onBack}>
-          ← 返回相册库
-        </button>
-        <div className="album-nav-right-actions">
+    <section className="album-fullscreen-theater" role="dialog" aria-modal="true" aria-label={`相册《${collection.name}》`}>
+      {/* Ambient Blurred Art Backdrop (Game-like Cinema Stage) */}
+      <div
+        className="theater-ambient-backdrop"
+        style={{ backgroundImage: coverUrl ? `url(${coverUrl})` : undefined }}
+      />
+      <div className="theater-ambient-overlay" />
+
+      {/* Top Game HUD Navigation Bar */}
+      <header className="theater-hud-header">
+        <div className="theater-hud-left">
+          <button className="theater-game-back-btn" onClick={onBack} title="退出相册返回书架 (ESC)">
+            <span className="key-badge">ESC</span>
+            <span>✕ 返回书架</span>
+          </button>
+          <div className="theater-album-title-block">
+            <span className="theater-sub-tag">DIGITAL SANCTUARY · MEMORIAL ALBUM</span>
+            <h1 className="theater-album-title">{collection.name}</h1>
+          </div>
+        </div>
+
+        <div className="theater-hud-center">
+          <SegmentedControl
+            compact
+            label="画册模式"
+            value={viewMode}
+            options={[
+              { value: "flip", label: "📖 翻页画册", title: "实体画册双页对开翻页质感" },
+              { value: "grid", label: "🖼️ 典藏网格", title: "全景网格速览" },
+              { value: "toc", label: "📑 篇目目录", title: "书籍篇目索引" }
+            ]}
+            onChange={(val) => setViewMode(val as "flip" | "grid" | "toc")}
+          />
+        </div>
+
+        <div className="theater-hud-right">
           {onFilterInGallery && (
-            <Button variant="ghost" onClick={onFilterInGallery} title="在画廊中筛选此相册全部画作">
-              在画廊中筛选查看
-            </Button>
+            <button className="theater-action-pill" onClick={onFilterInGallery} title="在画廊大网格中筛选此相册">
+              在画廊中筛选
+            </button>
           )}
-          <Button variant="primary" onClick={() => setIsPickingWorks(true)}>
-            + 从画廊添加作品
-          </Button>
-        </div>
-      </div>
-
-      {/* Artbook Hardcover Presentation & Epigraph Hero */}
-      <header className="album-hardcover-hero">
-        <div className="album-cover-column">
-          <div className="album-book-spine" />
-          <div className="album-cover-frame">
-            {coverUrl ? (
-              <img src={coverUrl} alt={collection.name} className="album-cover-img" />
-            ) : (
-              <div className="album-cover-empty">📖</div>
-            )}
-            <div className="album-cover-ribbon">ARTBOOK</div>
-          </div>
-        </div>
-
-        <div className="album-meta-column">
-          <p className="eyebrow">DIGITAL SANCTUARY · ARTBOOK ALBUM</p>
-          <h1 className="album-title">{collection.name}</h1>
-          <div className="album-stats-badge-row">
-            <span className="album-stat-chip">收录 {items.length} 部作品</span>
-            <span className="album-stat-chip">共 {items.length} 幅画作</span>
-          </div>
-
-          {/* Epigraph & Foreword (题记与卷首引言) */}
-          {collection.description ? (
-            <div className="album-epigraph-box">
-              <span className="epigraph-mark-open">“</span>
-              <p className="epigraph-text">{collection.description}</p>
-              <span className="epigraph-mark-close">”</span>
-            </div>
-          ) : (
-            <p className="album-no-desc">暂无卷首题记。可在相册编辑中添加您的专属引言与故事。</p>
-          )}
-
-          {/* View Mode Switcher (翻页书台 vs 画册网格 vs 目录索引) */}
-          <div className="album-view-switcher-row">
-            <SegmentedControl
-              compact
-              label="相册浏览模式"
-              value={viewMode}
-              options={[
-                { value: "flip", label: "📖 拟真翻页", title: "实体画册双页对开拟真翻页" },
-                { value: "grid", label: "🖼️ 画集网格", title: "瀑布流网格展示" },
-                { value: "toc", label: "📑 目录索引", title: "书籍章节目录排版" }
-              ]}
-              onChange={(val) => setViewMode(val as "flip" | "grid" | "toc")}
-            />
-          </div>
+          <button className="theater-action-pill primary" onClick={() => setIsPickingWorks(true)} title="从全库挑选作品收录入相册">
+            + 添加画作 ({items.length})
+          </button>
         </div>
       </header>
 
-      {items.length === 0 ? (
-        <div className="collection-detail-empty album-empty-state">
-          <span>📖</span>
-          <p>这本相册尚未收录任何作品。</p>
-          <small>您可以点击下方按钮直接从画廊挑选图片收录入册：</small>
-          <Button variant="primary" style={{ marginTop: 12 }} onClick={() => setIsPickingWorks(true)}>
-            + 立即挑选画廊作品
-          </Button>
-        </div>
-      ) : viewMode === "flip" ? (
-        /* Real Photobook Page-Flip Theater Spread View */
-        <PhotobookFlipSpread
-          collection={collection}
-          items={items}
-          onOpenArtwork={onOpenArtwork}
-          onSetCover={onSetCover}
-          onOpenPicker={() => setIsPickingWorks(true)}
-        />
-      ) : viewMode === "toc" ? (
-        /* Table of Contents Mode (画册目录索引模式) */
-        <div className="album-toc-container">
-          <div className="album-toc-header">
-            <span>INDEX / 索引编号</span>
-            <span>TITLE & ARTIST / 作品篇目</span>
-            <span>PREVIEW / 预览缩略图</span>
-            <span>ACTION / 选项</span>
+      {/* Main Theater Content Area */}
+      <main className="theater-stage-canvas">
+        {items.length === 0 ? (
+          <div className="theater-empty-state">
+            <div className="theater-empty-book-icon">📖</div>
+            <h2>《{collection.name}》尚未收录画作</h2>
+            <p>{collection.description || "暂无题记。您可以直接从画廊中挑选精美作品收录至本相册。"}</p>
+            <Button variant="primary" style={{ marginTop: 16 }} onClick={() => setIsPickingWorks(true)}>
+              + 立即从画廊挑选作品入册
+            </Button>
           </div>
-          <div className="album-toc-list">
-            {items.map((artwork, idx) => {
-              const numStr = String(idx + 1).padStart(2, "0");
-              const isCover = collection.coverArtworkId === artwork.id;
-              return (
-                <div
-                  key={artwork.id}
-                  className={`album-toc-row ${isCover ? "is-cover" : ""}`}
-                  onClick={() => onOpenArtwork(artwork.id)}
-                >
-                  <div className="toc-index-cell">
-                    <span className="toc-number">№ {numStr}</span>
-                    {isCover && <span className="toc-cover-tag">封面</span>}
-                  </div>
-
-                  <div className="toc-title-cell">
-                    <strong className="toc-title">{artwork.source?.title ?? artwork.fileName}</strong>
-                    <small className="toc-artist">
-                      by {artwork.source?.authorName ?? "本地画师"}
-                      {artwork.source?.pageIndex !== undefined ? ` · 第 ${artwork.source.pageIndex + 1} 页` : ""}
-                    </small>
-                  </div>
-
-                  <div className="toc-thumb-cell">
-                    <img src={artworkImageUrl(artwork)} alt="" loading="lazy" />
-                  </div>
-
-                  <div className="toc-action-cell" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      className={`toc-set-cover-btn ${isCover ? "active" : ""}`}
-                      onClick={() => onSetCover(artwork.id)}
-                      disabled={isCover}
+        ) : viewMode === "flip" ? (
+          /* 3D Real Photobook Double-Spread Flip Theater */
+          <PhotobookFlipSpread
+            collection={collection}
+            items={items}
+            onOpenArtwork={onOpenArtwork}
+            onSetCover={onSetCover}
+            onOpenPicker={() => setIsPickingWorks(true)}
+          />
+        ) : viewMode === "toc" ? (
+          /* Table of Contents Mode (画册目录索引模式) */
+          <div className="theater-toc-scroll-box">
+            <div className="album-toc-container">
+              <div className="album-toc-header">
+                <span>INDEX / 索引编号</span>
+                <span>TITLE & ARTIST / 作品篇目</span>
+                <span>PREVIEW / 预览缩略图</span>
+                <span>ACTION / 选项</span>
+              </div>
+              <div className="album-toc-list">
+                {items.map((artwork, idx) => {
+                  const numStr = String(idx + 1).padStart(2, "0");
+                  const isCover = collection.coverArtworkId === artwork.id;
+                  return (
+                    <div
+                      key={artwork.id}
+                      className={`album-toc-row ${isCover ? "is-cover" : ""}`}
+                      onClick={() => onOpenArtwork(artwork.id)}
                     >
-                      {isCover ? "当前封面" : "设为相册封面"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        /* Grid Mode (画册网格画廊模式) */
-        <div className="gallery-grid collection-detail-grid">
-          {items.map((artwork) => (
-            <div className="collection-artwork" key={artwork.id}>
-              <ArtworkCard artwork={artwork} collections={collections} onAssign={onAssign} onOpen={onOpenArtwork} />
-              <button
-                type="button"
-                className={`collection-cover-action ${collection.coverArtworkId === artwork.id ? "active" : ""}`}
-                onClick={() => onSetCover(artwork.id)}
-                disabled={collection.coverArtworkId === artwork.id}
-              >
-                {collection.coverArtworkId === artwork.id ? "当前封面" : "设为相册封面"}
-              </button>
+                      <div className="toc-index-cell">
+                        <span className="toc-number">№ {numStr}</span>
+                        {isCover && <span className="toc-cover-tag">封面</span>}
+                      </div>
+
+                      <div className="toc-title-cell">
+                        <strong className="toc-title">{artwork.source?.title ?? artwork.fileName}</strong>
+                        <small className="toc-artist">
+                          by {artwork.source?.authorName ?? "本地画师"}
+                          {artwork.source?.pageIndex !== undefined ? ` · 第 ${artwork.source.pageIndex + 1} 页` : ""}
+                        </small>
+                      </div>
+
+                      <div className="toc-thumb-cell">
+                        <img src={artworkImageUrl(artwork)} alt="" loading="lazy" />
+                      </div>
+
+                      <div className="toc-action-cell" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className={`toc-set-cover-btn ${isCover ? "active" : ""}`}
+                          onClick={() => onSetCover(artwork.id)}
+                          disabled={isCover}
+                        >
+                          {isCover ? "当前封面" : "设为相册封面"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          ))}
+          </div>
+        ) : (
+          /* Grid Mode (画册网格画廊模式) */
+          <div className="theater-grid-scroll-box">
+            <div className="gallery-grid collection-detail-grid">
+              {items.map((artwork) => (
+                <div className="collection-artwork" key={artwork.id}>
+                  <ArtworkCard artwork={artwork} collections={collections} onAssign={onAssign} onOpen={onOpenArtwork} />
+                  <button
+                    type="button"
+                    className={`collection-cover-action ${collection.coverArtworkId === artwork.id ? "active" : ""}`}
+                    onClick={() => onSetCover(artwork.id)}
+                    disabled={collection.coverArtworkId === artwork.id}
+                  >
+                    {collection.coverArtworkId === artwork.id ? "当前封面" : "设为相册封面"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Bottom Game Hotkey Legend Bar */}
+      <footer className="theater-hud-footer">
+        <div className="game-key-prompt-row">
+          <span className="key-prompt"><kbd>←</kbd> <kbd>A</kbd> 上一页</span>
+          <span className="key-prompt"><kbd>→</kbd> <kbd>D</kbd> <kbd>Space</kbd> 下一页</span>
+          <span className="key-prompt"><kbd>Click</kbd> 点击左右页翻页</span>
+          <span className="key-prompt"><kbd>ESC</kbd> 退出相册</span>
         </div>
-      )}
+        <div className="theater-footer-stats">
+          <span>共收录 <strong>{items.length}</strong> 幅典藏画作</span>
+        </div>
+      </footer>
 
       {/* Add Works from Library Modal Picker */}
       {isPickingWorks && (
@@ -265,7 +277,7 @@ function PhotobookFlipSpread({
 
   return (
     <div className="photobook-stage-deck">
-      {/* Wooden Desk / Easel Backdrop */}
+      {/* 3D Open Hardcover Double Spread */}
       <div className={`photobook-double-spread ${flipClass}`}>
         {/* Left Page (Verso): Table of Contents & Curated Index */}
         <section className="photobook-page page-verso" onClick={flipPrev} title="点击左页翻至上一张 (← / A)">
@@ -276,6 +288,15 @@ function PhotobookFlipSpread({
           </header>
 
           <div className="verso-content-scroll" onClick={(e) => e.stopPropagation()}>
+            {/* Album Epigraph Quote at Top of Left Page */}
+            {collection.description && (
+              <div className="verso-epigraph-quote">
+                <span className="quote-mark">“</span>
+                <p>{collection.description}</p>
+                <span className="quote-mark">”</span>
+              </div>
+            )}
+
             <div className="verso-heading">
               <h2 className="verso-artwork-title">{currentArtwork.source?.title ?? currentArtwork.fileName}</h2>
               <p className="verso-artwork-artist">
@@ -337,7 +358,7 @@ function PhotobookFlipSpread({
         >
           <div className="page-paper-texture" />
           <header className="page-header-art">
-            <span className="page-ribbon-tag">GALLERY PLATE</span>
+            <span className="page-ribbon-tag">GALLERY FINE ART PLATE</span>
             {isCover && <span className="page-cover-crown">★ 封面作品</span>}
           </header>
 
