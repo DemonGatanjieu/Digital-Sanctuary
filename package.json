@@ -26,7 +26,8 @@
     "smoke:installer": "node scripts/smoke-installer.mjs",
     "smoke:vision-bundle": "node scripts/smoke-vision-bundle.mjs",
     "typecheck": "npm run build:core && tsc -p apps/desktop/tsconfig.json --noEmit",
-    "test": "npm run build:core && vitest run && npm run test:python"
+    "test": "npm run build:core && vitest run && npm run test:python",
+    "verify": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "react": "19.2.8",

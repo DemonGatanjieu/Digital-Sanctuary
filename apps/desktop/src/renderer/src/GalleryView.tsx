@@ -179,6 +179,16 @@ export function GalleryView({
             onAssign={onAssignCollection}
             onOpenArtwork={setSelectedArtworkId}
             onSetCover={(artworkId) => onUpdateCollectionCover(selectedCollection.id, artworkId)}
+            onFilterInGallery={() => {
+              const {
+                collectionIds: _cids,
+                collectionMatchMode: _cmm,
+                excludedCollectionIds: _ecids,
+                ...restQuery
+              } = workQuery;
+              onWorkQueryChange({ ...restQuery, collectionId: selectedCollection.id, offset: 0 });
+              onModeChange("flat");
+            }}
           />
         ) : (
           <div className="collections-view-container">
@@ -235,11 +245,11 @@ export function GalleryView({
             <section className="normal-collections-section">
               <div className="section-header-row">
                 <div>
-                  <h3 className="section-title">全部普通分类 ({collections.length})</h3>
-                  <p className="section-subtext">用于归纳管理图片的实体分类</p>
+                  <h3 className="section-title">全部普通相册 ({collections.length})</h3>
+                  <p className="section-subtext">用于归纳管理图片的实体相册</p>
                 </div>
                 <Button onClick={onCreateCollection}>
-                  + 新建分类
+                  + 新建相册
                 </Button>
               </div>
 
@@ -247,8 +257,8 @@ export function GalleryView({
                 {collections.length === 0 && (
                   <div className="empty-state">
                     <p className="eyebrow">NO COLLECTIONS</p>
-                    <h2>暂无分类</h2>
-                    <p>点击上方“新建分类”来组织你的画廊</p>
+                    <h2>暂无相册</h2>
+                    <p>点击上方“新建相册”来组织你的画廊</p>
                   </div>
                 )}
                 {collections.map((collection) => (
@@ -256,7 +266,9 @@ export function GalleryView({
                     key={collection.id}
                     collection={collection}
                     artworks={artworks}
-                    onOpen={() => {
+                    onOpen={() => setSelectedCollectionId(collection.id)}
+                    onEdit={() => onEditCollection(collection)}
+                    onFilter={() => {
                       const {
                         collectionIds: _cids,
                         collectionMatchMode: _cmm,
@@ -266,7 +278,6 @@ export function GalleryView({
                       onWorkQueryChange({ ...restQuery, collectionId: collection.id, offset: 0 });
                       onModeChange("flat");
                     }}
-                    onEdit={() => onEditCollection(collection)}
                   />
                 ))}
               </div>

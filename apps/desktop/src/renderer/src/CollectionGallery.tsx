@@ -12,7 +12,8 @@ export function CollectionDetailPage({
   onBack,
   onAssign,
   onOpenArtwork,
-  onSetCover
+  onSetCover,
+  onFilterInGallery
 }: {
   collection: CollectionRecord;
   artworks: ArtworkRecord[];
@@ -21,6 +22,7 @@ export function CollectionDetailPage({
   onAssign: (artworkId: string, collectionId: string) => void;
   onOpenArtwork: (artworkId: string) => void;
   onSetCover: (artworkId: string) => void;
+  onFilterInGallery?: () => void;
 }) {
   const items = artworks.filter((artwork) => artwork.collectionIds.includes(collection.id));
   const coverArtwork = artworks.find((a) => a.id === collection.coverArtworkId) ?? items[0];
@@ -30,9 +32,16 @@ export function CollectionDetailPage({
 
   return (
     <section className="album-detail-page author-detail-page">
-      <button className="author-back album-back-btn" onClick={onBack}>
-        ← 返回相册库
-      </button>
+      <div className="album-nav-bar">
+        <button className="author-back album-back-btn" onClick={onBack}>
+          ← 返回相册库
+        </button>
+        {onFilterInGallery && (
+          <Button variant="ghost" onClick={onFilterInGallery} title="在画廊中筛选此相册全部画作">
+            在画廊中筛选查看
+          </Button>
+        )}
+      </div>
 
       {/* Artbook Hardcover Presentation & Epigraph Hero */}
       <header className="album-hardcover-hero">
@@ -123,7 +132,7 @@ export function CollectionDetailPage({
                     <strong className="toc-title">{artwork.source?.title ?? artwork.fileName}</strong>
                     <small className="toc-artist">
                       by {artwork.source?.authorName ?? "本地画师"}
-                      {artwork.source?.pageCount && artwork.source.pageCount > 1 ? ` · [共 ${artwork.source.pageCount} 页]` : ""}
+                      {artwork.source?.pageIndex !== undefined ? ` · 第 ${artwork.source.pageIndex + 1} 页` : ""}
                     </small>
                   </div>
 
@@ -313,12 +322,14 @@ export function CollectionCard({
   collection,
   artworks,
   onOpen,
-  onEdit
+  onEdit,
+  onFilter
 }: {
   collection: CollectionRecord;
   artworks: ArtworkRecord[];
   onOpen: () => void;
   onEdit: () => void;
+  onFilter?: () => void;
 }) {
   const coverArtwork = artworks.find((artwork) => artwork.id === collection.coverArtworkId)
     ?? artworks.find((artwork) => artwork.collectionIds.includes(collection.id));
@@ -327,17 +338,26 @@ export function CollectionCard({
 
   return (
     <article className="collection-card album-card-book" onClick={onOpen}>
-      <button
-        type="button"
-        className="collection-edit-button"
-        aria-label={`编辑相册 ${collection.name}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          onEdit();
-        }}
-      >
-        ···
-      </button>
+      <div className="collection-card-actions-top" onClick={(e) => e.stopPropagation()}>
+        {onFilter && (
+          <button
+            type="button"
+            className="collection-filter-button"
+            title="在画廊中筛选此相册"
+            onClick={onFilter}
+          >
+            筛选
+          </button>
+        )}
+        <button
+          type="button"
+          className="collection-edit-button"
+          aria-label={`编辑相册 ${collection.name}`}
+          onClick={onEdit}
+        >
+          ···
+        </button>
+      </div>
       <div className="collection-cover album-book-cover">
         <div className="album-card-spine" />
         {coverUrl ? (
@@ -385,13 +405,15 @@ export function SavedCollectionViewCard({
   collections,
   artworks,
   onOpen,
-  onEdit
+  onEdit,
+  onDelete
 }: {
   view: SavedCollectionView;
   collections: CollectionRecord[];
   artworks: ArtworkRecord[];
   onOpen: () => void;
   onEdit: () => void;
+  onDelete?: () => void;
 }) {
   const matchingArtworks = artworks.filter((artwork) => {
     const included =
@@ -408,17 +430,26 @@ export function SavedCollectionViewCard({
 
   return (
     <article className="collection-card saved-view-card" onClick={onOpen}>
-      <button
-        type="button"
-        className="collection-edit-button"
-        aria-label={`编辑相册组合 ${view.name}`}
-        onClick={(event) => {
-          event.stopPropagation();
-          onEdit();
-        }}
-      >
-        ···
-      </button>
+      <div className="collection-card-actions-top" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="collection-edit-button"
+          aria-label={`编辑相册组合 ${view.name}`}
+          onClick={onEdit}
+        >
+          编辑
+        </button>
+        {onDelete && (
+          <button
+            type="button"
+            className="collection-delete-button"
+            aria-label={`删除相册组合 ${view.name}`}
+            onClick={onDelete}
+          >
+            删除
+          </button>
+        )}
+      </div>
       <div className="saved-view-cover-grid">
         {previewArtworks.length > 0 ? (
           previewArtworks.map((artwork, idx) => (

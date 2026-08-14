@@ -99,7 +99,8 @@ export function InteractiveCompassDial({
 
   const identifySector = useCallback((currentAngle: number): SectorInfo => {
     const normalized = ((currentAngle % 360) + 360) % 360;
-    let closest = SECTORS[0];
+    const fallback = SECTORS[0] ?? { id: "default", name: "蔚蓝晨曦", angle: 0, symbol: "N · 晨曦", baseColor: "#0284c7" };
+    let closest: SectorInfo = fallback;
     let minDiff = 360;
     for (const sector of SECTORS) {
       let diff = Math.abs(normalized - sector.angle);
@@ -200,12 +201,14 @@ export function InteractiveCompassDial({
     if (history.length >= 2) {
       const oldest = history[0];
       const newest = history[history.length - 1];
-      const timeSpan = Math.max(1, newest.time - oldest.time);
-      let angleDiff = newest.angle - oldest.angle;
-      while (angleDiff < -180) angleDiff += 360;
-      while (angleDiff > 180) angleDiff -= 360;
-      // Convert to degrees per frame (~16ms)
-      velocity.current = (angleDiff / timeSpan) * 16;
+      if (oldest && newest) {
+        const timeSpan = Math.max(1, newest.time - oldest.time);
+        let angleDiff = newest.angle - oldest.angle;
+        while (angleDiff < -180) angleDiff += 360;
+        while (angleDiff > 180) angleDiff -= 360;
+        // Convert to degrees per frame (~16ms)
+        velocity.current = (angleDiff / timeSpan) * 16;
+      }
     }
 
     startMomentumLoop();
@@ -220,7 +223,8 @@ export function InteractiveCompassDial({
     }
   };
 
-  const activeSector = SECTORS.find((s) => s.id === activeSectorId) ?? SECTORS[0];
+  const fallbackSector: SectorInfo = { id: "default", name: "蔚蓝晨曦", angle: 0, symbol: "N · 晨曦", baseColor: "#0284c7" };
+  const activeSector = SECTORS.find((s) => s.id === activeSectorId) ?? SECTORS[0] ?? fallbackSector;
   const dynamicColor = getDynamicDialColor(rotation);
 
   return (
