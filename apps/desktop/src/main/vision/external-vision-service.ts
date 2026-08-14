@@ -9,6 +9,8 @@ import { type PreparedVisionImage } from "./vision-image-preprocessor.js";
 import type { ExternalVisionAdapter, ExternalVisionAdapterResult } from "./adapters/types.js";
 import { FakeVisionAdapter } from "./adapters/fake-adapter.js";
 import { OpenAiVisionAdapter } from "./adapters/openai-adapter.js";
+import { GeminiVisionAdapter } from "./adapters/gemini-adapter.js";
+import { AnthropicVisionAdapter } from "./adapters/anthropic-adapter.js";
 
 export class ExternalVisionService {
   readonly #secretStore: VisionSecretStore;
@@ -22,8 +24,10 @@ export class ExternalVisionService {
     this.registerAdapter(new FakeVisionAdapter());
     this.registerAdapter(new OpenAiVisionAdapter("openai", false));
     this.registerAdapter(new OpenAiVisionAdapter("openai_compatible", true));
+    this.registerAdapter(new GeminiVisionAdapter());
+    this.registerAdapter(new AnthropicVisionAdapter());
 
-    // Default configuration for OpenAI
+    // Default configurations
     this.#configs.set("openai", {
       id: "openai",
       provider: "openai",
@@ -39,6 +43,26 @@ export class ExternalVisionService {
       provider: "openai_compatible",
       model: "qwen-vl-plus",
       endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      hasApiKey: false,
+      enabled: false,
+      maxConcurrency: 1,
+      maxLongEdge: 1568
+    });
+
+    this.#configs.set("gemini", {
+      id: "gemini",
+      provider: "gemini",
+      model: "gemini-1.5-flash",
+      hasApiKey: false,
+      enabled: false,
+      maxConcurrency: 1,
+      maxLongEdge: 1568
+    });
+
+    this.#configs.set("anthropic", {
+      id: "anthropic",
+      provider: "anthropic",
+      model: "claude-3-5-sonnet-20241022",
       hasApiKey: false,
       enabled: false,
       maxConcurrency: 1,
