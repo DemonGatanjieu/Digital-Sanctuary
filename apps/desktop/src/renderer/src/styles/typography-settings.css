@@ -1,0 +1,295 @@
+/* ==========================================================================
+   Typography & Custom Fonts Settings Section (排版与个性化字体样式)
+   ========================================================================== */
+
+.typography-settings-section {
+  margin-bottom: 28px;
+}
+
+.typography-slots-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.typography-slot-card {
+  background: var(--ds-bg-card);
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-lg);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--ds-shadow-sm);
+  transition: border-color var(--ds-transition-fast), box-shadow var(--ds-transition-fast);
+}
+
+.typography-slot-card:hover {
+  border-color: var(--ds-border-strong);
+  box-shadow: var(--ds-shadow-md);
+}
+
+.slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.slot-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slot-icon {
+  font-size: 16px;
+}
+
+.slot-name {
+  font-size: 14px;
+  font-weight: 750;
+  color: var(--ds-text-heading);
+}
+
+.slot-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: var(--ds-radius-full);
+  background: var(--ds-bg-card-subtle);
+  color: var(--ds-text-secondary);
+  border: 1px solid var(--ds-border-light);
+}
+
+.slot-badge.source-custom {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+.slot-badge.source-system {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.slot-desc {
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.slot-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.slot-select {
+  flex: 1;
+  background: var(--ds-bg-card-subtle);
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--ds-text-heading);
+  outline: none;
+  transition: border-color var(--ds-transition-fast), box-shadow var(--ds-transition-fast);
+}
+
+.slot-select:focus {
+  border-color: var(--ds-primary);
+  box-shadow: 0 0 0 3px var(--ds-primary-glow);
+}
+
+.slot-revert-btn {
+  background: var(--ds-bg-card-subtle);
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  transition: all var(--ds-transition-fast);
+}
+
+.slot-revert-btn:hover:not(:disabled) {
+  background: var(--ds-bg-card);
+  color: var(--ds-text-heading);
+  border-color: var(--ds-border-strong);
+}
+
+.slot-revert-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Actions Toolbar */
+.typography-actions-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 14px 18px;
+  background: var(--ds-bg-card);
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-lg);
+}
+
+.typography-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.typography-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 650;
+  border-radius: var(--ds-radius-full);
+  cursor: pointer;
+  transition: all var(--ds-transition-fast);
+}
+
+.typography-action-btn.btn-primary {
+  background: var(--ds-gradient-primary);
+  color: #fff;
+  border: none;
+  box-shadow: 0 2px 8px var(--ds-primary-glow);
+}
+
+.typography-action-btn.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--ds-primary-glow);
+}
+
+.typography-action-btn.btn-secondary {
+  background: var(--ds-bg-card-subtle);
+  color: var(--ds-text-heading);
+  border: 1px solid var(--ds-border-light);
+}
+
+.typography-action-btn.btn-secondary:hover {
+  background: var(--ds-bg-card);
+  border-color: var(--ds-border-strong);
+}
+
+.typography-action-btn.btn-danger-outline {
+  background: transparent;
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.typography-action-btn.btn-danger-outline:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: #ef4444;
+}
+
+/* Multi-Lingual Preview Box */
+.typography-preview-box {
+  margin-top: 20px;
+  background: var(--ds-bg-card);
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-lg);
+  padding: 20px;
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.preview-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.preview-box-header h4 {
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--ds-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
+}
+
+.preview-sample-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.preview-sample-card {
+  background: var(--ds-bg-card-subtle);
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  padding: 14px 16px;
+}
+
+.preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ds-text-muted);
+  margin-bottom: 6px;
+}
+
+.preview-text-body {
+  font-family: var(--ds-font-body);
+  font-size: 14px;
+  color: var(--ds-text-heading);
+  line-height: var(--ds-leading-body);
+}
+
+.preview-text-display {
+  font-family: var(--ds-font-display);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ds-text-heading);
+  line-height: var(--ds-leading-tight);
+}
+
+.preview-text-editorial {
+  font-family: var(--ds-font-editorial);
+  font-size: 15px;
+  font-style: italic;
+  color: var(--ds-text-heading);
+  line-height: var(--ds-leading-relaxed);
+}
+
+.preview-text-mono {
+  font-family: var(--ds-font-mono);
+  font-size: 13px;
+  color: var(--ds-primary);
+  line-height: 1.5;
+}
+
+/* Save / Discard Bar */
+.typography-save-bar {
+  margin-top: 16px;
+  padding: 12px 20px;
+  background: var(--ds-primary-subtle);
+  border: 1px solid var(--ds-primary-border);
+  border-radius: var(--ds-radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: fadeIn 0.2s ease;
+}
+
+.typography-save-bar p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ds-text-heading);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}

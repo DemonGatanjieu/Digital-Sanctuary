@@ -711,6 +711,14 @@ try {
   await auditScenario("08_settings_view_w1", null, "W1", "default");
   await auditScenario("08_settings_theme_cyber", null, "W3", "builtin.cyber-deck");
 
+  // Settings scroll to Typography & Fonts Section
+  await auditScenario("08_settings_typography_section", async () => {
+    await cdp.evaluate(`(() => {
+      const typoSection = document.querySelector('.typography-settings-section');
+      typoSection?.scrollIntoView();
+    })()`);
+  }, "W3", "default");
+
   // Settings scroll to External AI Vision Providers Section
   await auditScenario("08_settings_vision_section", async () => {
     await cdp.evaluate(`(() => {

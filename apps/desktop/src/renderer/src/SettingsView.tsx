@@ -12,6 +12,7 @@ import { AppNotice } from "./AppNotice";
 import type { AppStatus } from "./AppSidebar";
 import { Button } from "./Button";
 import { ThemeSettingsSection } from "./ThemeSettingsSection";
+import { TypographySettingsSection } from "./typography/TypographySettingsSection";
 import { VisionSettingsSection } from "./VisionSettingsSection";
 
 interface SettingsViewProps {
@@ -97,6 +98,7 @@ export function SettingsView({
       {error && <AppNotice tone="error">{error}</AppNotice>}
 
       <ThemeSettingsSection />
+      <TypographySettingsSection />
       <VisionSettingsSection />
 
       <section className="user-profile-card">
