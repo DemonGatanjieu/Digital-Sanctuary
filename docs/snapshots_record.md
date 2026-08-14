@@ -31,6 +31,8 @@
 | **visual-audit-baseline-phase-1-4** | `0d6c809e4b3c7b79abe57b660ac4b70ce965d6fc` | 2026-08-15 | 实施全产品视觉审计 Phase 1~4：建立隔离 Fixture 与 Electron CDP 自动化巡检工具，全量捕获 22 份高保真截图并完成 10 维评估、矩阵覆盖与 VA 问题账本登记。 |
 | **visual-audit-remediation-phase-5-6** | `dedb39b3be5f714a3b67a07a2d729d835c0877b3` | 2026-08-15 | 实施视觉审计闭环整改 Phase 5~6：消除 900×620 最小窗口 60px 溢出、重构外部 AI 视觉配置 Tokens、提升画册暗色舞台对比度、统一大图雷达画像抽屉与全局相册弹窗文案，全量 7 项 VA 问题全部闭环验证。 |
 | **typography-phase-0-probes-and-adr** | `ae83e1d641cd0fdc09cf52ab37d21e5d671b6789` | 2026-08-15 | 实施排版与字体系统升级 Phase 0：完成样式硬编码热点扫描、Electron 43 Local Font Access 探针实测、Domain 领域契约/验证器与 ADR 0007 架构决策，全量通过单元测试与编译。 |
+| **typography-phase-1-tokens-migration** | `98e2720299aa941090bb1f25145402a2609020af` | 2026-08-15 | 实施排版与字体系统升级 Phase 1：在 tokens.css 建立四槽位语义字体 Token 及排版规范变量，完成 collections.css、themes.css、vision-radar.css 样式热点无行为平滑迁移，门禁 100% 通过。 |
+
 
 
 
