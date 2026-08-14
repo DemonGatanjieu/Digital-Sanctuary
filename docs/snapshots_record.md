@@ -33,6 +33,8 @@
 | **typography-phase-0-probes-and-adr** | `ae83e1d641cd0fdc09cf52ab37d21e5d671b6789` | 2026-08-15 | 实施排版与字体系统升级 Phase 0：完成样式硬编码热点扫描、Electron 43 Local Font Access 探针实测、Domain 领域契约/验证器与 ADR 0007 架构决策，全量通过单元测试与编译。 |
 | **typography-phase-1-tokens-migration** | `98e2720299aa941090bb1f25145402a2609020af` | 2026-08-15 | 实施排版与字体系统升级 Phase 1：在 tokens.css 建立四槽位语义字体 Token 及排版规范变量，完成 collections.css、themes.css、vision-radar.css 样式热点无行为平滑迁移，门禁 100% 通过。 |
 | **typography-phase-2-sandbox-and-protocol** | `9625fe272d540b22b15c890725da72195c423c32` | 2026-08-15 | 实施排版与字体系统升级 Phase 2：构建零依赖 SFNT 验证解析器、userData/fonts 沙箱原子索引、sanctuary-font:// 受控特权协议与 IPC 接入，单元测试与编译全部通过。 |
+| **typography-phase-3-6-provider-and-settings** | `4df3e87ed6d54bce2c11917408caf0a7a8d79307` | 2026-08-15 | 实施排版与字体系统升级 Phase 3~6：实现 TypographyProvider 动态 CSS 变量注入与 FontFace 管理、设置中心 4 槽位选择/草稿生效/系统字体读取与导入管理面板，全产品视觉巡检验证通过。 |
+
 
 
 
