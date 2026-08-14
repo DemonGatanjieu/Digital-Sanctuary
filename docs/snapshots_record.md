@@ -22,6 +22,8 @@
 | **vision-phase-0-spec-and-fixtures** | `4e020ac2944e1fdd7e67330bd9370d62cc88b051` | 2026-08-15 | 实施 Phase 0：统一 Vision 领域模型与套件定义（技术画像/美术造诣/角色表现）、实现运行时评分校验器、建立可重复测试图片 Fixture 生成器与 100 项自动化测试基线。 |
 | **vision-phase-1-local-profile** | `6857e38a52ee112009a1d2a1da76d689b634db43` | 2026-08-15 | 实施 Phase 1：实现本地确定性技术视觉画像（Pillow/NumPy 6 维统计特征算子）、扩展 Python JSONL 与 TS 协议管道、通过 7 项 Python 专项测试与 101 项全门禁测试。 |
 | **vision-phase-2-db-and-jobs** | `92a01c3695567e0c78366d4c9cb3c3d1133ac834` | 2026-08-15 | 实施 Phase 2：SQLite Migration 4 建立评估结果、多维分数值与外部请求审计表；实现精确缓存指纹；打通任务系统与技术画像封面资产分析链路。 |
+| **vision-phase-3-secrets-and-fake-provider** | `27dbc764a1890aad171cb6d414b5aaee7a188edb` | 2026-08-15 | 实施 Phase 3：实现 safeStorage 密钥安全存储与日志脱敏、图片预处理器、FakeVisionAdapter 及 ExternalVisionService 全链路。 |
+
 
 
 
