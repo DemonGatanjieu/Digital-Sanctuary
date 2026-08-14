@@ -22,6 +22,7 @@
     "pack:win": "npm run build && npm run build:vision-bundle && electron-builder --win --x64 --dir",
     "dist:win": "npm run build && npm run build:vision-bundle && electron-builder --win nsis --x64",
     "smoke:packaged": "node scripts/smoke-packaged.mjs",
+    "smoke:library-images": "node scripts/smoke-library-images.mjs",
     "smoke:installer": "node scripts/smoke-installer.mjs",
     "smoke:vision-bundle": "node scripts/smoke-vision-bundle.mjs",
     "typecheck": "npm run build:core && tsc -p apps/desktop/tsconfig.json --noEmit",

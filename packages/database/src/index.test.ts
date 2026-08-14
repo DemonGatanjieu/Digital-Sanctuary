@@ -85,8 +85,11 @@ describe("LibraryDatabase", () => {
       const [asset] = database.listAssetsNeedingThumbnails(10);
       expect(asset?.path).toBe(imagePath);
       expect(asset?.thumbnailPath).toBeNull();
+      expect(database.hasArtworkPath(imagePath)).toBe(true);
+      expect(database.hasArtworkPath(thumbnailPath)).toBe(false);
       writeFileSync(thumbnailPath, "thumbnail-placeholder");
       expect(database.updateAssetThumbnail(asset!.id, thumbnailPath)).toBe(true);
+      expect(database.hasArtworkPath(thumbnailPath)).toBe(true);
       expect(database.listAssetsNeedingThumbnails(10)).toEqual([]);
       expect(database.listWorks()[0]?.assets[0]?.thumbnailPath).toBe(thumbnailPath);
       rmSync(thumbnailPath, { force: true });

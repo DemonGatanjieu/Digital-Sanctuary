@@ -723,7 +723,19 @@ export class LibraryDatabase {
 
   hasArtworkPath(path: string): boolean {
     return Boolean(
-      this.#database.prepare("SELECT 1 AS found FROM artworks WHERE path = ?").get(path)
+      this.#database
+        .prepare(
+          `SELECT 1 AS found
+             FROM (
+               SELECT path AS local_path FROM artworks WHERE path = ?
+               UNION ALL
+               SELECT path AS local_path FROM assets WHERE path = ?
+               UNION ALL
+               SELECT thumbnail_path AS local_path FROM assets WHERE thumbnail_path = ?
+             )
+            LIMIT 1`
+        )
+        .get(path, path, path)
     );
   }
 
