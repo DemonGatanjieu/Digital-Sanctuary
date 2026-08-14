@@ -555,26 +555,6 @@ export function CollectionCard({
 
   return (
     <article className="collection-card album-card-book" onClick={onOpen}>
-      <div className="collection-card-actions-top" onClick={(e) => e.stopPropagation()}>
-        {onFilter && (
-          <button
-            type="button"
-            className="collection-filter-button"
-            title="在画廊中筛选此相册"
-            onClick={onFilter}
-          >
-            筛选
-          </button>
-        )}
-        <button
-          type="button"
-          className="collection-edit-button"
-          aria-label={`编辑相册 ${collection.name}`}
-          onClick={onEdit}
-        >
-          ···
-        </button>
-      </div>
       <div className="collection-cover album-book-cover">
         <div className="album-card-spine" />
         {coverUrl ? (
@@ -583,6 +563,28 @@ export function CollectionCard({
           <div className="collection-cover-placeholder"><span>📖</span></div>
         )}
         <span className="album-card-tag">ALBUM</span>
+
+        <div className="collection-card-actions-top" onClick={(e) => e.stopPropagation()}>
+          {onFilter && (
+            <button
+              type="button"
+              className="collection-filter-button"
+              title="在画廊中筛选此相册"
+              onClick={onFilter}
+            >
+              筛选
+            </button>
+          )}
+          <button
+            type="button"
+            className="collection-edit-button"
+            aria-label={`编辑相册 ${collection.name}`}
+            onClick={onEdit}
+            title="编辑相册"
+          >
+            ···
+          </button>
+        </div>
       </div>
       <div className="collection-info">
         <h3>{collection.name}</h3>
@@ -647,27 +649,29 @@ export function SavedCollectionViewCard({
 
   return (
     <article className="collection-card saved-view-card" onClick={onOpen}>
-      <div className="collection-card-actions-top" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          className="collection-edit-button"
-          aria-label={`编辑相册组合 ${view.name}`}
-          onClick={onEdit}
-        >
-          编辑
-        </button>
-        {onDelete && (
+      <div className="saved-view-cover-grid">
+        <div className="saved-view-card-actions" onClick={(e) => e.stopPropagation()}>
           <button
             type="button"
-            className="collection-delete-button"
-            aria-label={`删除相册组合 ${view.name}`}
-            onClick={onDelete}
+            className="saved-view-btn-action"
+            aria-label={`编辑相册组合 ${view.name}`}
+            onClick={onEdit}
+            title="编辑组合"
           >
-            删除
+            ✏️
           </button>
-        )}
-      </div>
-      <div className="saved-view-cover-grid">
+          {onDelete && (
+            <button
+              type="button"
+              className="saved-view-btn-action btn-danger"
+              aria-label={`删除相册组合 ${view.name}`}
+              onClick={onDelete}
+              title="删除组合"
+            >
+              🗑️
+            </button>
+          )}
+        </div>
         {previewArtworks.length > 0 ? (
           previewArtworks.map((artwork, idx) => (
             <div key={artwork.id} className={`preview-quadrant quadrant-${idx}`}>
