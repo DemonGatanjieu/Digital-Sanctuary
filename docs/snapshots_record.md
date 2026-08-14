@@ -28,6 +28,8 @@
 | **vision-phase-6-ui-and-radar** | `05e42f520fe22cc2cc9e1fdb2728575ce107ef5f` | 2026-08-15 | 实施 Phase 6：实现交互式 SVG 多维雷达图组件、设置页外部模型密钥与连通性测试面板、大图画作雷达图侧边抽屉与精准 IPC 调度。 |
 | **vision-phase-7-semantic-search-adr** | `5e686e5f84acac60eae835f24c1434d103bcc9db` | 2026-08-15 | 实施 Phase 7：建立多模态向量语义搜索架构任务书与 ADR 0006，完成视觉多维画像与语义向量搜索的架构解耦与演进定界。 |
 | **fix-album-card-action-bar-gap** | `7091c83401bd49307ff43bab0cc54202625fb915` | 2026-08-15 | 修复相册/画集卡片顶部“筛选”与“···”操作条脱离封面容器导致的流式占位白边漏洞，将操作胶囊置入封面相对浮层并优化半透毛玻璃质感。 |
+| **visual-audit-baseline-phase-1-4** | `0d6c809e4b3c7b79abe57b660ac4b70ce965d6fc` | 2026-08-15 | 实施全产品视觉审计 Phase 1~4：建立隔离 Fixture 与 Electron CDP 自动化巡检工具，全量捕获 22 份高保真截图并完成 10 维评估、矩阵覆盖与 VA 问题账本登记。 |
+
 
 
 
