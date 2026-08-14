@@ -37,11 +37,25 @@ export function AppSidebar({
 }) {
   return (
     <aside className="sidebar">
-      <div className="brand-mark">DS</div>
-      <div className="brand-copy">
-        <strong>纯净领域</strong>
-        <span>Digital Sanctuary</span>
+      <div
+        className="brand-row"
+        role="button"
+        tabIndex={0}
+        title="点击前往设置中心更换头像与个性化主题"
+        onClick={() => onViewChange("settings")}
+        onKeyDown={(e) => e.key === "Enter" && onViewChange("settings")}
+      >
+        {appearance.customAvatarUrl ? (
+          <img src={appearance.customAvatarUrl} alt="User Avatar" className="user-avatar-mark" />
+        ) : (
+          <div className="brand-mark">DS</div>
+        )}
+        <div className="brand-copy">
+          <strong>纯净领域</strong>
+          <span>Digital Sanctuary</span>
+        </div>
       </div>
+
 
       <nav>
         <button aria-current={activeView === "gallery" ? "page" : undefined} className={`nav-item ${activeView === "gallery" ? "active" : ""}`} data-nav="gallery" onClick={() => void onOpenGallery()}>

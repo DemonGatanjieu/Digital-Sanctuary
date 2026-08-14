@@ -202,6 +202,18 @@ export function ThemeSettingsSection({ onThemeSwitchSuccess }: ThemeSettingsSect
                         <span className="preview-swatch black" />
                         <span className="preview-label">空洞探索 · 绝区零</span>
                       </div>
+                    ) : theme.id === "builtin.sakura-dream" ? (
+                      <div className="theme-preset-preview sakura-dream-preview">
+                        <span className="preview-swatch pink" />
+                        <span className="preview-swatch purple" />
+                        <span className="preview-label">樱落梦境 · 粉彩</span>
+                      </div>
+                    ) : theme.id === "builtin.cyber-deck" ? (
+                      <div className="theme-preset-preview cyber-deck-preview">
+                        <span className="preview-swatch cyan" />
+                        <span className="preview-swatch magenta" />
+                        <span className="preview-label">赛博终端 · 矩阵</span>
+                      </div>
                     ) : (
                       <div className="theme-custom-preview">
                         <span className="preview-label">{theme.name}</span>

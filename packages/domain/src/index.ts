@@ -54,6 +54,7 @@ export interface AppearancePreferences {
   displayProfile: DisplayProfile;
   reducedMotion: boolean;
   ambientArtwork: boolean;
+  customAvatarUrl?: string | null;
 }
 
 export type ThemeColorScheme = "dark" | "light" | "auto";

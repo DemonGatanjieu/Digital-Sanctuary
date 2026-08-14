@@ -86,6 +86,14 @@
   background: linear-gradient(135deg, #11100d 0%, #2b2505 50%, #ffd200 100%);
 }
 
+.theme-preset-preview.sakura-dream-preview {
+  background: linear-gradient(135deg, #ff75a0 0%, #ffb3c6 50%, #9d4edd 100%);
+}
+
+.theme-preset-preview.cyber-deck-preview {
+  background: linear-gradient(135deg, #06090e 0%, #0d1420 50%, #00f0ff 100%);
+}
+
 .preview-swatch {
   width: 24px;
   height: 24px;
@@ -98,6 +106,11 @@
 .preview-swatch.sky { background: #38bdf8; }
 .preview-swatch.amber { background: #ffd200; }
 .preview-swatch.black { background: #11100d; }
+.preview-swatch.pink { background: #ff5e97; }
+.preview-swatch.purple { background: #9d4edd; }
+.preview-swatch.cyan { background: #00f0ff; }
+.preview-swatch.magenta { background: #ff0055; }
+
 
 .preview-label {
   position: absolute;

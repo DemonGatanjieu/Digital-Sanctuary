@@ -320,7 +320,13 @@ function parseAppearancePreferences(value: unknown): AppearancePreferences | nul
   return {
     displayProfile: candidate.displayProfile,
     reducedMotion: candidate.reducedMotion,
-    ambientArtwork: candidate.ambientArtwork
+    ambientArtwork: candidate.ambientArtwork,
+    customAvatarUrl:
+      typeof candidate.customAvatarUrl === "string" &&
+      (candidate.customAvatarUrl.startsWith("data:image/") || candidate.customAvatarUrl.startsWith("sanctuary-image:") || candidate.customAvatarUrl.startsWith("http")) &&
+      candidate.customAvatarUrl.length <= 2_500_000
+        ? candidate.customAvatarUrl
+        : null
   };
 }
 

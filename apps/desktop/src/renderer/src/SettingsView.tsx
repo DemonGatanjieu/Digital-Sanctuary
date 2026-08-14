@@ -97,6 +97,56 @@ export function SettingsView({
 
       <ThemeSettingsSection />
 
+      <section className="user-profile-card">
+        <header>
+          <div>
+            <p className="eyebrow">IDENTITY & PROFILE</p>
+            <h2>个人头像设置</h2>
+          </div>
+          <span>显示在左侧导航栏与专属控制台</span>
+        </header>
+        <div className="user-avatar-setting-row">
+          <div className="user-avatar-preview-box">
+            {appearance.customAvatarUrl ? (
+              <img src={appearance.customAvatarUrl} alt="Avatar Preview" className="avatar-preview-img" />
+            ) : (
+              <div className="avatar-placeholder-brand">DS</div>
+            )}
+          </div>
+          <div className="user-avatar-actions">
+            <label className="button variant-secondary avatar-upload-button">
+              <span>🖼️ 选择本地图片作为头像</span>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                style={{ display: "none" }}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    const result = reader.result;
+                    if (typeof result === "string") {
+                      void onAppearanceChange({ ...appearance, customAvatarUrl: result });
+                    }
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+            {appearance.customAvatarUrl && (
+              <Button
+                variant="ghost"
+                onClick={() => void onAppearanceChange({ ...appearance, customAvatarUrl: null })}
+              >
+                恢复默认品牌图标
+              </Button>
+            )}
+            <small className="avatar-hint">支持 PNG、JPEG、WebP、GIF 格式图片，自动适配并持久化保存。</small>
+          </div>
+        </div>
+      </section>
+
       <section className="appearance-settings-card">
         <header>
           <div><p className="eyebrow">APPEARANCE</p><h2>外观与性能</h2></div>

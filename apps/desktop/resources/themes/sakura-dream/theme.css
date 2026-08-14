@@ -1,0 +1,112 @@
+/* ==========================================================================
+   Sakura Dream (樱落梦境) - Anime Pastel & Lavender Design Tokens
+   ========================================================================== */
+
+:root {
+  /* Pastel Canvas & Background Tokens */
+  --ds-bg-app: #fff5f8;
+  --ds-bg-sidebar: #ffffff;
+  --ds-bg-card: #ffffff;
+  --ds-bg-card-subtle: #fff0f5;
+  --ds-bg-surface-glass: rgba(255, 255, 255, 0.88);
+  --ds-bg-overlay: rgba(50, 20, 35, 0.65);
+  --ds-bg-lightbox: rgba(25, 10, 18, 0.95);
+
+  /* Primary Blossom Pink & Candy Gradients */
+  --ds-primary: #ff5e97;
+  --ds-primary-hover: #ff4082;
+  --ds-primary-active: #e6286c;
+  --ds-primary-light: #ffe6ef;
+  --ds-primary-subtle: #fff0f6;
+  --ds-primary-border: #ffb8d2;
+  --ds-primary-glow: rgba(255, 94, 151, 0.28);
+  --ds-gradient-primary: linear-gradient(135deg, #ff85b3 0%, #ff5e97 60%, #b840e6 100%);
+  --ds-gradient-accent: linear-gradient(135deg, #ff85b3 0%, #ffb3c6 100%);
+  --ds-gradient-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 240, 245, 0.85) 100%);
+
+  /* Status Colors with Soft Tint */
+  --ds-success: #10b981;
+  --ds-success-light: #ecfdf5;
+  --ds-success-border: #a7f3d0;
+  --ds-success-text: #047857;
+
+  --ds-warning: #f59e0b;
+  --ds-warning-light: #fffbeb;
+  --ds-warning-border: #fde68a;
+  --ds-warning-text: #b45309;
+
+  --ds-danger: #ff4d6d;
+  --ds-danger-hover: #e63956;
+  --ds-danger-light: #fff0f3;
+  --ds-danger-border: #ffccd5;
+  --ds-danger-text: #c9184a;
+
+  --ds-purple: #9d4edd;
+  --ds-purple-light: #f3e8ff;
+  --ds-purple-border: #e9d5ff;
+  --ds-purple-text: #7b2cbf;
+
+  /* Typography Colors */
+  --ds-text-heading: #3a1c28;
+  --ds-text-body: #5c3546;
+  --ds-text-secondary: #8c5b70;
+  --ds-text-muted: #b88ea0;
+  --ds-text-inverse: #ffffff;
+
+  /* Soft Floral Borders */
+  --ds-border-light: #fce1ea;
+  --ds-border-subtle: #fff0f5;
+  --ds-border-glass: rgba(255, 255, 255, 0.95);
+
+  /* Shadows with Warm Pink Glow */
+  --ds-shadow-xs: 0 1px 3px rgba(255, 94, 151, 0.05);
+  --ds-shadow-sm: 0 2px 8px rgba(255, 94, 151, 0.08);
+  --ds-shadow-md: 0 8px 24px -3px rgba(255, 94, 151, 0.12);
+  --ds-shadow-lg: 0 16px 36px -4px rgba(255, 94, 151, 0.16);
+  --ds-shadow-xl: 0 24px 48px -6px rgba(255, 94, 151, 0.2);
+  --ds-shadow-glow: 0 0 24px var(--ds-primary-glow);
+
+  /* Bubbly & Round Radii */
+  --ds-radius-sm: 10px;
+  --ds-radius-md: 16px;
+  --ds-radius-lg: 22px;
+  --ds-radius-xl: 28px;
+  --ds-radius-full: 9999px;
+
+  /* Glassmorphism settings */
+  --ds-glass-blur: 24px;
+  --ds-glass-bg: rgba(255, 255, 255, 0.85);
+  --ds-glass-border: rgba(255, 230, 239, 0.9);
+
+  /* Font & Base */
+  color: var(--ds-text-body);
+  background: var(--ds-bg-app);
+}
+
+/* Specific Aesthetic Overrides for Sakura Theme */
+.app-sidebar {
+  border-right: 1px solid #fce1ea;
+}
+
+.ambient-hero {
+  border-bottom: 1px solid rgba(255, 94, 151, 0.15);
+}
+
+.work-card {
+  border: 1px solid #fce1ea;
+  border-radius: var(--ds-radius-lg);
+  box-shadow: 0 4px 16px rgba(255, 94, 151, 0.06);
+}
+
+.work-card:hover {
+  border-color: var(--ds-primary);
+  box-shadow: 0 12px 28px -4px rgba(255, 94, 151, 0.22);
+  transform: translateY(-4px) scale(1.015);
+}
+
+.button.variant-primary,
+.segmented-control button.active,
+.filter-chip.active {
+  border-radius: var(--ds-radius-full);
+  box-shadow: 0 4px 14px rgba(255, 94, 151, 0.35);
+}
