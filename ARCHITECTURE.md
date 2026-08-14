@@ -48,6 +48,7 @@ flowchart LR
 - **探索防线雷达 HUD**：将审查统计重构为彩色状态芯片组（放行绿 / 拦截红 / 广告黄 / 缓存紫 / 审查中蓝），提供清晰直观的实时吞吐监控。
 - **三档性能与显示策略**：持久化精致（Quality）、均衡（Balanced）、省电（Efficient）三档，支持 reduced motion 优雅退化；大图库渐进分页与 `content-visibility` 跳过屏幕外绘制，当前 10,000 作品基准首屏约 564 ms、JS 堆约 22 MB。
 - **动态主题引擎与个性化外观系统（全栈完成）**：前端视觉 tokens 与个性化样式解耦为标准化主题包（`theme.json` + `theme.css`）。主进程支持内置/用户主题扫描、文件夹与受限 ZIP 原子安装、活跃主题持久化、安全 CSS 读取、删除回退，以及带本地缓存和限流熔断的 GitHub Contents API 商店；渲染层实现 `<style id="ds-dynamic-theme">` 零刷新无缝热注入；开箱提供 4 套官方深度定制预设（庇护所标准蔚蓝、绝区零 Hollow Zero 潮酷暗调、樱落梦境 Sakura Dream 二次元粉彩、赛博终端 Cyber Deck 霓虹矩阵）；支持用户在设置中心自定义上传个人头像并同步展示于侧边栏品牌区。
+- **360° 交互式动力学星盘罗盘（Interactive Compass Dial）**：内嵌于画廊顶部 Ambient Hero 氛围横幅中；采用三角函数极坐标（`Math.atan2`）捕获鼠标转圈拖拽手势，驱动多层差速齿轮（Parallax Differential Rings）、发光磁性指针与物理惯性阻尼衰减（Momentum Damping），实现充满游戏生命力的 360° 无级旋转拨盘换肤互动。
 
 ### 2.2 Electron 主进程
 

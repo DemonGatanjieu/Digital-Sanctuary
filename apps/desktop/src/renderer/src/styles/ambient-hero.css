@@ -5,16 +5,24 @@
 .work-ambient-hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 240px;
-  min-height: 164px;
+  grid-template-columns: minmax(0, 1.2fr) auto 240px;
+  align-items: center;
+  min-height: 180px;
   margin: 0 0 22px;
   overflow: hidden;
   border: 1px solid var(--ds-border-light);
   border-radius: var(--ds-radius-xl);
-  background: #ffffff;
+  background: var(--ds-bg-card);
   box-shadow: var(--ds-shadow-md);
   isolation: isolate;
   transition: box-shadow var(--ds-transition-normal);
+}
+
+.work-ambient-interactive-slot {
+  display: grid;
+  place-items: center;
+  padding: 0 16px;
+  z-index: 2;
 }
 
 .work-ambient-hero:hover {

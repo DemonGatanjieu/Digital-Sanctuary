@@ -12,6 +12,8 @@ import type {
 import { DialogOverlay } from "./DialogOverlay";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
+import { InteractiveCompassDial } from "./InteractiveCompassDial";
+
 
 export function WorkLibrary({
   result,
@@ -159,6 +161,9 @@ export function WorkLibrary({
             <strong>{featuredWork.title}</strong>
             <small>{featuredWork.artistName ?? "本地作品"} · {featuredWork.pageCount} 页</small>
             <button type="button" onClick={() => void openWork(featuredWork)}>继续欣赏</button>
+          </div>
+          <div className="work-ambient-interactive-slot">
+            <InteractiveCompassDial mode="hero" />
           </div>
           <img className="work-ambient-cover" src={workImageUrl(featuredWork.coverAsset.thumbnailPath ?? featuredWork.coverAsset.path)} alt="" />
         </section>
