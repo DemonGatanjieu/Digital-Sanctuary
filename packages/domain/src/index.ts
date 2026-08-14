@@ -128,12 +128,39 @@ export type WorkSortField =
   | "pageCount"
   | "byteLength";
 export type SortDirection = "asc" | "desc";
+export type CollectionMatchMode = "all" | "any";
+
+export interface SavedCollectionViewQuery {
+  matchMode: CollectionMatchMode;
+  includedCollectionIds: string[];
+  excludedCollectionIds: string[];
+}
+
+export interface SavedCollectionView {
+  id: string;
+  name: string;
+  matchMode: CollectionMatchMode;
+  includedCollectionIds: string[];
+  excludedCollectionIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SavedCollectionViewDraft {
+  name: string;
+  matchMode: CollectionMatchMode;
+  includedCollectionIds: string[];
+  excludedCollectionIds: string[];
+}
 
 export interface WorkQuery {
   search?: string;
   workType?: WorkType;
   artistId?: string;
   collectionId?: string;
+  collectionIds?: string[];
+  collectionMatchMode?: CollectionMatchMode;
+  excludedCollectionIds?: string[];
   sortBy?: WorkSortField;
   direction?: SortDirection;
   offset?: number;

@@ -58,8 +58,7 @@ try {
         maxFrameMs: Math.round(Math.max(...frameDeltas) * 10) / 10,
         jsHeapMb: memory.usedJSHeapSize ? Math.round(memory.usedJSHeapSize / 1024 / 1024) : null
       };
-      const organizeButton = Array.from(document.querySelectorAll("nav button"))
-        .find((button) => button.textContent.trim() === "模型整理");
+      const organizeButton = document.querySelector("nav [data-nav='organize']");
       organizeButton?.click();
       await waitUntil(() => Boolean(document.querySelector(".analysis-scope-card")), 3000);
       return { ...metrics, analysisViewReady: Boolean(document.querySelector(".analysis-scope-card")) };

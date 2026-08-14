@@ -7,13 +7,13 @@ import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
-  it("records schema version 2 and creates a portable SQLite backup", () => {
+  it("records schema version 3 and creates a portable SQLite backup", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-backup-"));
     const databasePath = join(directory, "library.db");
     const backupPath = join(directory, "library-backup.db");
     const database = new LibraryDatabase(databasePath);
     try {
-      expect(database.schemaVersion()).toBe(2);
+      expect(database.schemaVersion()).toBe(3);
       database.createCollection("Backup fixture");
       expect(database.backupTo(backupPath)).toBe(backupPath);
       const backup = new DatabaseSync(backupPath, { readOnly: true });
@@ -508,6 +508,146 @@ describe("LibraryDatabase", () => {
       secondOpen.close();
     } finally {
       rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("supports saved collection views and multi-collection combination queries (AND, OR, NOT)", () => {
+    const database = new LibraryDatabase(":memory:");
+    try {
+      // 1. Create collections A, B, C
+      const colA = database.createCollection("Collection A");
+      const colB = database.createCollection("Collection B");
+      const colC = database.createCollection("Collection C");
+
+      // 2. Import 3 works
+      // Work 1 belongs to A, B
+      const art1 = database.importArtwork("E:\\gallery\\work1.jpg");
+      database.addArtworkToCollection(art1.id, colA.id);
+      database.addArtworkToCollection(art1.id, colB.id);
+
+      // Work 2 belongs to A
+      const art2 = database.importArtwork("E:\\gallery\\work2.jpg");
+      database.addArtworkToCollection(art2.id, colA.id);
+
+      // Work 3 belongs to B, C
+      const art3 = database.importArtwork("E:\\gallery\\work3.jpg");
+      database.addArtworkToCollection(art3.id, colB.id);
+      database.addArtworkToCollection(art3.id, colC.id);
+
+      // Helper to get titles
+      const queryTitles = (query: import("@sanctuary/domain").WorkQuery) =>
+        database.queryWorks(query).items.map((item) => item.title);
+
+      // Test 1: Legacy single collection query compatibility
+      const singleA = database.queryWorks({ collectionId: colA.id });
+      expect(singleA.total).toBe(2);
+      expect(singleA.items.map((i) => i.title).sort()).toEqual(["work1.jpg", "work2.jpg"]);
+
+      // Test 2: all mode returns intersection (A AND B -> Work 1)
+      const andResult = database.queryWorks({
+        collectionIds: [colA.id, colB.id],
+        collectionMatchMode: "all"
+      });
+      expect(andResult.total).toBe(1);
+      expect(andResult.items[0]?.title).toBe("work1.jpg");
+
+      // Test 3: any mode returns union without duplicates (A OR B -> Work 1, 2, 3)
+      const orResult = database.queryWorks({
+        collectionIds: [colA.id, colB.id],
+        collectionMatchMode: "any"
+      });
+      expect(orResult.total).toBe(3);
+      expect(orResult.items.map((i) => i.title).sort()).toEqual(["work1.jpg", "work2.jpg", "work3.jpg"]);
+
+      // Test 4: excluded category (A EXCLUDE B -> Work 2)
+      const excludeBResult = database.queryWorks({
+        collectionIds: [colA.id],
+        excludedCollectionIds: [colB.id]
+      });
+      expect(excludeBResult.total).toBe(1);
+      expect(excludeBResult.items[0]?.title).toBe("work2.jpg");
+
+      // Test 5: A OR B EXCLUDE C -> Work 1, 2
+      const orExcludeCResult = database.queryWorks({
+        collectionIds: [colA.id, colB.id],
+        collectionMatchMode: "any",
+        excludedCollectionIds: [colC.id]
+      });
+      expect(orExcludeCResult.total).toBe(2);
+      expect(orExcludeCResult.items.map((i) => i.title).sort()).toEqual(["work1.jpg", "work2.jpg"]);
+
+      // Test 6: Empty included + excluded (all works minus C -> Work 1, 2)
+      const allMinusC = database.queryWorks({
+        excludedCollectionIds: [colC.id]
+      });
+      expect(allMinusC.total).toBe(2);
+      expect(allMinusC.items.map((i) => i.title).sort()).toEqual(["work1.jpg", "work2.jpg"]);
+
+      // Test 7: Paged count consistency
+      const paged = database.queryWorks({
+        collectionIds: [colA.id, colB.id],
+        collectionMatchMode: "any",
+        limit: 1,
+        offset: 0
+      });
+      expect(paged.total).toBe(3);
+      expect(paged.items).toHaveLength(1);
+      expect(paged.hasMore).toBe(true);
+
+      // Test 8: SavedCollectionView CRUD & Persistence
+      const viewDraft = {
+        name: "A and B without C",
+        matchMode: "all" as const,
+        includedCollectionIds: [colA.id, colB.id],
+        excludedCollectionIds: [colC.id]
+      };
+      const createdView = database.createSavedCollectionView(viewDraft);
+      expect(createdView).toMatchObject({
+        name: "A and B without C",
+        matchMode: "all",
+        includedCollectionIds: [colA.id, colB.id],
+        excludedCollectionIds: [colC.id]
+      });
+      expect(database.listSavedCollectionViews()).toHaveLength(1);
+      expect(database.getSavedCollectionView(createdView.id)).toMatchObject({
+        name: "A and B without C"
+      });
+
+      // Update view
+      const updatedView = database.updateSavedCollectionView(createdView.id, {
+        name: "A and B renamed",
+        matchMode: "any",
+        includedCollectionIds: [colA.id],
+        excludedCollectionIds: []
+      });
+      expect(updatedView?.name).toBe("A and B renamed");
+      expect(updatedView?.matchMode).toBe("any");
+
+      // Test 9: Deleting saved collection view does NOT delete works, files, or collections
+      database.deleteSavedCollectionView(createdView.id);
+      expect(database.listSavedCollectionViews()).toHaveLength(0);
+      expect(database.listCollections()).toHaveLength(3);
+      expect(database.queryWorks().total).toBe(3);
+
+      // Test 10: SavedCollectionView works even if a referenced collection is deleted
+      const viewWithDeleted = database.createSavedCollectionView({
+        name: "View referencing soon deleted",
+        matchMode: "any",
+        includedCollectionIds: [colA.id, colC.id],
+        excludedCollectionIds: []
+      });
+      database.deleteCollection(colC.id);
+      expect(database.listCollections()).toHaveLength(2);
+      const readView = database.getSavedCollectionView(viewWithDeleted.id);
+      expect(readView?.includedCollectionIds).toContain(colC.id); // preserved in query_json
+      // Querying with the surviving collections does not crash
+      const queryWithMissing = database.queryWorks({
+        ...(readView?.includedCollectionIds ? { collectionIds: readView.includedCollectionIds } : {}),
+        ...(readView?.matchMode ? { collectionMatchMode: readView.matchMode } : {})
+      });
+      expect(queryWithMissing.total).toBe(2); // Work 1, Work 2 (having colA)
+    } finally {
+      database.close();
     }
   });
 });

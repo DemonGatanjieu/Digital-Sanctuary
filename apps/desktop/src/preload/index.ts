@@ -12,6 +12,8 @@ import type {
   ElementFilterSetting,
   LibraryPreferences,
   RuleSandboxResult,
+  SavedCollectionView,
+  SavedCollectionViewDraft,
   WorkQuery,
   WorkQueryResult,
   WorkRecord,
@@ -78,6 +80,10 @@ export interface SanctuaryApi {
   updateCollection(collectionId: string, draft: { name: string; description: string }): Promise<CollectionRecord[]>;
   deleteCollection(collectionId: string): Promise<CollectionRecord[]>;
   updateCollectionCover(collectionId: string, artworkId: string | null): Promise<CollectionRecord[]>;
+  listSavedCollectionViews(): Promise<SavedCollectionView[]>;
+  createSavedCollectionView(draft: SavedCollectionViewDraft): Promise<SavedCollectionView>;
+  updateSavedCollectionView(id: string, draft: SavedCollectionViewDraft): Promise<SavedCollectionView | null>;
+  deleteSavedCollectionView(id: string): Promise<boolean>;
   addArtworkToCollection(artworkId: string, collectionId: string): Promise<ArtworkRecord[]>;
   addWorkToCollection(workId: string, collectionId: string): Promise<WorkRecord | null>;
   removeWorkFromCollection(workId: string, collectionId: string): Promise<WorkRecord | null>;
@@ -141,6 +147,14 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("collections:delete", collectionId) as Promise<CollectionRecord[]>,
   updateCollectionCover: (collectionId, artworkId) =>
     ipcRenderer.invoke("collections:update-cover", collectionId, artworkId) as Promise<CollectionRecord[]>,
+  listSavedCollectionViews: () =>
+    ipcRenderer.invoke("saved-collection-views:list") as Promise<SavedCollectionView[]>,
+  createSavedCollectionView: (draft) =>
+    ipcRenderer.invoke("saved-collection-views:create", draft) as Promise<SavedCollectionView>,
+  updateSavedCollectionView: (id, draft) =>
+    ipcRenderer.invoke("saved-collection-views:update", id, draft) as Promise<SavedCollectionView | null>,
+  deleteSavedCollectionView: (id) =>
+    ipcRenderer.invoke("saved-collection-views:delete", id) as Promise<boolean>,
   addArtworkToCollection: (artworkId, collectionId) =>
     ipcRenderer.invoke(
       "collections:add-artwork",

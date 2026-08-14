@@ -8,7 +8,7 @@
 2. 另行备份 Pixiv 保存目录。自定义目录显示在同一设置卡；默认是系统图片目录下的 `Digital Sanctuary/Pixiv`。
 3. 若要保留 Pixiv 登录 session，应在应用完全退出后备份用户数据目录。开发版/早期版本通常为 `%APPDATA%\digital-sanctuary`；安装版以 Electron 实际用户数据目录为准。
 
-数据库当前 schema 版本为 `2`。从旧 `artworks` 页面模型首次迁移到作品模型前，程序还会在原数据库旁创建一次 `library.db.pre-v2.bak`。
+数据库当前 schema 版本为 `3`。从旧 `artworks` 页面模型首次迁移到作品模型前，程序仍会在原数据库旁创建一次 `library.db.pre-v2.bak`；后续的分类组合视图迁移不会改写原作品文件。
 
 ## 恢复数据库
 

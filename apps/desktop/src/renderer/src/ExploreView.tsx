@@ -129,7 +129,13 @@ export function ExploreView({ state, error, onStateChange, onError }: {
         <button className="login-button" onClick={() => void runCommand("login")}>邮箱登录</button>
         <div className="shield-status" title="作品图先由本地 WD Tagger 审查，未命中黑名单才显示">
           <span className="status-dot online" />
-          队列 {state.queuedResources} · 审查中 {state.pendingResources} · 放行 {state.approvedResources} · 内容拦截 {state.blockedResources} · 网络广告 {state.blockedAds} · 缓存命中 {state.remoteReviewCacheHits}
+          <span>放行 {state.approvedResources}</span>
+          {state.blockedResources > 0 && <span style={{ color: "var(--ds-danger-text)", fontWeight: 700 }}>· 拦截 {state.blockedResources}</span>}
+          {state.blockedAds > 0 && <span style={{ color: "var(--ds-warning-text)" }}>· 广告 {state.blockedAds}</span>}
+          {state.remoteReviewCacheHits > 0 && <span>· 缓存 {state.remoteReviewCacheHits}</span>}
+          {(state.pendingResources > 0 || state.queuedResources > 0) && (
+            <span style={{ color: "var(--ds-primary)", fontWeight: 700 }}>· 审查中 {state.pendingResources + state.queuedResources}</span>
+          )}
         </div>
         <button className="maximize-button" title={state.maximized ? "还原窗口" : "最大化窗口"} onClick={() => void runCommand("maximize")}>
           {state.maximized ? "❐" : "□"}

@@ -8,6 +8,8 @@ import {
   type ElementFilterSetting,
   DEFAULT_LIBRARY_PREFERENCES,
   type LibraryPreferences,
+  type SavedCollectionView,
+  type SavedCollectionViewDraft,
   type WorkQuery,
   type WorkQueryResult
 } from "@sanctuary/domain";
@@ -55,6 +57,7 @@ export function App() {
   const [bookmarkPreview, setBookmarkPreview] = useState<BookmarkDownloadPreview | null>(null);
   const [startingBookmarkDownload, setStartingBookmarkDownload] = useState(false);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
+  const [savedCollectionViews, setSavedCollectionViews] = useState<SavedCollectionView[]>([]);
   const [artists, setArtists] = useState<ArtistRecord[]>([]);
   const [filterSettings, setFilterSettings] = useState<ElementFilterSetting[]>([]);
   const [status, setStatus] = useState<AppStatus | null>(null);
@@ -75,21 +78,24 @@ export function App() {
   }, [workQuery]);
 
   const refreshLibrary = useCallback(async () => {
-    const [nextWorks, nextCollections, nextArtists, nextArtworks] = await Promise.all([
+    const [nextWorks, nextCollections, nextArtists, nextArtworks, nextSavedViews] = await Promise.all([
       window.sanctuary.queryWorks(workQuery),
       window.sanctuary.listCollections(),
       window.sanctuary.listArtists(),
-      galleryMode === "flat" ? Promise.resolve(null) : window.sanctuary.listArtworks()
+      galleryMode === "flat" ? Promise.resolve(null) : window.sanctuary.listArtworks(),
+      window.sanctuary.listSavedCollectionViews()
     ]);
     setWorkResult(nextWorks);
     if (nextArtworks) setArtworks(nextArtworks);
     setCollections(nextCollections);
     setArtists(nextArtists);
+    setSavedCollectionViews(nextSavedViews);
   }, [galleryMode, workQuery]);
 
   useEffect(() => {
     void Promise.all([
       window.sanctuary.listCollections(),
+      window.sanctuary.listSavedCollectionViews(),
       window.sanctuary.listFilterSettings(),
       window.sanctuary.status(),
       window.sanctuary.listArtists(),
@@ -97,8 +103,9 @@ export function App() {
       window.sanctuary.getLibraryPreferences(),
       window.sanctuary.listCustomElementGroups()
     ])
-      .then(([nextCollections, nextFilterSettings, nextStatus, nextArtists, nextAppearance, nextLibraryPreferences, nextCustomGroups]) => {
+      .then(([nextCollections, nextSavedViews, nextFilterSettings, nextStatus, nextArtists, nextAppearance, nextLibraryPreferences, nextCustomGroups]) => {
         setCollections(nextCollections);
+        setSavedCollectionViews(nextSavedViews);
         setFilterSettings(nextFilterSettings);
         setStatus(nextStatus);
         setArtists(nextArtists);
@@ -171,6 +178,29 @@ export function App() {
       showError(caught);
     } finally {
       setCollectionSaving(false);
+    }
+  }
+
+  async function saveSavedCollectionView(draft: SavedCollectionViewDraft, id?: string) {
+    try {
+      if (id) {
+        await window.sanctuary.updateSavedCollectionView(id, draft);
+      } else {
+        await window.sanctuary.createSavedCollectionView(draft);
+      }
+      setSavedCollectionViews(await window.sanctuary.listSavedCollectionViews());
+    } catch (caught) {
+      showError(caught);
+      throw caught;
+    }
+  }
+
+  async function deleteSavedCollectionView(id: string) {
+    try {
+      await window.sanctuary.deleteSavedCollectionView(id);
+      setSavedCollectionViews(await window.sanctuary.listSavedCollectionViews());
+    } catch (caught) {
+      showError(caught);
     }
   }
 
@@ -383,6 +413,7 @@ export function App() {
             workQuery={workQuery}
             workLoading={workLoading}
             collections={collections}
+            savedCollectionViews={savedCollectionViews}
             artists={artists}
             appearance={appearance}
             mode={galleryMode}
@@ -393,6 +424,8 @@ export function App() {
             onImport={importImages}
             onCreateCollection={() => setCollectionEditor("new")}
             onEditCollection={setCollectionEditor}
+            onSaveSavedView={saveSavedCollectionView}
+            onDeleteSavedView={deleteSavedCollectionView}
             onAssignCollection={assignCollection}
             onAssignWorkCollection={assignWorkCollection}
             onUpdateCollectionCover={updateCollectionCover}

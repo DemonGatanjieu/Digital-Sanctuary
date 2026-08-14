@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
   AppearancePreferences,
@@ -46,6 +46,27 @@ export function WorkLibrary({
   const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState<{ message: string; undo?: () => Promise<void> } | null>(null);
   const activeCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
+  const isCombinationFilter = Boolean(
+    (query.collectionIds && query.collectionIds.length > 0) ||
+    (query.excludedCollectionIds && query.excludedCollectionIds.length > 0)
+  );
+
+  const combinationSummary = useMemo(() => {
+    if (!isCombinationFilter) return "";
+    const incNames = (query.collectionIds ?? []).map(
+      (id) => collections.find((c) => c.id === id)?.name ?? "未知分类"
+    );
+    const excNames = (query.excludedCollectionIds ?? []).map(
+      (id) => collections.find((c) => c.id === id)?.name ?? "未知分类"
+    );
+    const op = query.collectionMatchMode === "all" ? " + " : " | ";
+    let str = "";
+    if (incNames.length > 0) str += incNames.join(op);
+    else str += "全库作品";
+    if (excNames.length > 0) str += " - " + excNames.join(" - ");
+    return str;
+  }, [isCombinationFilter, query.collectionIds, query.excludedCollectionIds, query.collectionMatchMode, collections]);
+
   const featuredWork = result.items[0] ?? null;
   const lastSelectedWorkId = useRef<string | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -220,6 +241,22 @@ export function WorkLibrary({
           <button type="button" onClick={() => {
             const { collectionId: _collectionId, ...withoutCollection } = query;
             onQueryChange({ ...withoutCollection, offset: 0 });
+          }}>查看全部作品</button>
+        </section>
+      )}
+
+      {isCombinationFilter && (
+        <section className="work-collection-context work-combination-context">
+          <div>
+            <span>当前组合</span>
+            <strong>{combinationSummary}</strong>
+            <small className="combo-mode-label">
+              {query.collectionMatchMode === "all" ? "全部满足 (AND)" : "任意满足 (OR)"}
+            </small>
+          </div>
+          <button type="button" onClick={() => {
+            const { collectionIds: _cids, collectionMatchMode: _cmm, excludedCollectionIds: _ecids, ...withoutCombo } = query;
+            onQueryChange({ ...withoutCombo, offset: 0 });
           }}>查看全部作品</button>
         </section>
       )}
@@ -435,7 +472,7 @@ function WorkCard({
   const [assigning, setAssigning] = useState(false);
   const coverPath = work.coverAsset?.thumbnailPath ?? work.coverAsset?.path ?? "";
   return (
-    <article className={`work-library-card ${selected ? "selected" : ""}`}>
+    <article className={`work-library-card ${selected ? "selected" : ""}`} data-multi-page={work.pageCount > 1 ? "true" : undefined}>
       {selecting && (
         <button type="button" className="work-card-check" aria-label={selected ? `取消选择 ${work.title}` : `选择 ${work.title}`} onClick={(event) => onToggleSelection(event.shiftKey)}>
           {selected ? "✓" : ""}

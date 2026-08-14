@@ -1,4 +1,5 @@
 import type {
+  CollectionMatchMode,
   SortDirection,
   WorkQuery,
   WorkSortField,
@@ -15,6 +16,7 @@ const SORT_FIELDS = new Set<WorkSortField>([
   "byteLength"
 ]);
 const DIRECTIONS = new Set<SortDirection>(["asc", "desc"]);
+const COLLECTION_MATCH_MODES = new Set<CollectionMatchMode>(["all", "any"]);
 
 /** Converts untrusted renderer input into a small, bounded database query. */
 export function parseWorkQuery(value: unknown): WorkQuery {
@@ -34,6 +36,16 @@ export function parseWorkQuery(value: unknown): WorkQuery {
   }
   if (typeof value.collectionId === "string" && value.collectionId.length <= 200) {
     query.collectionId = value.collectionId;
+  }
+  const collectionIds = boundedStringIds(value.collectionIds, 50, 200);
+  if (collectionIds?.length) query.collectionIds = collectionIds;
+  const excludedCollectionIds = boundedStringIds(value.excludedCollectionIds, 50, 200);
+  if (excludedCollectionIds?.length) query.excludedCollectionIds = excludedCollectionIds;
+  if (
+    typeof value.collectionMatchMode === "string" &&
+    COLLECTION_MATCH_MODES.has(value.collectionMatchMode as CollectionMatchMode)
+  ) {
+    query.collectionMatchMode = value.collectionMatchMode as CollectionMatchMode;
   }
   if (typeof value.sortBy === "string" && SORT_FIELDS.has(value.sortBy as WorkSortField)) {
     query.sortBy = value.sortBy as WorkSortField;
@@ -65,4 +77,13 @@ function boundedInteger(value: unknown, fallback: number, minimum: number, maxim
   return typeof value === "number" && Number.isSafeInteger(value)
     ? Math.min(maximum, Math.max(minimum, value))
     : fallback;
+}
+
+function boundedStringIds(value: unknown, maximumItems: number, maximumLength: number): string[] | null {
+  if (!Array.isArray(value) || value.length > maximumItems) return null;
+  const ids = value.filter(
+    (item): item is string => typeof item === "string" && item.length > 0 && item.length <= maximumLength
+  );
+  if (ids.length !== value.length) return null;
+  return [...new Set(ids)];
 }

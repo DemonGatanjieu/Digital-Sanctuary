@@ -6,6 +6,9 @@ describe("parseWorkQuery", () => {
     expect(parseWorkQuery({
       search: "  cloud  ",
       workType: "manga",
+      collectionIds: ["collection:a", "collection:a", "collection:b"],
+      collectionMatchMode: "all",
+      excludedCollectionIds: ["collection:c"],
       sortBy: "title",
       direction: "asc",
       limit: 9_999,
@@ -13,6 +16,9 @@ describe("parseWorkQuery", () => {
     })).toEqual({
       search: "cloud",
       workType: "manga",
+      collectionIds: ["collection:a", "collection:b"],
+      collectionMatchMode: "all",
+      excludedCollectionIds: ["collection:c"],
       sortBy: "title",
       direction: "asc",
       limit: 200,
@@ -23,6 +29,11 @@ describe("parseWorkQuery", () => {
   it("drops unsupported renderer input", () => {
     expect(parseWorkQuery({ workType: "anything", sortBy: "sql", direction: "sideways" }))
       .toEqual({ limit: 60, offset: 0 });
+    expect(parseWorkQuery({
+      collectionIds: ["valid", 42],
+      excludedCollectionIds: Array.from({ length: 51 }, (_, index) => String(index)),
+      collectionMatchMode: "neither"
+    })).toEqual({ limit: 60, offset: 0 });
     expect(parseWorkId(42)).toBeNull();
     expect(parseWorkId("pixiv:42")).toBe("pixiv:42");
     expect(parseWorkIds(["pixiv:42", "pixiv:42", "local:1"])).toEqual(["pixiv:42", "local:1"]);

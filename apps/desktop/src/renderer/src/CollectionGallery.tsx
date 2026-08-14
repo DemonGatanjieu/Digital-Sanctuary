@@ -1,4 +1,4 @@
-import type { ArtworkRecord, CollectionRecord } from "@sanctuary/domain";
+import type { ArtworkRecord, CollectionRecord, SavedCollectionView } from "@sanctuary/domain";
 import { ArtworkCard, artworkImageUrl } from "./ArtworkCard";
 
 export function CollectionDetailPage({
@@ -91,6 +91,103 @@ export function CollectionCard({
         <h3>{collection.name}</h3>
         <small>{count} 个作品</small>
         {collection.description && <p className="collection-desc">{collection.description}</p>}
+      </div>
+    </article>
+  );
+}
+
+export function formatSavedViewSummary(
+  view: SavedCollectionView,
+  collections: CollectionRecord[]
+): string {
+  const incNames = view.includedCollectionIds.map(
+    (id) => collections.find((c) => c.id === id)?.name ?? "已失效分类"
+  );
+  const excNames = view.excludedCollectionIds.map(
+    (id) => collections.find((c) => c.id === id)?.name ?? "已失效分类"
+  );
+  const op = view.matchMode === "all" ? " + " : " | ";
+  let str = "";
+  if (incNames.length > 0) str += incNames.join(op);
+  else str += "全库作品";
+  if (excNames.length > 0) str += " - " + excNames.join(" - ");
+  return str;
+}
+
+export function SavedCollectionViewCard({
+  view,
+  collections,
+  artworks,
+  onOpen,
+  onEdit,
+  onDelete
+}: {
+  view: SavedCollectionView;
+  collections: CollectionRecord[];
+  artworks: ArtworkRecord[];
+  onOpen: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const summary = formatSavedViewSummary(view, collections);
+
+  // Find up to 3 covers from the included collections
+  const covers = view.includedCollectionIds
+    .map((colId) => {
+      const col = collections.find((c) => c.id === colId);
+      if (!col) return "";
+      const art = artworks.find((a) => a.id === col.coverArtworkId)
+        ?? artworks.find((a) => a.collectionIds.includes(colId));
+      return art ? artworkImageUrl(art) : "";
+    })
+    .filter(Boolean)
+    .slice(0, 3);
+
+  return (
+    <article className="collection-card saved-view-card" onClick={onOpen}>
+      <div className="saved-view-card-actions" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="saved-view-btn-action"
+          title="编辑组合"
+          aria-label={`编辑组合 ${view.name}`}
+          onClick={onEdit}
+        >
+          ✏️
+        </button>
+        <button
+          type="button"
+          className="saved-view-btn-action btn-danger"
+          title="删除组合"
+          aria-label={`删除组合 ${view.name}`}
+          onClick={onDelete}
+        >
+          🗑️
+        </button>
+      </div>
+
+      <div className="collection-cover saved-view-cover-collage">
+        {covers.length > 0 ? (
+          covers.map((url, idx) => (
+            <img key={idx} src={url} alt="" className={`collage-item collage-item-${idx + 1}`} loading="lazy" />
+          ))
+        ) : (
+          <div className="collection-cover-placeholder saved-view-placeholder">
+            <span>⚡</span>
+          </div>
+        )}
+      </div>
+
+      <div className="collection-info">
+        <div className="saved-view-meta-row">
+          <span className={`saved-view-mode-tag mode-${view.matchMode}`}>
+            {view.matchMode === "all" ? "全部满足" : "任意满足"}
+          </span>
+        </div>
+        <h3>{view.name}</h3>
+        <p className="collection-desc saved-view-summary-text" title={summary}>
+          {summary}
+        </p>
       </div>
     </article>
   );
