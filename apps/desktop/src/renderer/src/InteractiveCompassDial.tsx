@@ -21,9 +21,9 @@ const SECTORS: SectorInfo[] = [
   { id: "builtin.cyber-deck", name: "赛博矩阵", angle: 270, symbol: "W · 矩阵", baseColor: "#00f0ff" }
 ];
 
-// Continuous dynamic chromatic spectrum interpolation
-function getDynamicDialColor(deg: number): { color: string; glow: string; bgPlate: string; hue: number } {
-  const norm = ((deg % 360) + 360) % 360;
+// Continuous dynamic chromatic spectrum interpolation based on angle at 12 o'clock
+function getDynamicDialColor(rotation: number): { color: string; glow: string; bgPlate: string; hue: number } {
+  const norm = ((-rotation % 360) + 360) % 360;
   let hue = 205;
   if (norm >= 0 && norm < 90) {
     const t = norm / 90;
@@ -70,7 +70,7 @@ export function InteractiveCompassDial({
       setActiveSectorId(active.themeId);
       const matched = SECTORS.find((s) => s.id === active.themeId);
       if (matched) {
-        setRotation(matched.angle);
+        setRotation(-matched.angle);
       }
     }).catch(() => {});
 
@@ -78,7 +78,7 @@ export function InteractiveCompassDial({
       setActiveSectorId(e.activeThemeId);
       const matched = SECTORS.find((s) => s.id === e.activeThemeId);
       if (matched) {
-        setRotation(matched.angle);
+        setRotation(-matched.angle);
       }
     });
     return unsub;
@@ -97,13 +97,14 @@ export function InteractiveCompassDial({
     return degrees;
   }, []);
 
-  const identifySector = useCallback((currentAngle: number): SectorInfo => {
-    const normalized = ((currentAngle % 360) + 360) % 360;
+  const identifySector = useCallback((currentRotation: number): SectorInfo => {
+    // When wheel is rotated by R, the sector at the 12 o'clock top is (-R) mod 360
+    const normalizedAtTop = ((-currentRotation % 360) + 360) % 360;
     const fallback = SECTORS[0] ?? { id: "default", name: "蔚蓝晨曦", angle: 0, symbol: "N · 晨曦", baseColor: "#0284c7" };
     let closest: SectorInfo = fallback;
     let minDiff = 360;
     for (const sector of SECTORS) {
-      let diff = Math.abs(normalized - sector.angle);
+      let diff = Math.abs(normalizedAtTop - sector.angle);
       if (diff > 180) diff = 360 - diff;
       if (diff < minDiff) {
         minDiff = diff;
@@ -136,7 +137,7 @@ export function InteractiveCompassDial({
           const currentSector = identifySector(prev);
           void window.sanctuary.setActiveTheme(currentSector.id);
           onThemeSwitch?.(currentSector.id);
-          return prev;
+          return -currentSector.angle;
         });
       }
     };
@@ -240,7 +241,7 @@ export function InteractiveCompassDial({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerLeave}
-      title="按住鼠标顺时针/逆时针旋转拨盘，可无极切换四大次元主题！"
+      title="按住鼠标顺时针/逆时针旋转拨盘，将心仪的次元符文转至 12 点钟指针处即可切换主题！"
     >
       {/* Dynamic Chromatic Outer Halo */}
       <div
@@ -251,7 +252,7 @@ export function InteractiveCompassDial({
         }}
       />
 
-      {/* Ring 1: Outer Rune & Degree Ticks (Rotates 1x) */}
+      {/* Ring 1: Outer Rune & Degree Ticks (Rotates with user drag) */}
       <div
         className="astrolabe-ring outer-ring"
         style={{ transform: `rotate(${rotation}deg)` }}
@@ -318,13 +319,13 @@ export function InteractiveCompassDial({
         />
       </div>
 
-      {/* Center Astrolabe Core & Magnetic Pointer Needle */}
+      {/* Center Astrolabe Core & Fixed 12 o'clock Magnetic Pointer Needle */}
       <div className="astrolabe-core">
         <div
-          className="core-pointer-needle"
-          style={{ transform: `rotate(${rotation}deg)` }}
+          className="core-pointer-needle fixed-north"
+          style={{ transform: "rotate(0deg)" }}
         >
-          {/* North Pointing Arrowhead */}
+          {/* North Pointing Arrowhead (Firmly pointing straight up at 12 o'clock reticle) */}
           <div
             className="needle-arrow-north"
             style={{
