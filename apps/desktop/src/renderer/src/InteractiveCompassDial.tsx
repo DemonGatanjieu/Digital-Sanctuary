@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { ActiveTheme } from "@sanctuary/domain";
 
 export interface InteractiveCompassDialProps {
   mode?: "hero" | "floating" | "compact";
@@ -12,15 +11,39 @@ interface SectorInfo {
   name: string;
   angle: number; // in degrees: 0 = North, 90 = East, 180 = South, 270 = West
   symbol: string;
-  color: string;
+  baseColor: string;
 }
 
 const SECTORS: SectorInfo[] = [
-  { id: "default", name: "蔚蓝", angle: 0, symbol: "N · 晨曦", color: "#0284c7" },
-  { id: "builtin.hollow-zero", name: "绝区", angle: 90, symbol: "E · 空洞", color: "#ffd200" },
-  { id: "builtin.sakura-dream", name: "樱梦", angle: 180, symbol: "S · 梦境", color: "#ff5e97" },
-  { id: "builtin.cyber-deck", name: "赛博", angle: 270, symbol: "W · 矩阵", color: "#00f0ff" }
+  { id: "default", name: "蔚蓝晨曦", angle: 0, symbol: "N · 晨曦", baseColor: "#0284c7" },
+  { id: "builtin.hollow-zero", name: "空洞绝区", angle: 90, symbol: "E · 空洞", baseColor: "#ffd200" },
+  { id: "builtin.sakura-dream", name: "樱落梦境", angle: 180, symbol: "S · 梦境", baseColor: "#ff5e97" },
+  { id: "builtin.cyber-deck", name: "赛博矩阵", angle: 270, symbol: "W · 矩阵", baseColor: "#00f0ff" }
 ];
+
+// Continuous dynamic chromatic spectrum interpolation
+function getDynamicDialColor(deg: number): { color: string; glow: string; bgPlate: string; hue: number } {
+  const norm = ((deg % 360) + 360) % 360;
+  let hue = 205;
+  if (norm >= 0 && norm < 90) {
+    const t = norm / 90;
+    hue = 205 - t * (205 - 48); // Azure (205) -> Yellow (48)
+  } else if (norm >= 90 && norm < 180) {
+    const t = (norm - 90) / 90;
+    hue = (48 - t * 73 + 360) % 360; // Yellow (48) -> Pink (335)
+  } else if (norm >= 180 && norm < 270) {
+    const t = (norm - 180) / 90;
+    hue = 335 - t * (335 - 185); // Pink (335) -> Cyan (185)
+  } else {
+    const t = (norm - 270) / 90;
+    hue = 185 + t * (205 - 185); // Cyan (185) -> Azure (205)
+  }
+  const roundedHue = Math.round(hue);
+  const color = `hsl(${roundedHue}, 96%, 58%)`;
+  const glow = `hsla(${roundedHue}, 96%, 58%, 0.48)`;
+  const bgPlate = `radial-gradient(circle, hsla(${roundedHue}, 80%, 45%, 0.22) 0%, rgba(12, 16, 26, 0.88) 100%)`;
+  return { color, glow, bgPlate, hue: roundedHue };
+}
 
 export function InteractiveCompassDial({
   mode = "hero",
@@ -33,15 +56,15 @@ export function InteractiveCompassDial({
   const [activeSectorId, setActiveSectorId] = useState<string>("default");
   const [tilt, setTilt] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  // Physics state refs
-  const dragStartAngle = useRef<number>(0);
-  const dialStartRotation = useRef<number>(0);
-  const lastAngle = useRef<number>(0);
+  // Physics tracking state refs
+  const dragStartCursorAngle = useRef<number>(0);
+  const dragStartDialRotation = useRef<number>(0);
+  const velocityHistory = useRef<Array<{ angle: number; time: number }>>([]);
   const velocity = useRef<number>(0);
   const animFrameId = useRef<number | null>(null);
   const isInteracting = useRef<boolean>(false);
 
-  // Sync with current active theme
+  // Sync with current active theme on mount and events
   useEffect(() => {
     window.sanctuary.getActiveTheme().then((active) => {
       setActiveSectorId(active.themeId);
@@ -68,7 +91,7 @@ export function InteractiveCompassDial({
     const centerY = rect.top + rect.height / 2;
     const dx = clientX - centerX;
     const dy = clientY - centerY;
-    // atan2 gives angle where 0 is East (+X), we offset so 0 is North (-Y)
+    // 0 is North (-Y), clockwise
     let degrees = (Math.atan2(dy, dx) * 180) / Math.PI + 90;
     if (degrees < 0) degrees += 360;
     return degrees;
@@ -89,15 +112,15 @@ export function InteractiveCompassDial({
     return closest;
   }, []);
 
-  // Inertial momentum animation loop
+  // Smooth inertial momentum animation loop
   const startMomentumLoop = useCallback(() => {
     if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
 
     const step = () => {
       if (isInteracting.current) return;
 
-      velocity.current *= 0.94; // damping friction
-      if (Math.abs(velocity.current) > 0.08) {
+      velocity.current *= 0.955; // high-fidelity momentum damping
+      if (Math.abs(velocity.current) > 0.04) {
         setRotation((prev) => {
           const next = prev + velocity.current;
           const currentSector = identifySector(next);
@@ -107,7 +130,7 @@ export function InteractiveCompassDial({
         animFrameId.current = requestAnimationFrame(step);
       } else {
         velocity.current = 0;
-        // Snap to nearest sector and activate
+        // Snap smoothly to nearest sector and trigger theme switch
         setRotation((prev) => {
           const currentSector = identifySector(prev);
           void window.sanctuary.setActiveTheme(currentSector.id);
@@ -124,10 +147,10 @@ export function InteractiveCompassDial({
     setIsDragging(true);
     if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
 
-    const currentAngle = getAngleFromCenter(e.clientX, e.clientY);
-    dragStartAngle.current = currentAngle;
-    dialStartRotation.current = rotation;
-    lastAngle.current = currentAngle;
+    const cursorAngle = getAngleFromCenter(e.clientX, e.clientY);
+    dragStartCursorAngle.current = cursorAngle;
+    dragStartDialRotation.current = rotation;
+    velocityHistory.current = [{ angle: cursorAngle, time: performance.now() }];
     velocity.current = 0;
 
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
@@ -139,27 +162,31 @@ export function InteractiveCompassDial({
       const rect = dialRef.current.getBoundingClientRect();
       const cx = (e.clientX - (rect.left + rect.width / 2)) / (rect.width / 2);
       const cy = (e.clientY - (rect.top + rect.height / 2)) / (rect.height / 2);
-      setTilt({ x: -cy * 14, y: cx * 14 });
+      setTilt({ x: -cy * 12, y: cx * 12 });
     }
 
     if (!isDragging) return;
 
-    const currentAngle = getAngleFromCenter(e.clientX, e.clientY);
-    let delta = currentAngle - lastAngle.current;
-    if (delta > 180) delta -= 360;
-    if (delta < -180) delta += 360;
+    const currentCursorAngle = getAngleFromCenter(e.clientX, e.clientY);
+    const now = performance.now();
 
-    velocity.current = delta * 0.8;
-    lastAngle.current = currentAngle;
+    // Sample rolling velocity window
+    const history = velocityHistory.current;
+    history.push({ angle: currentCursorAngle, time: now });
+    if (history.length > 5) history.shift();
 
-    setRotation((prev) => {
-      const next = prev + delta;
-      const currentSector = identifySector(next);
-      if (currentSector.id !== activeSectorId) {
-        setActiveSectorId(currentSector.id);
-      }
-      return next;
-    });
+    // Shortest angular delta
+    let delta = currentCursorAngle - dragStartCursorAngle.current;
+    while (delta < -180) delta += 360;
+    while (delta > 180) delta -= 360;
+
+    const targetRotation = dragStartDialRotation.current + delta;
+    setRotation(targetRotation);
+
+    const currentSector = identifySector(targetRotation);
+    if (currentSector.id !== activeSectorId) {
+      setActiveSectorId(currentSector.id);
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
@@ -167,6 +194,20 @@ export function InteractiveCompassDial({
     isInteracting.current = false;
     setIsDragging(false);
     (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
+
+    // Calculate instantaneous release velocity from history
+    const history = velocityHistory.current;
+    if (history.length >= 2) {
+      const oldest = history[0];
+      const newest = history[history.length - 1];
+      const timeSpan = Math.max(1, newest.time - oldest.time);
+      let angleDiff = newest.angle - oldest.angle;
+      while (angleDiff < -180) angleDiff += 360;
+      while (angleDiff > 180) angleDiff -= 360;
+      // Convert to degrees per frame (~16ms)
+      velocity.current = (angleDiff / timeSpan) * 16;
+    }
+
     startMomentumLoop();
   };
 
@@ -180,13 +221,16 @@ export function InteractiveCompassDial({
   };
 
   const activeSector = SECTORS.find((s) => s.id === activeSectorId) ?? SECTORS[0];
+  const dynamicColor = getDynamicDialColor(rotation);
 
   return (
     <div
       ref={dialRef}
       className={`compass-astrolabe-widget ${mode} ${isDragging ? "is-dragging" : ""} ${className}`}
       style={{
-        transform: `perspective(700px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
+        transform: `perspective(700px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+        background: dynamicColor.bgPlate,
+        borderColor: dynamicColor.glow
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -194,8 +238,14 @@ export function InteractiveCompassDial({
       onPointerLeave={handlePointerLeave}
       title="按住鼠标顺时针/逆时针旋转拨盘，可无极切换四大次元主题！"
     >
-      {/* Outer Glow Halo */}
-      <div className="astrolabe-halo" style={{ borderColor: activeSector.color }} />
+      {/* Dynamic Chromatic Outer Halo */}
+      <div
+        className="astrolabe-halo"
+        style={{
+          borderColor: dynamicColor.color,
+          boxShadow: `0 0 24px ${dynamicColor.glow}`
+        }}
+      />
 
       {/* Ring 1: Outer Rune & Degree Ticks (Rotates 1x) */}
       <div
@@ -203,19 +253,24 @@ export function InteractiveCompassDial({
         style={{ transform: `rotate(${rotation}deg)` }}
       >
         <div className="dial-ticks" />
-        {SECTORS.map((sector) => (
-          <div
-            key={sector.id}
-            className={`cardinal-rune ${activeSectorId === sector.id ? "active" : ""}`}
-            style={{
-              transform: `rotate(${sector.angle}deg) translateY(-54px)`
-            }}
-          >
-            <span style={{ color: activeSectorId === sector.id ? sector.color : undefined }}>
-              {sector.symbol}
-            </span>
-          </div>
-        ))}
+        {SECTORS.map((sector) => {
+          const isActive = activeSectorId === sector.id;
+          return (
+            <div
+              key={sector.id}
+              className={`cardinal-rune ${isActive ? "active" : ""}`}
+              style={{
+                transform: `rotate(${sector.angle}deg) translateY(-54px)`,
+                borderColor: isActive ? dynamicColor.color : undefined,
+                boxShadow: isActive ? `0 0 12px ${dynamicColor.glow}` : undefined
+              }}
+            >
+              <span style={{ color: isActive ? dynamicColor.color : undefined }}>
+                {sector.symbol}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Ring 2: Middle Differential Gear (Counter-rotates -0.65x) */}
@@ -224,13 +279,19 @@ export function InteractiveCompassDial({
         style={{ transform: `rotate(${-rotation * 0.65}deg)` }}
       >
         <div className="gear-teeth" />
-        <div className="astrolabe-matrix-grid" />
+        <div
+          className="astrolabe-matrix-grid"
+          style={{ borderColor: dynamicColor.glow }}
+        />
       </div>
 
-      {/* Ring 3: Inner Constellation / HUD Ring (Rotates 0.35x) */}
+      {/* Ring 3: Inner Constellation HUD (Rotates 0.35x) */}
       <div
         className="astrolabe-ring inner-hud"
-        style={{ transform: `rotate(${rotation * 0.35}deg)` }}
+        style={{
+          transform: `rotate(${rotation * 0.35}deg)`,
+          borderColor: dynamicColor.glow
+        }}
       >
         <div className="hud-brackets" />
       </div>
@@ -240,13 +301,16 @@ export function InteractiveCompassDial({
         <div
           className="target-arrow-triangle"
           style={{
-            borderTopColor: activeSector.color,
-            filter: `drop-shadow(0 0 8px ${activeSector.color})`
+            borderTopColor: dynamicColor.color,
+            filter: `drop-shadow(0 0 10px ${dynamicColor.glow})`
           }}
         />
         <div
           className="target-beacon-dot"
-          style={{ backgroundColor: activeSector.color }}
+          style={{
+            backgroundColor: dynamicColor.color,
+            boxShadow: `0 0 8px ${dynamicColor.color}`
+          }}
         />
       </div>
 
@@ -260,8 +324,8 @@ export function InteractiveCompassDial({
           <div
             className="needle-arrow-north"
             style={{
-              backgroundColor: activeSector.color,
-              boxShadow: `0 0 14px ${activeSector.color}`
+              backgroundColor: dynamicColor.color,
+              boxShadow: `0 0 16px ${dynamicColor.glow}`
             }}
           />
           {/* Needle Spine */}
@@ -272,8 +336,8 @@ export function InteractiveCompassDial({
         <div
           className="core-gemstone"
           style={{
-            backgroundColor: activeSector.color,
-            boxShadow: `0 0 20px ${activeSector.color}`
+            backgroundColor: dynamicColor.color,
+            boxShadow: `0 0 24px ${dynamicColor.glow}`
           }}
         >
           <span className="gemstone-symbol">✦</span>
@@ -281,9 +345,12 @@ export function InteractiveCompassDial({
       </div>
 
       {/* Dynamic Interaction HUD Label */}
-      <div className="astrolabe-label">
+      <div
+        className="astrolabe-label"
+        style={{ borderColor: dynamicColor.glow }}
+      >
         <span className="label-prefix">DIAL · </span>
-        <strong style={{ color: activeSector.color }}>{activeSector.name}</strong>
+        <strong style={{ color: dynamicColor.color }}>{activeSector.name}</strong>
       </div>
     </div>
   );
