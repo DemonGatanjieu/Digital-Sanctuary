@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ArtworkRecord, CollectionRecord, SavedCollectionView } from "@sanctuary/domain";
+import { AquariumFloatingStage } from "./AquariumFloatingStage";
 import { ArtworkCard, artworkImageUrl } from "./ArtworkCard";
 import { Button } from "./Button";
 import { DialogOverlay } from "./DialogOverlay";
@@ -37,7 +38,7 @@ export function CollectionDetailPage({
   const items = artworks.filter((artwork) => artwork.collectionIds.includes(collection.id));
   const coverArtwork = artworks.find((a) => a.id === collection.coverArtworkId) ?? items[0];
   const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
-  const [viewMode, setViewMode] = useState<"flip" | "grid" | "toc">("flip");
+  const [viewMode, setViewMode] = useState<"flip" | "aquarium" | "grid" | "toc">("flip");
   const [isPickingWorks, setIsPickingWorks] = useState(false);
   const [isPhotobookTocOpen, setIsPhotobookTocOpen] = useState(false);
 
@@ -90,10 +91,11 @@ export function CollectionDetailPage({
             value={viewMode}
             options={[
               { value: "flip", label: "📖 翻页画册", title: "实体画册双页对开翻页质感" },
+              { value: "aquarium", label: "🫧 水族漂浮", title: "深海沉浸漂浮水泡，大小错落，流动触感" },
               { value: "grid", label: "🖼️ 典藏网格", title: "全景网格速览" },
               { value: "toc", label: "📑 篇目目录", title: "书籍篇目索引" }
             ]}
-            onChange={(val) => setViewMode(val as "flip" | "grid" | "toc")}
+            onChange={(val) => setViewMode(val as "flip" | "aquarium" | "grid" | "toc")}
           />
         </div>
 
@@ -120,6 +122,15 @@ export function CollectionDetailPage({
               + 立即从画廊挑选作品入册
             </Button>
           </div>
+        ) : viewMode === "aquarium" ? (
+          /* Abyssal Aquarium Floating Bubble Stage */
+          <AquariumFloatingStage
+            items={items}
+            onOpenArtwork={onOpenArtwork}
+            onSetCover={onSetCover}
+            coverArtworkId={collection.coverArtworkId}
+            title={collection.name}
+          />
         ) : viewMode === "flip" ? (
           /* 3D Real Photobook Double-Spread Flip Theater */
           <PhotobookFlipSpread

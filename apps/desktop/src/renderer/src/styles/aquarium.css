@@ -1,0 +1,406 @@
+/* ==========================================================================
+   Abyssal Aquarium Floating Bubble Stage (沉浸深海水族馆漂浮相册)
+   ========================================================================== */
+
+.aquarium-stage-viewport {
+  position: relative;
+  width: 100%;
+  min-height: 720px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 20%, #082f49 0%, #031e36 40%, #021124 75%, #010712 100%);
+  display: flex;
+  flex-direction: column;
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.8);
+}
+
+/* Deep Ocean Caustics & Sunbeam Shimmer */
+.aquarium-caustics-layer {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% -10%, rgba(56, 189, 248, 0.25) 0%, rgba(14, 165, 233, 0.08) 50%, transparent 80%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 1;
+  animation: aquarium-caustic-pulse 8s ease-in-out infinite alternate;
+}
+
+@keyframes aquarium-caustic-pulse {
+  0% { opacity: 0.7; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.05) translateY(10px); }
+}
+
+.aquarium-deep-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, transparent 40%, rgba(1, 7, 18, 0.75) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Ambient Floating Micro-Bubbles */
+.aquarium-ambient-bubbles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.micro-bubble {
+  position: absolute;
+  bottom: -40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.8) 0%, rgba(56, 189, 248, 0.4) 60%, rgba(255, 255, 255, 0.1) 100%);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+  animation: aquarium-rise-bubble linear infinite;
+}
+
+.micro-1 { width: 10px; height: 10px; opacity: 0.6; }
+.micro-2 { width: 16px; height: 16px; opacity: 0.5; }
+.micro-3 { width: 6px; height: 6px; opacity: 0.7; }
+.micro-4 { width: 22px; height: 22px; opacity: 0.4; }
+
+@keyframes aquarium-rise-bubble {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  15% { opacity: 0.6; }
+  85% { opacity: 0.6; }
+  100% { transform: translateY(-800px) translateX(30px); opacity: 0; }
+}
+
+/* Floating HUD Bar */
+.aquarium-floating-hud {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  background: rgba(3, 14, 28, 0.45);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(56, 189, 248, 0.15);
+}
+
+.aquarium-hud-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  background: rgba(14, 165, 233, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.2);
+}
+
+.aquarium-pulse-dot {
+  font-size: 14px;
+  animation: aquarium-pulse 2s ease-in-out infinite alternate;
+}
+
+@keyframes aquarium-pulse {
+  0% { transform: scale(0.9); }
+  100% { transform: scale(1.2); }
+}
+
+.aquarium-hud-text {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #38bdf8;
+}
+
+.aquarium-hud-count {
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(56, 189, 248, 0.25);
+  color: #f0f9ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.aquarium-hud-hint {
+  font-size: 11.5px;
+  color: rgba(224, 242, 254, 0.65);
+  font-weight: 550;
+}
+
+/* Bubbles Swarm Stage */
+.aquarium-bubbles-swarm {
+  position: relative;
+  z-index: 5;
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 36px 40px;
+  padding: 48px 40px 64px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+/* Base Bubble Structure */
+.aquarium-bubble {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  will-change: transform;
+  animation: aquarium-buoyancy ease-in-out infinite alternate;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease;
+}
+
+@keyframes aquarium-buoyancy {
+  0% { transform: translate3d(0, -12px, 0) rotate(1deg); }
+  50% { transform: translate3d(6px, 0px, 0) rotate(-1deg); }
+  100% { transform: translate3d(0, 14px, 0) rotate(1.5deg); }
+}
+
+.aquarium-bubble:hover {
+  transform: scale(1.1) translateY(-8px) !important;
+  z-index: 25;
+}
+
+/* Bubble Size Hierarchy */
+.aquarium-bubble.size-hero {
+  width: 290px;
+  height: 290px;
+}
+
+.aquarium-bubble.size-large {
+  width: 235px;
+  height: 235px;
+}
+
+.aquarium-bubble.size-medium {
+  width: 185px;
+  height: 185px;
+}
+
+.aquarium-bubble.size-small {
+  width: 135px;
+  height: 135px;
+}
+
+/* Bubble Sphere Shell & Optical Layers */
+.bubble-sphere-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 24px rgba(255, 255, 255, 0.4),
+    inset 0 -12px 28px rgba(14, 165, 233, 0.35),
+    0 16px 36px rgba(2, 6, 23, 0.7),
+    0 0 24px rgba(56, 189, 248, 0.3);
+  transition: box-shadow 0.35s ease;
+}
+
+.aquarium-bubble:hover .bubble-sphere-shell {
+  box-shadow:
+    inset 0 0 32px rgba(255, 255, 255, 0.6),
+    inset 0 -16px 36px rgba(14, 165, 233, 0.5),
+    0 20px 48px rgba(2, 6, 23, 0.8),
+    0 0 36px rgba(56, 189, 248, 0.6);
+}
+
+.aquarium-bubble.is-cover-bubble .bubble-sphere-shell {
+  box-shadow:
+    inset 0 0 32px rgba(255, 255, 255, 0.6),
+    inset 0 -16px 36px rgba(234, 179, 8, 0.45),
+    0 20px 48px rgba(2, 6, 23, 0.8),
+    0 0 40px rgba(234, 179, 8, 0.5);
+}
+
+.bubble-lens-content {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #0a1e36;
+}
+
+.bubble-artwork-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.aquarium-bubble:hover .bubble-artwork-img {
+  transform: scale(1.08);
+}
+
+/* Thin-Film Iridescent Prismatic Rim */
+.bubble-iridescent-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  background: radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.2) 0%, transparent 60%, rgba(56, 189, 248, 0.3) 85%, rgba(244, 114, 182, 0.25) 100%);
+  pointer-events: none;
+}
+
+/* Specular Light Reflection Arcs */
+.bubble-specular-arc {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.arc-top-left {
+  top: 10%;
+  left: 14%;
+  width: 38%;
+  height: 22%;
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 75%);
+  transform: rotate(-35deg);
+}
+
+.arc-bottom-right {
+  bottom: 12%;
+  right: 15%;
+  width: 26%;
+  height: 16%;
+  background: radial-gradient(ellipse at center, rgba(56, 189, 248, 0.6) 0%, rgba(56, 189, 248, 0) 75%);
+  transform: rotate(145deg);
+}
+
+.bubble-surface-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, transparent 50%, rgba(2, 132, 199, 0.2) 100%);
+  pointer-events: none;
+}
+
+/* Pop / Burst Ripple Shockwave Animation */
+.bubble-pop-shockwave {
+  position: absolute;
+  inset: -20px;
+  border-radius: 50%;
+  border: 3px solid rgba(56, 189, 248, 0.9);
+  animation: aquarium-pop-burst 0.28s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes aquarium-pop-burst {
+  0% { transform: scale(0.8); opacity: 1; border-width: 4px; }
+  100% { transform: scale(1.6); opacity: 0; border-width: 1px; }
+}
+
+/* Hover Information Capsule */
+.bubble-info-capsule {
+  position: absolute;
+  bottom: -44px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: rgba(3, 14, 28, 0.88);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(14, 165, 233, 0.3);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 30;
+}
+
+.aquarium-bubble:hover .bubble-info-capsule {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
+}
+
+.capsule-title {
+  font-size: 12px;
+  font-weight: 750;
+  color: #f0f9ff;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.capsule-artist {
+  font-size: 10px;
+  color: #7dd3fc;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.capsule-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.capsule-btn {
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(14, 165, 233, 0.15);
+  color: #e0f2fe;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.capsule-btn:hover {
+  background: #0284c7;
+  color: #ffffff;
+  border-color: #38bdf8;
+  transform: scale(1.05);
+}
+
+.capsule-btn.active {
+  background: #eab308;
+  color: #0f172a;
+  border-color: #fde047;
+}
+
+/* Empty State */
+.aquarium-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 80px 20px;
+  color: #94a3b8;
+  text-align: center;
+}
+
+.aquarium-empty-bubble {
+  font-size: 48px;
+  animation: aquarium-pulse 2.5s ease-in-out infinite alternate;
+}
+
+.aquarium-empty-state h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  color: #f0f9ff;
+}
+
+.aquarium-empty-state p {
+  margin: 0;
+  font-size: 13px;
+  color: #7dd3fc;
+}

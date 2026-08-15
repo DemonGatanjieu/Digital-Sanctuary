@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CollectionRecord } from "@sanctuary/domain";
+import { AquariumFloatingStage } from "./AquariumFloatingStage";
 import { ArtworkCard, LazyArtworkImage, artworkImageUrl } from "./ArtworkCard";
 import { PhotobookFlipSpread, type PhotobookAlbumInfo } from "./CollectionGallery";
 import { SegmentedControl } from "./SegmentedControl";
@@ -68,7 +69,7 @@ export function AuthorDetailPage({
   onAssign: (artworkId: string, collectionId: string) => void;
   onOpenArtwork: (artworkId: string) => void;
 }) {
-  const [viewMode, setViewMode] = useState<"works" | "artbook" | "catalog">("works");
+  const [viewMode, setViewMode] = useState<"works" | "artbook" | "aquarium" | "catalog">("works");
   const [isPhotobookTocOpen, setIsPhotobookTocOpen] = useState(false);
 
   // Flatten all artworks for this author
@@ -126,9 +127,10 @@ export function AuthorDetailPage({
               options={[
                 { value: "works", label: "🗂️ 套图展区", title: "按作品与多页套图分组浏览" },
                 { value: "artbook", label: "📖 翻页画集", title: "实体画册双页对开翻页质感" },
+                { value: "aquarium", label: "🫧 水族漂浮", title: "深海沉浸漂浮水泡，大小错落，流动触感" },
                 { value: "catalog", label: "📑 篇目编目", title: "全量画作索引目录表格" }
               ]}
-              onChange={(nextMode) => setViewMode(nextMode as "works" | "artbook" | "catalog")}
+              onChange={(nextMode) => setViewMode(nextMode as "works" | "artbook" | "aquarium" | "catalog")}
             />
           </div>
         </div>
@@ -184,6 +186,14 @@ export function AuthorDetailPage({
               interactionSuspended={false}
             />
           </div>
+        ) : viewMode === "aquarium" ? (
+          /* View Mode 4: Abyssal Aquarium Floating Bubble Experience */
+          <AquariumFloatingStage
+            items={allArtworks}
+            onOpenArtwork={onOpenArtwork}
+            coverArtworkId={primaryArtwork?.id}
+            title={`${author.name} 的专属水族馆`}
+          />
         ) : viewMode === "catalog" ? (
           /* View Mode 3: Chronological / Structured Catalog Table */
           <div className="author-catalog-container">
