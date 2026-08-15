@@ -44,8 +44,9 @@ pnpm-debug.log*
 *.pfx
 *.key
 .codex/
-.agents/*
-!.agents/rules/
+.agents/
+AGENTS.md
+GEMINI.md
 .idea/
 .vscode/
 .DS_Store
