@@ -295,23 +295,15 @@ function PhotobookFlipSpread({
     if (fallbackTimerRef.current !== null) window.clearTimeout(fallbackTimerRef.current);
   }, []);
 
-  // Pre-cache adjacent spread images into browser memory to eliminate image decoding pop
+  // Pre-cache all collection artworks into browser memory immediately to guarantee zero decoding flash
   useEffect(() => {
-    const spreadsToPreload = [spreadIndex - 1, spreadIndex, spreadIndex + 1];
-    for (const s of spreadsToPreload) {
-      if (s < 0 || s >= totalSpreads) continue;
-      const leftIdx = getPhotobookArtworkIndex(s, "left", items.length);
-      const rightIdx = getPhotobookArtworkIndex(s, "right", items.length);
-      if (leftIdx !== null && items[leftIdx]) {
-        const img = new Image();
-        img.src = artworkImageUrl(items[leftIdx]);
-      }
-      if (rightIdx !== null && items[rightIdx]) {
-        const img = new Image();
-        img.src = artworkImageUrl(items[rightIdx]);
-      }
-    }
-  }, [spreadIndex, items, totalSpreads]);
+    if (!items || items.length === 0) return;
+    items.forEach((item) => {
+      const img = new Image();
+      img.decoding = "sync";
+      img.src = artworkImageUrl(item);
+    });
+  }, [items]);
 
   useEffect(() => {
     const safeSpread = Math.min(spreadIndex, totalSpreads - 1);
@@ -463,7 +455,6 @@ function PhotobookFlipSpread({
           <div className="page-corner-curl corner-verso" onClick={(e) => { e.stopPropagation(); flipPrev(); }} title="点击翻至上一展对" />
           
           <PhotobookSpreadPageContent
-            key={`desk-left-${displayLeftSpread}`}
             side="left"
             spreadIndex={displayLeftSpread}
             collection={collection}
@@ -495,7 +486,6 @@ function PhotobookFlipSpread({
           <div className="page-corner-curl corner-recto" onClick={(e) => { e.stopPropagation(); flipNext(); }} title="点击翻至下一展对" />
 
           <PhotobookSpreadPageContent
-            key={`desk-right-${displayRightSpread}`}
             side="right"
             spreadIndex={displayRightSpread}
             collection={collection}
@@ -511,10 +501,9 @@ function PhotobookFlipSpread({
           />
         </section>
 
-        {/* 3D Flipping Leaf Overlay during Page Flip (Keyed per transition for zero frame tearing) */}
+        {/* 3D Flipping Leaf Overlay during Page Flip */}
         {transitionState.isAnimating && (
           <div
-            key={`leaf-${transitionState.fromSpread}->${transitionState.toSpread}-${transitionState.direction}`}
             className={`photobook-3d-flipping-leaf leaf-${transitionState.direction}`}
             onAnimationEnd={(e) => {
               if (e.target === e.currentTarget) {
@@ -527,7 +516,6 @@ function PhotobookFlipSpread({
               <div className="page-paper-texture" />
               {transitionState.direction === "forward" ? (
                 <PhotobookSpreadPageContent
-                  key={`leaf-front-${transitionState.fromSpread}-right`}
                   side="right"
                   spreadIndex={transitionState.fromSpread}
                   collection={collection}
@@ -543,7 +531,6 @@ function PhotobookFlipSpread({
                 />
               ) : (
                 <PhotobookSpreadPageContent
-                  key={`leaf-front-${transitionState.fromSpread}-left`}
                   side="left"
                   spreadIndex={transitionState.fromSpread}
                   collection={collection}
@@ -567,7 +554,6 @@ function PhotobookFlipSpread({
               <div className="page-paper-texture" />
               {transitionState.direction === "forward" ? (
                 <PhotobookSpreadPageContent
-                  key={`leaf-back-${transitionState.toSpread}-left`}
                   side="left"
                   spreadIndex={transitionState.toSpread}
                   collection={collection}
@@ -583,7 +569,6 @@ function PhotobookFlipSpread({
                 />
               ) : (
                 <PhotobookSpreadPageContent
-                  key={`leaf-back-${transitionState.toSpread}-right`}
                   side="right"
                   spreadIndex={transitionState.toSpread}
                   collection={collection}
@@ -985,6 +970,7 @@ function PhotoMountCard({
             alt={artwork.fileName}
             className="art-matte-image"
             loading="eager"
+            decoding="sync"
           />
 
           {/* Floating Quick Actions Capsule */}
