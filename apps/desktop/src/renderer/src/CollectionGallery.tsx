@@ -282,7 +282,7 @@ function PhotobookFlipSpread({
     }
     animationFallbackTimerRef.current = window.setTimeout(() => {
       completeFlip(targetIndex);
-    }, 600);
+    }, 850);
   };
 
   const flipNext = () => flipTo(Math.min(items.length - 1, pageIndex + 1));
