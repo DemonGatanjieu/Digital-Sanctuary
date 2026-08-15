@@ -47,6 +47,8 @@
 | **photobook-continuous-aerodynamics-and-spine-anchor** | `b6bb5f43536ee0705e499184dc18690ded526699` | 2026-08-15 | 根治翻页阴影中途消失后突现与分段生硬停顿：重构为单张物理纸张 0°~180° 连续 3D 空气动力学平滑翻折，将中脊装订立体阴影提升至 z-index: 60 恒定置顶锚定，精确对齐脊线 0 圆角装订边缘，杜绝任何阴影断层与撕裂感。 |
 | **photobook-clean-minimalist-gutter-seam** | `2af4e9f00f0d72b25b32981fe1df9300ffdabd42` | 2026-08-15 | 彻底废除正中突兀粗黑的重阴影竖条、点状缝线与丝带标记：全面回归现代高端艺术画册（Editorial Artbook）极简设计语言，将书台中缝净化为 1px 典雅细微中缝线，纯净还原两页对开画作本身。 |
 | **photobook-multi-turn-transitions-suite** | `f69fcbb96df3432bee1d9358a34d24e7a743dc97` | 2026-08-15 | 实装 4 套高品质可自由切换的画册翻页动画（3D 典藏翻页、平移动画、柔光渐隐、层叠抽拉）：顶部双选择器工具栏、硬件 GPU Compositor Layer 隔离与 localStorage 偏好持久化，彻底解决不同设备环境下的卡顿与生硬感。 |
+| **photobook-dual-spread-slide-track** | `52df7588235b365533411fbece60b25687157858` | 2026-08-15 | 彻底根除平移动画中左页提前暴露新图的异常：重构为全画幅 200% 宽度双展对连续平移轨道（Dual-Spread Track），使旧展对与新展对作为一个整体横向无缝推拉，底台全程冻结，实现真正电影级零闪现滑行。 |
+
 
 
 
