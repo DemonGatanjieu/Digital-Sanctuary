@@ -503,88 +503,54 @@ function PhotobookFlipSpread({
           />
         </section>
 
-        {/* 3D Flipping Leaf Overlay during Page Flip */}
+        {/* Split-Phase Single-Sided 3D Page Turn Layer (Zero Backface Bleed & Zero Z-Fighting) */}
         {spreadState.isAnimating && (
           <div
-            className={`photobook-3d-flipping-leaf leaf-${spreadState.direction}`}
+            className="photobook-turn-animation-layer"
             onAnimationEnd={(e) => {
-              if (e.target === e.currentTarget) {
+              if (e.animationName.includes("split-leaf-back")) {
                 finishFlip(spreadState.toSpread);
               }
             }}
           >
-            {/* Front Face of Turning Sheet (translateZ: +1.2px) */}
-            <div className="leaf-face leaf-face-front">
+            {/* Phase 1: Lifting Front Page (0deg -> 90deg) */}
+            <div className={`photobook-split-leaf-front ${spreadState.direction}`}>
               <div className="page-paper-texture" />
-              {spreadState.direction === "forward" ? (
-                <PhotobookSpreadPageContent
-                  side="right"
-                  spreadIndex={spreadState.fromSpread}
-                  collection={collection}
-                  items={items}
-                  mountStyle={mountStyle}
-                  totalSpreads={totalSpreads}
-                  onOpenArtwork={onOpenArtwork}
-                  onSetCover={onSetCover}
-                  onOpenToc={() => onTocOpenChange(true)}
-                  onFlipToSpread={flipToSpread}
-                  onFlipPrev={flipPrev}
-                  onFlipNext={flipNext}
-                />
-              ) : (
-                <PhotobookSpreadPageContent
-                  side="left"
-                  spreadIndex={spreadState.fromSpread}
-                  collection={collection}
-                  items={items}
-                  mountStyle={mountStyle}
-                  totalSpreads={totalSpreads}
-                  onOpenArtwork={onOpenArtwork}
-                  onSetCover={onSetCover}
-                  onOpenToc={() => onTocOpenChange(true)}
-                  onFlipToSpread={flipToSpread}
-                  onFlipPrev={flipPrev}
-                  onFlipNext={flipNext}
-                />
-              )}
+              <PhotobookSpreadPageContent
+                side={spreadState.direction === "forward" ? "right" : "left"}
+                spreadIndex={spreadState.fromSpread}
+                collection={collection}
+                items={items}
+                mountStyle={mountStyle}
+                totalSpreads={totalSpreads}
+                onOpenArtwork={onOpenArtwork}
+                onSetCover={onSetCover}
+                onOpenToc={() => onTocOpenChange(true)}
+                onFlipToSpread={flipToSpread}
+                onFlipPrev={flipPrev}
+                onFlipNext={flipNext}
+              />
               <div className="leaf-specular-sheen" />
               <div className="leaf-shadow-sweep" />
             </div>
 
-            {/* Back Face of Turning Sheet (rotateY: 180deg + translateZ: +1.2px) */}
-            <div className="leaf-face leaf-face-back">
+            {/* Phase 2: Landing Back Page (90deg -> 0deg) */}
+            <div className={`photobook-split-leaf-back ${spreadState.direction}`}>
               <div className="page-paper-texture" />
-              {spreadState.direction === "forward" ? (
-                <PhotobookSpreadPageContent
-                  side="left"
-                  spreadIndex={spreadState.toSpread}
-                  collection={collection}
-                  items={items}
-                  mountStyle={mountStyle}
-                  totalSpreads={totalSpreads}
-                  onOpenArtwork={onOpenArtwork}
-                  onSetCover={onSetCover}
-                  onOpenToc={() => onTocOpenChange(true)}
-                  onFlipToSpread={flipToSpread}
-                  onFlipPrev={flipPrev}
-                  onFlipNext={flipNext}
-                />
-              ) : (
-                <PhotobookSpreadPageContent
-                  side="right"
-                  spreadIndex={spreadState.toSpread}
-                  collection={collection}
-                  items={items}
-                  mountStyle={mountStyle}
-                  totalSpreads={totalSpreads}
-                  onOpenArtwork={onOpenArtwork}
-                  onSetCover={onSetCover}
-                  onOpenToc={() => onTocOpenChange(true)}
-                  onFlipToSpread={flipToSpread}
-                  onFlipPrev={flipPrev}
-                  onFlipNext={flipNext}
-                />
-              )}
+              <PhotobookSpreadPageContent
+                side={spreadState.direction === "forward" ? "left" : "right"}
+                spreadIndex={spreadState.toSpread}
+                collection={collection}
+                items={items}
+                mountStyle={mountStyle}
+                totalSpreads={totalSpreads}
+                onOpenArtwork={onOpenArtwork}
+                onSetCover={onSetCover}
+                onOpenToc={() => onTocOpenChange(true)}
+                onFlipToSpread={flipToSpread}
+                onFlipPrev={flipPrev}
+                onFlipNext={flipNext}
+              />
               <div className="leaf-specular-sheen" />
               <div className="leaf-shadow-sweep" />
             </div>
