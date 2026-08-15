@@ -242,6 +242,22 @@ export function CollectionDetailPage({
    Photobook Flip Spread View (拟真画册对开翻页书台)
    ========================================================================== */
 
+export type PhotobookTurnEffect = "3d-flip" | "slide" | "fade" | "deck-stack";
+
+function normalizeTurnEffect(val: string | null): PhotobookTurnEffect {
+  if (val === "slide" || val === "fade" || val === "deck-stack" || val === "3d-flip") {
+    return val;
+  }
+  return "3d-flip";
+}
+
+const TURN_EFFECTS: Array<{ id: PhotobookTurnEffect; label: string; icon: string; description: string }> = [
+  { id: "3d-flip", label: "3D 翻页", icon: "📖", description: "立体物理纸张翻折，典藏精装书手感" },
+  { id: "slide", label: "平移动画", icon: "↔️", description: "极速丝滑横向平移，平稳零晃动，超高帧率" },
+  { id: "fade", label: "柔光渐隐", icon: "✨", description: "电影级柔和淡入淡出，沉浸式呼吸感" },
+  { id: "deck-stack", label: "层叠抽拉", icon: "🃏", description: "画作相纸层叠滑出，触感交互体验" }
+];
+
 const MOUNT_STYLES: Array<{ id: PhotoMountStyle; label: string; icon: string; description: string }> = [
   { id: "corners", label: "典藏相角", icon: "🔲", description: "四角金属/复古相角扣件 + 相纸细腻白边 + 立体双层悬浮阴影" },
   { id: "washi-tape", label: "和纸手账", icon: "🏷️", description: "半透明磨砂和纸胶贴 + 微角度手账同人画集感" },
@@ -271,6 +287,28 @@ function PhotobookFlipSpread({
   const [mountStyle, setMountStyle] = useState<PhotoMountStyle>(() => {
     return normalizePhotoMountStyle(localStorage.getItem("sanctuary_photobook_mount_style"));
   });
+
+  const [turnEffect, setTurnEffect] = useState<PhotobookTurnEffect>(() => {
+    return normalizeTurnEffect(localStorage.getItem("sanctuary_photobook_turn_effect"));
+  });
+
+  const changeMountStyle = (style: PhotoMountStyle) => {
+    setMountStyle(style);
+    try {
+      localStorage.setItem("sanctuary_photobook_mount_style", style);
+    } catch {
+      // Ignore storage errors
+    }
+  };
+
+  const changeTurnEffect = (effect: PhotobookTurnEffect) => {
+    setTurnEffect(effect);
+    try {
+      localStorage.setItem("sanctuary_photobook_turn_effect", effect);
+    } catch {
+      // Ignore storage errors
+    }
+  };
 
   // Calculate total spreads: Spread 0 (Preface + Art 0), Spread 1+ (Art 2K-1 + Art 2K)
   const totalSpreads = getPhotobookTotalSpreads(items.length);
@@ -321,10 +359,6 @@ function PhotobookFlipSpread({
     });
   }, [totalSpreads]);
 
-  const changeMountStyle = (style: PhotoMountStyle) => {
-    setMountStyle(style);
-    localStorage.setItem("sanctuary_photobook_mount_style", style);
-  };
 
   const finishFlip = (targetSpread: number) => {
     if (fallbackTimerRef.current) {
@@ -360,9 +394,10 @@ function PhotobookFlipSpread({
     if (fallbackTimerRef.current) {
       window.clearTimeout(fallbackTimerRef.current);
     }
+    const timeoutDuration = turnEffect === "fade" ? 450 : (turnEffect === "slide" ? 520 : (turnEffect === "deck-stack" ? 560 : 650));
     fallbackTimerRef.current = window.setTimeout(() => {
       finishFlip(targetSpread);
-    }, 750);
+    }, timeoutDuration);
   };
 
   const flipNext = () => flipToSpread(Math.min(totalSpreads - 1, spreadState.currentSpread + 1));
@@ -405,17 +440,18 @@ function PhotobookFlipSpread({
   if (items.length === 0) return null;
 
   // Active spread display indices (Atomic synchronization)
+  const is3D = turnEffect === "3d-flip";
   const displayLeftSpread = spreadState.isAnimating
-    ? (spreadState.direction === "forward" ? spreadState.fromSpread : spreadState.toSpread)
+    ? (is3D ? (spreadState.direction === "forward" ? spreadState.fromSpread : spreadState.toSpread) : spreadState.toSpread)
     : spreadState.currentSpread;
 
   const displayRightSpread = spreadState.isAnimating
-    ? (spreadState.direction === "forward" ? spreadState.toSpread : spreadState.fromSpread)
+    ? (is3D ? (spreadState.direction === "forward" ? spreadState.toSpread : spreadState.fromSpread) : spreadState.toSpread)
     : spreadState.currentSpread;
 
   return (
     <div className="photobook-stage-deck">
-      {/* Top Floating Toolbar (Mount Switcher & Quick TOC Button) */}
+      {/* Top Floating Toolbar (Quick TOC Button, Turn Effect Switcher & Mount Switcher) */}
       <div className="photobook-toolbar-header">
         <div className="photobook-toolbar-left">
           <button
@@ -430,27 +466,49 @@ function PhotobookFlipSpread({
           </button>
         </div>
 
-        <div className="photobook-mount-switcher">
-          <span className="mount-switcher-label">🎴 装裱风格</span>
-          <div className="mount-switcher-options">
-            {MOUNT_STYLES.map((st) => (
-              <button
-                key={st.id}
-                type="button"
-                className={`mount-style-pill ${mountStyle === st.id ? "active" : ""}`}
-                onClick={() => changeMountStyle(st.id)}
-                title={st.description}
-              >
-                <span className="mount-pill-icon">{st.icon}</span>
-                <span className="mount-pill-text">{st.label}</span>
-              </button>
-            ))}
+        <div className="photobook-toolbar-right">
+          {/* Turn Effect Switcher */}
+          <div className="photobook-mount-switcher photobook-effect-switcher">
+            <span className="mount-switcher-label">✨ 翻页效果</span>
+            <div className="mount-switcher-options">
+              {TURN_EFFECTS.map((eff) => (
+                <button
+                  key={eff.id}
+                  type="button"
+                  className={`mount-style-pill ${turnEffect === eff.id ? "active" : ""}`}
+                  onClick={() => changeTurnEffect(eff.id)}
+                  title={eff.description}
+                >
+                  <span className="mount-pill-icon">{eff.icon}</span>
+                  <span className="mount-pill-text">{eff.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Mount Style Switcher */}
+          <div className="photobook-mount-switcher">
+            <span className="mount-switcher-label">🎴 装裱风格</span>
+            <div className="mount-switcher-options">
+              {MOUNT_STYLES.map((st) => (
+                <button
+                  key={st.id}
+                  type="button"
+                  className={`mount-style-pill ${mountStyle === st.id ? "active" : ""}`}
+                  onClick={() => changeMountStyle(st.id)}
+                  title={st.description}
+                >
+                  <span className="mount-pill-icon">{st.icon}</span>
+                  <span className="mount-pill-text">{st.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
       {/* 3D Open Hardcover Double Spread (Permanent Double Page Deck) */}
-      <div className={`photobook-double-spread ${spreadState.isAnimating ? `is-animating flip-${spreadState.direction}` : ""}`}>
+      <div className={`photobook-double-spread ${spreadState.isAnimating ? `is-animating flip-${spreadState.direction} effect-${turnEffect}` : ""}`}>
         {/* Left Page (Verso) */}
         <section className="photobook-page page-verso" onClick={flipPrev} title="点击左页翻至上一展对 (← / A)">
           <div className="page-paper-texture" />
@@ -500,54 +558,200 @@ function PhotobookFlipSpread({
           />
         </section>
 
-        {/* 3D Physical Flipping Leaf Overlay (Smooth Continuous Single Sheet) */}
+        {/* Animation Overlays for 4 Turn Effects */}
         {spreadState.isAnimating && (
-          <div
-            className={`photobook-3d-flipping-leaf leaf-${spreadState.direction}`}
-            onAnimationEnd={(e) => {
-              if (e.target === e.currentTarget) {
-                finishFlip(spreadState.toSpread);
-              }
-            }}
-          >
-            {/* Front Face of Turning Sheet (Facing viewer at start: 0deg) */}
-            <div className="leaf-face leaf-face-front">
-              <div className="page-paper-texture" />
-              <PhotobookSpreadPageContent
-                side={spreadState.direction === "forward" ? "right" : "left"}
-                spreadIndex={spreadState.fromSpread}
-                collection={collection}
-                items={items}
-                mountStyle={mountStyle}
-                totalSpreads={totalSpreads}
-                onOpenArtwork={onOpenArtwork}
-                onSetCover={onSetCover}
-                onOpenToc={() => onTocOpenChange(true)}
-                onFlipToSpread={flipToSpread}
-                onFlipPrev={flipPrev}
-                onFlipNext={flipNext}
-              />
-            </div>
+          <>
+            {/* 1. 3D Physical Flipping Leaf */}
+            {turnEffect === "3d-flip" && (
+              <div
+                className={`photobook-3d-flipping-leaf leaf-${spreadState.direction}`}
+                onAnimationEnd={(e) => {
+                  if (e.target === e.currentTarget) {
+                    finishFlip(spreadState.toSpread);
+                  }
+                }}
+              >
+                <div className="leaf-face leaf-face-front">
+                  <div className="page-paper-texture" />
+                  <PhotobookSpreadPageContent
+                    side={spreadState.direction === "forward" ? "right" : "left"}
+                    spreadIndex={spreadState.fromSpread}
+                    collection={collection}
+                    items={items}
+                    mountStyle={mountStyle}
+                    totalSpreads={totalSpreads}
+                    onOpenArtwork={onOpenArtwork}
+                    onSetCover={onSetCover}
+                    onOpenToc={() => onTocOpenChange(true)}
+                    onFlipToSpread={flipToSpread}
+                    onFlipPrev={flipPrev}
+                    onFlipNext={flipNext}
+                  />
+                </div>
+                <div className="leaf-face leaf-face-back">
+                  <div className="page-paper-texture" />
+                  <PhotobookSpreadPageContent
+                    side={spreadState.direction === "forward" ? "left" : "right"}
+                    spreadIndex={spreadState.toSpread}
+                    collection={collection}
+                    items={items}
+                    mountStyle={mountStyle}
+                    totalSpreads={totalSpreads}
+                    onOpenArtwork={onOpenArtwork}
+                    onSetCover={onSetCover}
+                    onOpenToc={() => onTocOpenChange(true)}
+                    onFlipToSpread={flipToSpread}
+                    onFlipPrev={flipPrev}
+                    onFlipNext={flipNext}
+                  />
+                </div>
+              </div>
+            )}
 
-            {/* Back Face of Turning Sheet (Facing desk at start: 180deg) */}
-            <div className="leaf-face leaf-face-back">
-              <div className="page-paper-texture" />
-              <PhotobookSpreadPageContent
-                side={spreadState.direction === "forward" ? "left" : "right"}
-                spreadIndex={spreadState.toSpread}
-                collection={collection}
-                items={items}
-                mountStyle={mountStyle}
-                totalSpreads={totalSpreads}
-                onOpenArtwork={onOpenArtwork}
-                onSetCover={onSetCover}
-                onOpenToc={() => onTocOpenChange(true)}
-                onFlipToSpread={flipToSpread}
-                onFlipPrev={flipPrev}
-                onFlipNext={flipNext}
-              />
-            </div>
-          </div>
+            {/* 2. Silky Horizontal Slide Animation */}
+            {turnEffect === "slide" && (
+              <div
+                className={`photobook-slide-overlay slide-${spreadState.direction}`}
+                onAnimationEnd={(e) => {
+                  if (e.target === e.currentTarget) {
+                    finishFlip(spreadState.toSpread);
+                  }
+                }}
+              >
+                <div className="slide-deck-spread slide-spread-incoming">
+                  <section className="photobook-page page-verso">
+                    <PhotobookSpreadPageContent
+                      side="left"
+                      spreadIndex={spreadState.toSpread}
+                      collection={collection}
+                      items={items}
+                      mountStyle={mountStyle}
+                      totalSpreads={totalSpreads}
+                      onOpenArtwork={onOpenArtwork}
+                      onSetCover={onSetCover}
+                      onOpenToc={() => onTocOpenChange(true)}
+                      onFlipToSpread={flipToSpread}
+                      onFlipPrev={flipPrev}
+                      onFlipNext={flipNext}
+                    />
+                  </section>
+                  <div className="photobook-spine-crease" />
+                  <section className="photobook-page page-recto">
+                    <PhotobookSpreadPageContent
+                      side="right"
+                      spreadIndex={spreadState.toSpread}
+                      collection={collection}
+                      items={items}
+                      mountStyle={mountStyle}
+                      totalSpreads={totalSpreads}
+                      onOpenArtwork={onOpenArtwork}
+                      onSetCover={onSetCover}
+                      onOpenToc={() => onTocOpenChange(true)}
+                      onFlipToSpread={flipToSpread}
+                      onFlipPrev={flipPrev}
+                      onFlipNext={flipNext}
+                    />
+                  </section>
+                </div>
+              </div>
+            )}
+
+            {/* 3. Serene Crossfade Dissolve */}
+            {turnEffect === "fade" && (
+              <div
+                className="photobook-fade-overlay"
+                onAnimationEnd={(e) => {
+                  if (e.target === e.currentTarget) {
+                    finishFlip(spreadState.toSpread);
+                  }
+                }}
+              >
+                <div className="fade-deck-spread">
+                  <section className="photobook-page page-verso">
+                    <PhotobookSpreadPageContent
+                      side="left"
+                      spreadIndex={spreadState.toSpread}
+                      collection={collection}
+                      items={items}
+                      mountStyle={mountStyle}
+                      totalSpreads={totalSpreads}
+                      onOpenArtwork={onOpenArtwork}
+                      onSetCover={onSetCover}
+                      onOpenToc={() => onTocOpenChange(true)}
+                      onFlipToSpread={flipToSpread}
+                      onFlipPrev={flipPrev}
+                      onFlipNext={flipNext}
+                    />
+                  </section>
+                  <div className="photobook-spine-crease" />
+                  <section className="photobook-page page-recto">
+                    <PhotobookSpreadPageContent
+                      side="right"
+                      spreadIndex={spreadState.toSpread}
+                      collection={collection}
+                      items={items}
+                      mountStyle={mountStyle}
+                      totalSpreads={totalSpreads}
+                      onOpenArtwork={onOpenArtwork}
+                      onSetCover={onSetCover}
+                      onOpenToc={() => onTocOpenChange(true)}
+                      onFlipToSpread={flipToSpread}
+                      onFlipPrev={flipPrev}
+                      onFlipNext={flipNext}
+                    />
+                  </section>
+                </div>
+              </div>
+            )}
+
+            {/* 4. Tactile Deck Stack Slide & Tuck */}
+            {turnEffect === "deck-stack" && (
+              <div
+                className={`photobook-deck-stack-overlay deck-${spreadState.direction}`}
+                onAnimationEnd={(e) => {
+                  if (e.target === e.currentTarget) {
+                    finishFlip(spreadState.toSpread);
+                  }
+                }}
+              >
+                <div className="deck-stack-outgoing-spread">
+                  <section className="photobook-page page-verso">
+                    <PhotobookSpreadPageContent
+                      side="left"
+                      spreadIndex={spreadState.fromSpread}
+                      collection={collection}
+                      items={items}
+                      mountStyle={mountStyle}
+                      totalSpreads={totalSpreads}
+                      onOpenArtwork={onOpenArtwork}
+                      onSetCover={onSetCover}
+                      onOpenToc={() => onTocOpenChange(true)}
+                      onFlipToSpread={flipToSpread}
+                      onFlipPrev={flipPrev}
+                      onFlipNext={flipNext}
+                    />
+                  </section>
+                  <div className="photobook-spine-crease" />
+                  <section className="photobook-page page-recto">
+                    <PhotobookSpreadPageContent
+                      side="right"
+                      spreadIndex={spreadState.fromSpread}
+                      collection={collection}
+                      items={items}
+                      mountStyle={mountStyle}
+                      totalSpreads={totalSpreads}
+                      onOpenArtwork={onOpenArtwork}
+                      onSetCover={onSetCover}
+                      onOpenToc={() => onTocOpenChange(true)}
+                      onFlipToSpread={flipToSpread}
+                      onFlipPrev={flipPrev}
+                      onFlipNext={flipNext}
+                    />
+                  </section>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
