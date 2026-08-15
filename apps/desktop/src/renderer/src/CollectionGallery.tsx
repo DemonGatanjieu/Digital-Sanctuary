@@ -255,10 +255,20 @@ function PhotobookFlipSpread({
   } | null>(null);
 
   const tocListRef = useRef<HTMLDivElement>(null);
+  const animationFallbackTimerRef = useRef<number | null>(null);
 
   const changeMountStyle = (style: PhotoMountStyle) => {
     setMountStyle(style);
     localStorage.setItem("sanctuary_photobook_mount_style", style);
+  };
+
+  const completeFlip = (targetIndex: number) => {
+    if (animationFallbackTimerRef.current) {
+      window.clearTimeout(animationFallbackTimerRef.current);
+      animationFallbackTimerRef.current = null;
+    }
+    setPageIndex(targetIndex);
+    setFlipAnimation(null);
   };
 
   const flipTo = (targetIndex: number) => {
@@ -266,10 +276,13 @@ function PhotobookFlipSpread({
     const direction = targetIndex > pageIndex ? "forward" : "backward";
     setFlipAnimation({ direction, fromIndex: pageIndex, toIndex: targetIndex });
 
-    window.setTimeout(() => {
-      setPageIndex(targetIndex);
-      setFlipAnimation(null);
-    }, 520);
+    // Safety fallback timer in case animation event is dropped
+    if (animationFallbackTimerRef.current) {
+      window.clearTimeout(animationFallbackTimerRef.current);
+    }
+    animationFallbackTimerRef.current = window.setTimeout(() => {
+      completeFlip(targetIndex);
+    }, 600);
   };
 
   const flipNext = () => flipTo(Math.min(items.length - 1, pageIndex + 1));
@@ -309,9 +322,6 @@ function PhotobookFlipSpread({
   const rightArtwork = items[activeRightIndex] ?? currentArtwork;
   const isRightCover = rightArtwork && collection.coverArtworkId === rightArtwork.id;
 
-  const currentNumStr = String(pageIndex + 1).padStart(2, "0");
-  const totalNumStr = String(items.length).padStart(2, "0");
-
   return (
     <div className="photobook-stage-deck">
       {/* Top Floating Mount Style Switcher Toolbar */}
@@ -342,66 +352,15 @@ function PhotobookFlipSpread({
           <div className="page-paper-texture" />
           <div className="page-corner-curl corner-verso" onClick={(e) => { e.stopPropagation(); flipPrev(); }} title="点击翻至上一页" />
           
-          <header className="page-header-index">
-            <span className="page-eyebrow">CHAPTER / 篇目索引</span>
-            <span className="page-corner-num">P. {String(activeLeftIndex + 1).padStart(2, "0")}</span>
-          </header>
-
-          <div className="verso-content-scroll" onClick={(e) => e.stopPropagation()}>
-            {/* Album Epigraph Quote at Top of Left Page */}
-            {collection.description && (
-              <div className="verso-epigraph-quote">
-                <span className="quote-mark">“</span>
-                <p>{collection.description}</p>
-                <span className="quote-mark">”</span>
-              </div>
-            )}
-
-            <div className="verso-heading">
-              <h2 className="verso-artwork-title">{leftArtwork.source?.title ?? leftArtwork.fileName}</h2>
-              <p className="verso-artwork-artist">
-                by {leftArtwork.source?.authorName ?? "本地画师"}
-                {leftArtwork.source?.pageIndex !== undefined ? ` · 第 ${leftArtwork.source.pageIndex + 1} 页` : ""}
-              </p>
-            </div>
-
-            {/* Quick Interactive Mini Table of Contents */}
-            <div className="photobook-toc-list" ref={tocListRef}>
-              {items.map((item, idx) => {
-                const isActive = idx === pageIndex;
-                const idxStr = String(idx + 1).padStart(2, "0");
-                return (
-                  <div
-                    key={item.id}
-                    className={`photobook-toc-item ${isActive ? "active" : ""}`}
-                    onClick={() => flipTo(idx)}
-                    title={`点击翻至第 ${idx + 1} 页`}
-                  >
-                    <span className="toc-item-badge">#{idxStr}</span>
-                    <span className="toc-item-name">{item.source?.title ?? item.fileName}</span>
-                    <div className="toc-item-mini-thumb">
-                      <img src={artworkImageUrl(item)} alt="" loading="lazy" />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <footer className="page-footer-verso" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="book-flip-nav-btn prev"
-              disabled={pageIndex === 0}
-              onClick={flipPrev}
-              title="上一页 (← / A)"
-            >
-              ‹ 上一页
-            </button>
-            <span className="book-page-counter">
-              {currentNumStr} / {totalNumStr}
-            </span>
-          </footer>
+          <PhotobookVersoContent
+            collection={collection}
+            items={items}
+            pageIndex={activeLeftIndex}
+            totalItems={items.length}
+            onFlipTo={flipTo}
+            onFlipPrev={flipPrev}
+            tocListRef={tocListRef}
+          />
         </section>
 
         {/* Central Book Spine Crease & Depth Shadows */}
@@ -419,69 +378,51 @@ function PhotobookFlipSpread({
           <div className="page-paper-texture" />
           <div className="page-corner-curl corner-recto" onClick={(e) => { e.stopPropagation(); flipNext(); }} title="点击翻至下一页" />
 
-          <header className="page-header-art">
-            <span className="page-ribbon-tag">GALLERY FINE ART PLATE</span>
-            {isRightCover && <span className="page-cover-crown">★ 封面作品</span>}
-          </header>
-
-          <PhotoMountCard
+          <PhotobookRectoContent
             artwork={rightArtwork}
             mountStyle={mountStyle}
             pageIndex={activeRightIndex}
+            totalItems={items.length}
             isCover={isRightCover}
             onOpenArtwork={onOpenArtwork}
             onSetCover={onSetCover}
+            onFlipNext={flipNext}
           />
-
-          <footer className="page-footer-recto" onClick={(e) => e.stopPropagation()}>
-            <span className="page-recto-tip">按 ← → 键或点击页面翻页</span>
-            <button
-              type="button"
-              className="book-flip-nav-btn next"
-              disabled={pageIndex >= items.length - 1}
-              onClick={flipNext}
-              title="下一页 (→ / D / 空格)"
-            >
-              下一页 ›
-            </button>
-          </footer>
         </section>
 
         {/* 3D Flipping Leaf Overlay during Page Flip */}
         {flipAnimation && (
-          <div className={`photobook-3d-flipping-leaf leaf-${flipAnimation.direction}`}>
+          <div
+            className={`photobook-3d-flipping-leaf leaf-${flipAnimation.direction}`}
+            onAnimationEnd={(e) => {
+              if (e.target === e.currentTarget) {
+                completeFlip(flipAnimation.toIndex);
+              }
+            }}
+          >
             {/* Front of the turning leaf */}
             <div className="leaf-face leaf-face-front">
               <div className="page-paper-texture" />
               {flipAnimation.direction === "forward" ? (
-                <div className="leaf-art-container">
-                  <header className="page-header-art">
-                    <span className="page-ribbon-tag">GALLERY FINE ART PLATE</span>
-                  </header>
-                  <PhotoMountCard
-                    artwork={items[flipAnimation.fromIndex] ?? currentArtwork}
-                    mountStyle={mountStyle}
-                    pageIndex={flipAnimation.fromIndex}
-                    isCover={items[flipAnimation.fromIndex]?.id === collection.coverArtworkId}
-                    onOpenArtwork={onOpenArtwork}
-                    onSetCover={onSetCover}
-                  />
-                </div>
+                <PhotobookRectoContent
+                  artwork={items[flipAnimation.fromIndex] ?? currentArtwork}
+                  mountStyle={mountStyle}
+                  pageIndex={flipAnimation.fromIndex}
+                  totalItems={items.length}
+                  isCover={items[flipAnimation.fromIndex]?.id === collection.coverArtworkId}
+                  onOpenArtwork={onOpenArtwork}
+                  onSetCover={onSetCover}
+                  onFlipNext={flipNext}
+                />
               ) : (
-                <div className="leaf-verso-container">
-                  <header className="page-header-index">
-                    <span className="page-eyebrow">CHAPTER / 篇目索引</span>
-                    <span className="page-corner-num">P. {String(flipAnimation.fromIndex + 1).padStart(2, "0")}</span>
-                  </header>
-                  <div className="verso-heading">
-                    <h2 className="verso-artwork-title">
-                      {items[flipAnimation.fromIndex]?.source?.title ?? items[flipAnimation.fromIndex]?.fileName}
-                    </h2>
-                    <p className="verso-artwork-artist">
-                      by {items[flipAnimation.fromIndex]?.source?.authorName ?? "本地画师"}
-                    </p>
-                  </div>
-                </div>
+                <PhotobookVersoContent
+                  collection={collection}
+                  items={items}
+                  pageIndex={flipAnimation.fromIndex}
+                  totalItems={items.length}
+                  onFlipTo={flipTo}
+                  onFlipPrev={flipPrev}
+                />
               )}
               <div className="leaf-shadow-sweep" />
             </div>
@@ -490,34 +431,25 @@ function PhotobookFlipSpread({
             <div className="leaf-face leaf-face-back">
               <div className="page-paper-texture" />
               {flipAnimation.direction === "forward" ? (
-                <div className="leaf-verso-container">
-                  <header className="page-header-index">
-                    <span className="page-eyebrow">CHAPTER / 篇目索引</span>
-                    <span className="page-corner-num">P. {String(flipAnimation.toIndex + 1).padStart(2, "0")}</span>
-                  </header>
-                  <div className="verso-heading">
-                    <h2 className="verso-artwork-title">
-                      {items[flipAnimation.toIndex]?.source?.title ?? items[flipAnimation.toIndex]?.fileName}
-                    </h2>
-                    <p className="verso-artwork-artist">
-                      by {items[flipAnimation.toIndex]?.source?.authorName ?? "本地画师"}
-                    </p>
-                  </div>
-                </div>
+                <PhotobookVersoContent
+                  collection={collection}
+                  items={items}
+                  pageIndex={flipAnimation.toIndex}
+                  totalItems={items.length}
+                  onFlipTo={flipTo}
+                  onFlipPrev={flipPrev}
+                />
               ) : (
-                <div className="leaf-art-container">
-                  <header className="page-header-art">
-                    <span className="page-ribbon-tag">GALLERY FINE ART PLATE</span>
-                  </header>
-                  <PhotoMountCard
-                    artwork={items[flipAnimation.toIndex] ?? currentArtwork}
-                    mountStyle={mountStyle}
-                    pageIndex={flipAnimation.toIndex}
-                    isCover={items[flipAnimation.toIndex]?.id === collection.coverArtworkId}
-                    onOpenArtwork={onOpenArtwork}
-                    onSetCover={onSetCover}
-                  />
-                </div>
+                <PhotobookRectoContent
+                  artwork={items[flipAnimation.toIndex] ?? currentArtwork}
+                  mountStyle={mountStyle}
+                  pageIndex={flipAnimation.toIndex}
+                  totalItems={items.length}
+                  isCover={items[flipAnimation.toIndex]?.id === collection.coverArtworkId}
+                  onOpenArtwork={onOpenArtwork}
+                  onSetCover={onSetCover}
+                  onFlipNext={flipNext}
+                />
               )}
               <div className="leaf-shadow-sweep" />
             </div>
@@ -525,6 +457,150 @@ function PhotobookFlipSpread({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Reusable Left Page (Verso) Content
+ */
+function PhotobookVersoContent({
+  collection,
+  items,
+  pageIndex,
+  totalItems,
+  onFlipTo,
+  onFlipPrev,
+  tocListRef
+}: {
+  collection: CollectionRecord;
+  items: ArtworkRecord[];
+  pageIndex: number;
+  totalItems: number;
+  onFlipTo: (idx: number) => void;
+  onFlipPrev: () => void;
+  tocListRef?: React.RefObject<HTMLDivElement | null>;
+}) {
+  const currentArtwork = items[pageIndex] ?? items[0];
+  const pageNumStr = String(pageIndex + 1).padStart(2, "0");
+  const totalNumStr = String(totalItems).padStart(2, "0");
+
+  return (
+    <>
+      <header className="page-header-index">
+        <span className="page-eyebrow">CHAPTER / 篇目索引</span>
+        <span className="page-corner-num">P. {pageNumStr}</span>
+      </header>
+
+      <div className="verso-content-scroll" onClick={(e) => e.stopPropagation()}>
+        {/* Album Epigraph Quote at Top of Left Page */}
+        {collection.description && (
+          <div className="verso-epigraph-quote">
+            <span className="quote-mark">“</span>
+            <p>{collection.description}</p>
+            <span className="quote-mark">”</span>
+          </div>
+        )}
+
+        <div className="verso-heading">
+          <h2 className="verso-artwork-title">{currentArtwork?.source?.title ?? currentArtwork?.fileName}</h2>
+          <p className="verso-artwork-artist">
+            by {currentArtwork?.source?.authorName ?? "本地画师"}
+            {currentArtwork?.source?.pageIndex !== undefined ? ` · 第 ${currentArtwork.source.pageIndex + 1} 页` : ""}
+          </p>
+        </div>
+
+        {/* Quick Interactive Mini Table of Contents */}
+        <div className="photobook-toc-list" ref={tocListRef}>
+          {items.map((item, idx) => {
+            const isActive = idx === pageIndex;
+            const idxStr = String(idx + 1).padStart(2, "0");
+            return (
+              <div
+                key={item.id}
+                className={`photobook-toc-item ${isActive ? "active" : ""}`}
+                onClick={() => onFlipTo(idx)}
+                title={`点击翻至第 ${idx + 1} 页`}
+              >
+                <span className="toc-item-badge">#{idxStr}</span>
+                <span className="toc-item-name">{item.source?.title ?? item.fileName}</span>
+                <div className="toc-item-mini-thumb">
+                  <img src={artworkImageUrl(item)} alt="" loading="lazy" />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <footer className="page-footer-verso" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="book-flip-nav-btn prev"
+          disabled={pageIndex === 0}
+          onClick={onFlipPrev}
+          title="上一页 (← / A)"
+        >
+          ‹ 上一页
+        </button>
+        <span className="book-page-counter">
+          {pageNumStr} / {totalNumStr}
+        </span>
+      </footer>
+    </>
+  );
+}
+
+/**
+ * Reusable Right Page (Recto) Content
+ */
+function PhotobookRectoContent({
+  artwork,
+  mountStyle,
+  pageIndex,
+  totalItems,
+  isCover,
+  onOpenArtwork,
+  onSetCover,
+  onFlipNext
+}: {
+  artwork: ArtworkRecord;
+  mountStyle: PhotoMountStyle;
+  pageIndex: number;
+  totalItems: number;
+  isCover: boolean;
+  onOpenArtwork: (artworkId: string) => void;
+  onSetCover: (artworkId: string) => void;
+  onFlipNext: () => void;
+}) {
+  return (
+    <>
+      <header className="page-header-art">
+        <span className="page-ribbon-tag">GALLERY FINE ART PLATE</span>
+        {isCover && <span className="page-cover-crown">★ 封面作品</span>}
+      </header>
+
+      <PhotoMountCard
+        artwork={artwork}
+        mountStyle={mountStyle}
+        pageIndex={pageIndex}
+        isCover={isCover}
+        onOpenArtwork={onOpenArtwork}
+        onSetCover={onSetCover}
+      />
+
+      <footer className="page-footer-recto" onClick={(e) => e.stopPropagation()}>
+        <span className="page-recto-tip">按 ← → 键或点击页面翻页</span>
+        <button
+          type="button"
+          className="book-flip-nav-btn next"
+          disabled={pageIndex >= totalItems - 1}
+          onClick={onFlipNext}
+          title="下一页 (→ / D / 空格)"
+        >
+          下一页 ›
+        </button>
+      </footer>
+    </>
   );
 }
 

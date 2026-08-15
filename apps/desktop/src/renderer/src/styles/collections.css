@@ -865,47 +865,48 @@
   z-index: 50;
   transform-style: preserve-3d;
   pointer-events: none;
+  will-change: transform;
 }
 
 .photobook-3d-flipping-leaf.leaf-forward {
   left: 50%;
   transform-origin: left center;
-  animation: leaf-flip-forward 0.52s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: leaf-flip-forward 0.44s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .photobook-3d-flipping-leaf.leaf-backward {
   left: 0;
   transform-origin: right center;
-  animation: leaf-flip-backward 0.52s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation: leaf-flip-backward 0.44s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes leaf-flip-forward {
   0% {
-    transform: rotateY(0deg);
-    box-shadow: -10px 0 24px rgba(0, 0, 0, 0.1);
+    transform: rotateY(0deg) translateZ(0);
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
   }
-  50% {
-    transform: rotateY(-90deg) scale(0.98);
-    box-shadow: -25px 0 50px rgba(0, 0, 0, 0.45);
+  38% {
+    transform: rotateY(-76deg) scale(0.985) translateZ(2px);
+    box-shadow: -24px 0 45px rgba(0, 0, 0, 0.4);
   }
   100% {
-    transform: rotateY(-180deg);
-    box-shadow: 10px 0 24px rgba(0, 0, 0, 0.1);
+    transform: rotateY(-180deg) translateZ(0);
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.08);
   }
 }
 
 @keyframes leaf-flip-backward {
   0% {
-    transform: rotateY(0deg);
-    box-shadow: 10px 0 24px rgba(0, 0, 0, 0.1);
+    transform: rotateY(0deg) translateZ(0);
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.08);
   }
-  50% {
-    transform: rotateY(90deg) scale(0.98);
-    box-shadow: 25px 0 50px rgba(0, 0, 0, 0.45);
+  38% {
+    transform: rotateY(76deg) scale(0.985) translateZ(2px);
+    box-shadow: 24px 0 45px rgba(0, 0, 0, 0.4);
   }
   100% {
-    transform: rotateY(180deg);
-    box-shadow: -10px 0 24px rgba(0, 0, 0, 0.1);
+    transform: rotateY(180deg) translateZ(0);
+    box-shadow: -4px 0 16px rgba(0, 0, 0, 0.08);
   }
 }
 
@@ -921,6 +922,8 @@
   overflow: hidden;
   border-radius: var(--ds-radius-lg);
   border: 1px solid var(--ds-border-light);
+  transform-style: preserve-3d;
+  will-change: transform;
 }
 
 .leaf-face-front {
