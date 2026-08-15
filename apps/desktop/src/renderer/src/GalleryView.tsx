@@ -319,6 +319,7 @@ export function GalleryView({
               onBack={() => setSelectedAuthorKey("")}
               onAssign={onAssignCollection}
               onOpenArtwork={setSelectedArtworkId}
+              lightboxOpen={Boolean(selectedArtwork)}
             />
           )}
         </section>

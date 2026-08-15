@@ -38,8 +38,14 @@ export function ArtworkLightbox({
   useEffect(() => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
-    setImageLoaded(false);
-    setImageFailed(false);
+    const imgEl = imageRef.current;
+    if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
+      setImageLoaded(true);
+      setImageFailed(false);
+    } else {
+      setImageLoaded(false);
+      setImageFailed(false);
+    }
     setHudVisible(true);
     if (window.sanctuary?.listVisionEvaluationsForWork) {
       window.sanctuary.listVisionEvaluationsForWork(artwork.id).then(setEvaluations).catch(() => setEvaluations([]));
@@ -270,7 +276,12 @@ export function ArtworkLightbox({
         )}
         {!imageFailed && (
           <img
-            ref={imageRef}
+            ref={(el) => {
+              imageRef.current = el;
+              if (el && el.complete && el.naturalWidth > 0 && !imageLoaded) {
+                setImageLoaded(true);
+              }
+            }}
             key={artwork.id}
             src={artworkImageUrl(artwork)}
             alt={artwork.source?.title ?? artwork.fileName}

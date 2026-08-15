@@ -61,13 +61,15 @@ export function AuthorDetailPage({
   collections,
   onBack,
   onAssign,
-  onOpenArtwork
+  onOpenArtwork,
+  lightboxOpen = false
 }: {
   author: AuthorGalleryGroup;
   collections: CollectionRecord[];
   onBack: () => void;
   onAssign: (artworkId: string, collectionId: string) => void;
   onOpenArtwork: (artworkId: string) => void;
+  lightboxOpen?: boolean | undefined;
 }) {
   const [viewMode, setViewMode] = useState<"works" | "artbook" | "aquarium" | "catalog">("works");
   const [isPhotobookTocOpen, setIsPhotobookTocOpen] = useState(false);
@@ -80,7 +82,7 @@ export function AuthorDetailPage({
   // Keyboard navigation for ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || lightboxOpen) return;
       if (isPhotobookTocOpen) {
         e.preventDefault();
         setIsPhotobookTocOpen(false);
@@ -91,7 +93,7 @@ export function AuthorDetailPage({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPhotobookTocOpen, onBack]);
+  }, [isPhotobookTocOpen, lightboxOpen, onBack]);
 
   const authorAlbumInfo: PhotobookAlbumInfo = useMemo(() => ({
     id: author.id,

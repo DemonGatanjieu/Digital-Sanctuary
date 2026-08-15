@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ArtworkRecord } from "@sanctuary/domain";
 import { artworkImageUrl } from "./ArtworkCard";
 
@@ -17,12 +17,23 @@ export function AquariumFloatingStage({
 }) {
   const [burstingId, setBurstingId] = useState<string | null>(null);
 
+  // Pre-cache all collection artworks to memory for instant bubble and lightbox display
+  useEffect(() => {
+    if (!items || items.length === 0) return;
+    items.forEach((item) => {
+      const img = new Image();
+      img.decoding = "sync";
+      img.src = artworkImageUrl(item);
+    });
+  }, [items]);
+
   const handleBubbleClick = (artworkId: string) => {
     setBurstingId(artworkId);
+    // Trigger open immediately for instantaneous responsiveness
+    onOpenArtwork(artworkId);
     window.setTimeout(() => {
-      onOpenArtwork(artworkId);
       setBurstingId(null);
-    }, 280);
+    }, 300);
   };
 
   if (items.length === 0) {
@@ -71,6 +82,7 @@ export function AquariumFloatingStage({
         {items.map((artwork, idx) => {
           const isCover = coverArtworkId ? artwork.id === coverArtworkId : idx === 0;
           const isBursting = burstingId === artwork.id;
+          const action = artwork.decision?.action ?? "allow";
 
           // Categorize bubble size hierarchy
           let sizeCategory: "hero" | "large" | "medium" | "small" = "medium";
@@ -91,25 +103,37 @@ export function AquariumFloatingStage({
           return (
             <div
               key={artwork.id}
+              role="button"
+              tabIndex={0}
               className={`aquarium-bubble size-${sizeCategory} ${isCover ? "is-cover-bubble" : ""} ${isBursting ? "is-bursting" : ""}`}
               style={{
                 animationDuration: `${driftDuration}s`,
                 animationDelay: `-${driftDelay}s`
               }}
               onClick={() => handleBubbleClick(artwork.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleBubbleClick(artwork.id);
+                }
+              }}
               title={`${artwork.source?.title ?? artwork.fileName} (点击戳破进全屏)`}
             >
               {/* Bubble Spherical Shell with Optical Refraction & Highlights */}
               <div className="bubble-sphere-shell">
                 {/* Artwork Inside Water Lens */}
                 <div className="bubble-lens-content">
-                  <img
-                    src={artworkImageUrl(artwork)}
-                    alt={artwork.fileName}
-                    className="bubble-artwork-img"
-                    loading="lazy"
-                    decoding="async"
-                  />
+                  {action === "hide" ? (
+                    <div className="bubble-shield-box">◇</div>
+                  ) : (
+                    <img
+                      src={artworkImageUrl(artwork)}
+                      alt={artwork.fileName}
+                      className={`bubble-artwork-img ${action === "blur" ? "blurred" : ""}`}
+                      loading="eager"
+                      decoding="sync"
+                    />
+                  )}
                 </div>
 
                 {/* Thin-Film Iridescence Rim (Prismatic Refraction) */}
