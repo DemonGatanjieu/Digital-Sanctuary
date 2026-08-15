@@ -220,6 +220,15 @@ export function CollectionDetailPage({
    Photobook Flip Spread View (拟真画册对开翻页书台)
    ========================================================================== */
 
+export type PhotoMountStyle = "corners" | "washi-tape" | "gallery-float" | "polaroid";
+
+const MOUNT_STYLES: Array<{ id: PhotoMountStyle; label: string; icon: string; description: string }> = [
+  { id: "corners", label: "典藏相角", icon: "🔲", description: "四角金属/复古相角扣件 + 相纸细腻白边 + 立体双层悬浮阴影" },
+  { id: "washi-tape", label: "和纸手账", icon: "🏷️", description: "半透明磨砂和纸胶贴 + 微角度手账同人画集感" },
+  { id: "gallery-float", label: "画廊浮雕", icon: "🖼️", description: "极简无框悬浮 + 精密相纸倒角高光与环境光遮蔽" },
+  { id: "polaroid", label: "复古拍立得", icon: "📷", description: "经典下宽拍立得相纸留白 + 手写体篇目题记与艺术印戳" }
+];
+
 function PhotobookFlipSpread({
   collection,
   items,
@@ -234,16 +243,33 @@ function PhotobookFlipSpread({
   onOpenPicker: () => void;
 }) {
   const [pageIndex, setPageIndex] = useState(0);
-  const [flipClass, setFlipClass] = useState<"" | "flip-forward" | "flip-backward">("");
-  const currentArtwork = items[pageIndex] ?? items[0];
-  const isCover = currentArtwork && collection.coverArtworkId === currentArtwork.id;
+  const [mountStyle, setMountStyle] = useState<PhotoMountStyle>(() => {
+    return (localStorage.getItem("sanctuary_photobook_mount_style") as PhotoMountStyle) ?? "corners";
+  });
+
+  // 3D Flipping leaf transition state
+  const [flipAnimation, setFlipAnimation] = useState<{
+    direction: "forward" | "backward";
+    fromIndex: number;
+    toIndex: number;
+  } | null>(null);
+
   const tocListRef = useRef<HTMLDivElement>(null);
 
+  const changeMountStyle = (style: PhotoMountStyle) => {
+    setMountStyle(style);
+    localStorage.setItem("sanctuary_photobook_mount_style", style);
+  };
+
   const flipTo = (targetIndex: number) => {
-    if (targetIndex < 0 || targetIndex >= items.length || targetIndex === pageIndex) return;
-    setFlipClass(targetIndex > pageIndex ? "flip-forward" : "flip-backward");
-    setPageIndex(targetIndex);
-    window.setTimeout(() => setFlipClass(""), 450);
+    if (targetIndex < 0 || targetIndex >= items.length || targetIndex === pageIndex || flipAnimation !== null) return;
+    const direction = targetIndex > pageIndex ? "forward" : "backward";
+    setFlipAnimation({ direction, fromIndex: pageIndex, toIndex: targetIndex });
+
+    window.setTimeout(() => {
+      setPageIndex(targetIndex);
+      setFlipAnimation(null);
+    }, 520);
   };
 
   const flipNext = () => flipTo(Math.min(items.length - 1, pageIndex + 1));
@@ -270,21 +296,55 @@ function PhotobookFlipSpread({
     activeEl?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [pageIndex]);
 
+  const currentArtwork = items[pageIndex] ?? items[0];
   if (!currentArtwork) return null;
+
+  // During 3D flip animation:
+  // - If flipping forward: underneath Right page shows toIndex, Left page shows fromIndex
+  // - If flipping backward: underneath Left page shows toIndex, Right page shows fromIndex
+  const activeLeftIndex = flipAnimation?.direction === "forward" ? flipAnimation.fromIndex : flipAnimation?.direction === "backward" ? flipAnimation.toIndex : pageIndex;
+  const activeRightIndex = flipAnimation?.direction === "forward" ? flipAnimation.toIndex : flipAnimation?.direction === "backward" ? flipAnimation.fromIndex : pageIndex;
+
+  const leftArtwork = items[activeLeftIndex] ?? currentArtwork;
+  const rightArtwork = items[activeRightIndex] ?? currentArtwork;
+  const isRightCover = rightArtwork && collection.coverArtworkId === rightArtwork.id;
 
   const currentNumStr = String(pageIndex + 1).padStart(2, "0");
   const totalNumStr = String(items.length).padStart(2, "0");
 
   return (
     <div className="photobook-stage-deck">
+      {/* Top Floating Mount Style Switcher Toolbar */}
+      <div className="photobook-toolbar-header">
+        <div className="photobook-mount-switcher">
+          <span className="mount-switcher-label">🎴 装裱风格</span>
+          <div className="mount-switcher-options">
+            {MOUNT_STYLES.map((st) => (
+              <button
+                key={st.id}
+                type="button"
+                className={`mount-style-pill ${mountStyle === st.id ? "active" : ""}`}
+                onClick={() => changeMountStyle(st.id)}
+                title={st.description}
+              >
+                <span className="mount-pill-icon">{st.icon}</span>
+                <span className="mount-pill-text">{st.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* 3D Open Hardcover Double Spread */}
-      <div className={`photobook-double-spread ${flipClass}`}>
+      <div className={`photobook-double-spread ${flipAnimation ? `is-animating flip-${flipAnimation.direction}` : ""}`}>
         {/* Left Page (Verso): Table of Contents & Curated Index */}
         <section className="photobook-page page-verso" onClick={flipPrev} title="点击左页翻至上一张 (← / A)">
           <div className="page-paper-texture" />
+          <div className="page-corner-curl corner-verso" onClick={(e) => { e.stopPropagation(); flipPrev(); }} title="点击翻至上一页" />
+          
           <header className="page-header-index">
             <span className="page-eyebrow">CHAPTER / 篇目索引</span>
-            <span className="page-corner-num">P. {currentNumStr}</span>
+            <span className="page-corner-num">P. {String(activeLeftIndex + 1).padStart(2, "0")}</span>
           </header>
 
           <div className="verso-content-scroll" onClick={(e) => e.stopPropagation()}>
@@ -298,10 +358,10 @@ function PhotobookFlipSpread({
             )}
 
             <div className="verso-heading">
-              <h2 className="verso-artwork-title">{currentArtwork.source?.title ?? currentArtwork.fileName}</h2>
+              <h2 className="verso-artwork-title">{leftArtwork.source?.title ?? leftArtwork.fileName}</h2>
               <p className="verso-artwork-artist">
-                by {currentArtwork.source?.authorName ?? "本地画师"}
-                {currentArtwork.source?.pageIndex !== undefined ? ` · 第 ${currentArtwork.source.pageIndex + 1} 页` : ""}
+                by {leftArtwork.source?.authorName ?? "本地画师"}
+                {leftArtwork.source?.pageIndex !== undefined ? ` · 第 ${leftArtwork.source.pageIndex + 1} 页` : ""}
               </p>
             </div>
 
@@ -350,46 +410,28 @@ function PhotobookFlipSpread({
           <div className="silk-bookmark-ribbon" />
         </div>
 
-        {/* Right Page (Recto): Full-Bleed Matte Art Gallery Print */}
+        {/* Right Page (Recto): Photorealistic Mounted Art Plate */}
         <section
           className="photobook-page page-recto"
           onClick={flipNext}
           title="点击右页翻至下一张 (→ / D / 空格)"
         >
           <div className="page-paper-texture" />
+          <div className="page-corner-curl corner-recto" onClick={(e) => { e.stopPropagation(); flipNext(); }} title="点击翻至下一页" />
+
           <header className="page-header-art">
             <span className="page-ribbon-tag">GALLERY FINE ART PLATE</span>
-            {isCover && <span className="page-cover-crown">★ 封面作品</span>}
+            {isRightCover && <span className="page-cover-crown">★ 封面作品</span>}
           </header>
 
-          <div className="art-matte-plate" onClick={(e) => e.stopPropagation()}>
-            <img
-              src={artworkImageUrl(currentArtwork)}
-              alt={currentArtwork.fileName}
-              className="art-matte-image"
-              loading="eager"
-            />
-            {/* Quick Actions Hover Capsule on the Art Print */}
-            <div className="art-plate-actions">
-              <button
-                type="button"
-                className="art-action-lightbox-btn"
-                onClick={() => onOpenArtwork(currentArtwork.id)}
-                title="全屏影院级大图欣赏"
-              >
-                🔍 全屏影院
-              </button>
-              <button
-                type="button"
-                className={`art-action-cover-btn ${isCover ? "active" : ""}`}
-                onClick={() => onSetCover(currentArtwork.id)}
-                disabled={isCover}
-                title="将此画作设为当前相册封面"
-              >
-                {isCover ? "当前封面" : "设为封面"}
-              </button>
-            </div>
-          </div>
+          <PhotoMountCard
+            artwork={rightArtwork}
+            mountStyle={mountStyle}
+            pageIndex={activeRightIndex}
+            isCover={isRightCover}
+            onOpenArtwork={onOpenArtwork}
+            onSetCover={onSetCover}
+          />
 
           <footer className="page-footer-recto" onClick={(e) => e.stopPropagation()}>
             <span className="page-recto-tip">按 ← → 键或点击页面翻页</span>
@@ -404,6 +446,169 @@ function PhotobookFlipSpread({
             </button>
           </footer>
         </section>
+
+        {/* 3D Flipping Leaf Overlay during Page Flip */}
+        {flipAnimation && (
+          <div className={`photobook-3d-flipping-leaf leaf-${flipAnimation.direction}`}>
+            {/* Front of the turning leaf */}
+            <div className="leaf-face leaf-face-front">
+              <div className="page-paper-texture" />
+              {flipAnimation.direction === "forward" ? (
+                <div className="leaf-art-container">
+                  <header className="page-header-art">
+                    <span className="page-ribbon-tag">GALLERY FINE ART PLATE</span>
+                  </header>
+                  <PhotoMountCard
+                    artwork={items[flipAnimation.fromIndex] ?? currentArtwork}
+                    mountStyle={mountStyle}
+                    pageIndex={flipAnimation.fromIndex}
+                    isCover={items[flipAnimation.fromIndex]?.id === collection.coverArtworkId}
+                    onOpenArtwork={onOpenArtwork}
+                    onSetCover={onSetCover}
+                  />
+                </div>
+              ) : (
+                <div className="leaf-verso-container">
+                  <header className="page-header-index">
+                    <span className="page-eyebrow">CHAPTER / 篇目索引</span>
+                    <span className="page-corner-num">P. {String(flipAnimation.fromIndex + 1).padStart(2, "0")}</span>
+                  </header>
+                  <div className="verso-heading">
+                    <h2 className="verso-artwork-title">
+                      {items[flipAnimation.fromIndex]?.source?.title ?? items[flipAnimation.fromIndex]?.fileName}
+                    </h2>
+                    <p className="verso-artwork-artist">
+                      by {items[flipAnimation.fromIndex]?.source?.authorName ?? "本地画师"}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="leaf-shadow-sweep" />
+            </div>
+
+            {/* Back of the turning leaf */}
+            <div className="leaf-face leaf-face-back">
+              <div className="page-paper-texture" />
+              {flipAnimation.direction === "forward" ? (
+                <div className="leaf-verso-container">
+                  <header className="page-header-index">
+                    <span className="page-eyebrow">CHAPTER / 篇目索引</span>
+                    <span className="page-corner-num">P. {String(flipAnimation.toIndex + 1).padStart(2, "0")}</span>
+                  </header>
+                  <div className="verso-heading">
+                    <h2 className="verso-artwork-title">
+                      {items[flipAnimation.toIndex]?.source?.title ?? items[flipAnimation.toIndex]?.fileName}
+                    </h2>
+                    <p className="verso-artwork-artist">
+                      by {items[flipAnimation.toIndex]?.source?.authorName ?? "本地画师"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="leaf-art-container">
+                  <header className="page-header-art">
+                    <span className="page-ribbon-tag">GALLERY FINE ART PLATE</span>
+                  </header>
+                  <PhotoMountCard
+                    artwork={items[flipAnimation.toIndex] ?? currentArtwork}
+                    mountStyle={mountStyle}
+                    pageIndex={flipAnimation.toIndex}
+                    isCover={items[flipAnimation.toIndex]?.id === collection.coverArtworkId}
+                    onOpenArtwork={onOpenArtwork}
+                    onSetCover={onSetCover}
+                  />
+                </div>
+              )}
+              <div className="leaf-shadow-sweep" />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Photorealistic Mounted Art Plate Component
+ */
+function PhotoMountCard({
+  artwork,
+  mountStyle,
+  pageIndex,
+  isCover,
+  onOpenArtwork,
+  onSetCover
+}: {
+  artwork: ArtworkRecord;
+  mountStyle: PhotoMountStyle;
+  pageIndex: number;
+  isCover: boolean;
+  onOpenArtwork: (artworkId: string) => void;
+  onSetCover: (artworkId: string) => void;
+}) {
+  const pageNumStr = String(pageIndex + 1).padStart(2, "0");
+
+  return (
+    <div className={`art-photo-mount-stage mount-${mountStyle}`} onClick={(e) => e.stopPropagation()}>
+      {/* Decorative Mounting Corners (for 'corners' style) */}
+      {mountStyle === "corners" && (
+        <div className="photo-mount-corners-layer">
+          <span className="mount-corner corner-top-left" />
+          <span className="mount-corner corner-top-right" />
+          <span className="mount-corner corner-bottom-left" />
+          <span className="mount-corner corner-bottom-right" />
+        </div>
+      )}
+
+      {/* Decorative Washi Tape Strips (for 'washi-tape' style) */}
+      {mountStyle === "washi-tape" && (
+        <div className="photo-washi-tape-layer">
+          <span className="washi-tape-strip tape-top-left" />
+          <span className="washi-tape-strip tape-top-right" />
+        </div>
+      )}
+
+      {/* The Physical Photo Mat & Image Surface */}
+      <div className="art-photo-mat-surface">
+        <div className="photo-image-frame">
+          <img
+            src={artworkImageUrl(artwork)}
+            alt={artwork.fileName}
+            className="art-matte-image"
+            loading="eager"
+          />
+
+          {/* Floating Quick Actions Capsule */}
+          <div className="art-plate-actions">
+            <button
+              type="button"
+              className="art-action-lightbox-btn"
+              onClick={() => onOpenArtwork(artwork.id)}
+              title="全屏影院级大图欣赏"
+            >
+              🔍 全屏影院
+            </button>
+            <button
+              type="button"
+              className={`art-action-cover-btn ${isCover ? "active" : ""}`}
+              onClick={() => onSetCover(artwork.id)}
+              disabled={isCover}
+              title="将此画作设为当前相册封面"
+            >
+              {isCover ? "★ 当前封面" : "设为封面"}
+            </button>
+          </div>
+        </div>
+
+        {/* Polaroid Handwritten Caption Margin */}
+        {mountStyle === "polaroid" && (
+          <div className="polaroid-caption-bar">
+            <span className="polaroid-caption-title">{artwork.source?.title ?? artwork.fileName}</span>
+            <span className="polaroid-caption-meta">
+              № {pageNumStr} · {artwork.source?.authorName ?? "典藏原画"}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

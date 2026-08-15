@@ -646,6 +646,30 @@ try {
     })()`);
   }, "W3", "default");
 
+  // Switch to Washi Tape style
+  await auditScenario("05_album_mount_washi", async () => {
+    await cdp.evaluate(`(() => {
+      const btn = Array.from(document.querySelectorAll('.mount-style-pill')).find(el => el.textContent.includes('和纸'));
+      btn?.click();
+    })()`);
+  }, "W3", "default");
+
+  // Switch to Polaroid style
+  await auditScenario("05_album_mount_polaroid", async () => {
+    await cdp.evaluate(`(() => {
+      const btn = Array.from(document.querySelectorAll('.mount-style-pill')).find(el => el.textContent.includes('拍立得'));
+      btn?.click();
+    })()`);
+  }, "W3", "default");
+
+  // Switch to Gallery Float style
+  await auditScenario("05_album_mount_float", async () => {
+    await cdp.evaluate(`(() => {
+      const btn = Array.from(document.querySelectorAll('.mount-style-pill')).find(el => el.textContent.includes('浮雕'));
+      btn?.click();
+    })()`);
+  }, "W3", "default");
+
   // 6. Authors Gallery View
   console.log("[audit] 6. Authors Gallery View...");
   await auditScenario("06_authors_view", async () => {
