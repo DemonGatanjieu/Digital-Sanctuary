@@ -43,6 +43,8 @@
 | **photobook-eliminate-reload-flash** | `a583d8f5d623ee6ebecb3dab4bd86f3a210b3565` | 2026-08-15 | 彻底消除翻页时“像网页刷新一样白闪”的现象：移除强行销毁重建 DOM 的动态 key 属性让 React 原地复用稳定书台节点，引入全集画作进入相册瞬间的全局同步预解码（decoding=sync），杜绝 DOM 重建导致的布局空白与图片异步刷新。 |
 | **photobook-atomic-spread-state-machine** | `9635e9a2fdf1000a60c6875ae39ad1aa4c5dab3d` | 2026-08-15 | 深度分析用户录屏发现翻页后左页短暂回退卷首的瞬间闪烁（Spread Reversion Glitch）：重构翻页展台为单一原子状态机（Unified Atomic State Machine），使 spread 索引更新与动画完成在同一渲染帧内完全原子化，彻底根除多状态不同步引发的闪现旧页问题。 |
 | **photobook-split-phase-engine-and-doc** | `b53b381321ba7a43b55b5b7af39c10b293e6db45` | 2026-08-15 | 实装行业级双半程单面隔离折叠引擎（Split-Phase Single-Sided Folding Architecture）并输出权威图形学技术分析白皮书：废弃双面背靠背 3D 夹层，拆分为前半程右页单面起折与后半程左页单面展平，100% 免疫 Chromium backface-visibility 亚像素浮点穿透与 Z-Fighting。 |
+| **photobook-soft-natural-paper-shadows** | `2a284cf2c55022a1d39b1720492c6e67cdae1536` | 2026-08-15 | 去除生硬的人工扫光遮罩与生硬的黑影突变：全面软化翻折关键帧阴影过渡（最大 alpha 从 0.40 降至细腻的 0.12），移除高反差镜面扫光层，呈现物理艺术画集原汁原味的柔和自然纸张起伏感。 |
+
 
 
 
