@@ -41,6 +41,8 @@
 | **photobook-double-spread-and-floating-toc** | `b16482a5c7468e68fee62087606235bc2f801eaf` | 2026-08-15 | 重构画册为全景双页对开画廊体系（Spread-based Layout）：第 1 展对为卷首题记与封面首作，后续内页展对左页与右页全部展示独立装裱画作，实装顶部/底部快捷入口与全局键盘快捷键 T 唤起的浮动亚克力毛玻璃篇目索引抽屉。 |
 | **photobook-flash-fix-and-precaching** | `489db0533b9cd3e203afcf461de6f4d99b9a18f3` | 2026-08-15 | 彻底根除翻页过程中“先出现上一张图片又出现下一张图片”的时序穿透闪烁：引入相邻展对画作 GPU 显存级异步预解码与预加载（Pre-caching），重构 3D 翻页叶片为精确 keyed 独立渲染周期，彻底解决底层页面提前暴露与叶片复位跳跃。 |
 | **photobook-eliminate-reload-flash** | `a583d8f5d623ee6ebecb3dab4bd86f3a210b3565` | 2026-08-15 | 彻底消除翻页时“像网页刷新一样白闪”的现象：移除强行销毁重建 DOM 的动态 key 属性让 React 原地复用稳定书台节点，引入全集画作进入相册瞬间的全局同步预解码（decoding=sync），杜绝 DOM 重建导致的布局空白与图片异步刷新。 |
+| **photobook-atomic-spread-state-machine** | `9635e9a2fdf1000a60c6875ae39ad1aa4c5dab3d` | 2026-08-15 | 深度分析用户录屏发现翻页后左页短暂回退卷首的瞬间闪烁（Spread Reversion Glitch）：重构翻页展台为单一原子状态机（Unified Atomic State Machine），使 spread 索引更新与动画完成在同一渲染帧内完全原子化，彻底根除多状态不同步引发的闪现旧页问题。 |
+
 
 
 
