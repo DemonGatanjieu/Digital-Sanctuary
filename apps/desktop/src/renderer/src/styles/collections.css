@@ -855,7 +855,7 @@
   font-size: 12px;
 }
 
-/* 3D Open Hardcover Double Spread */
+/* 3D Open Hardcover Double Spread (Rock-solid stationary canvas) */
 .photobook-double-spread {
   position: relative;
   display: grid;
@@ -867,10 +867,14 @@
     0 24px 60px rgba(0, 0, 0, 0.4),
     0 4px 16px rgba(0, 0, 0, 0.2),
     inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-  overflow: visible;
+  overflow: hidden;
   border: 1px solid var(--ds-border-light);
+  box-sizing: border-box;
+}
+
+.photobook-double-spread.effect-3d-flip {
+  overflow: visible;
   transform-style: preserve-3d;
-  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 /* Dog-Ear Corner Curl Micro-interaction */
@@ -1046,7 +1050,7 @@
   pointer-events: none;
   z-index: 45;
   overflow: hidden;
-  border-radius: var(--ds-radius-lg);
+  border-radius: inherit;
   background: var(--ds-bg-app);
 }
 
@@ -1071,9 +1075,9 @@
   box-sizing: border-box;
 }
 
-/* Forward: Track slides from 0% to -50% */
+/* Forward: Track slides from 0% to -50% with buttery natural ease */
 .photobook-slide-overlay.slide-forward .photobook-slide-track {
-  animation: photobook-slide-track-forward 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: photobook-slide-track-forward 0.36s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 @keyframes photobook-slide-track-forward {
@@ -1085,9 +1089,9 @@
   }
 }
 
-/* Backward: Track starts at -50% and slides to 0% */
+/* Backward: Track starts at -50% and slides to 0% with buttery natural ease */
 .photobook-slide-overlay.slide-backward .photobook-slide-track {
-  animation: photobook-slide-track-backward 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: photobook-slide-track-backward 0.36s cubic-bezier(0.25, 1, 0.5, 1) forwards;
 }
 
 @keyframes photobook-slide-track-backward {
@@ -1099,14 +1103,14 @@
   }
 }
 
-/* 3. Crossfade Dissolve Overlay */
+/* 3. Crossfade Dissolve Overlay (Pure 1:1 Pixel Fade, Zero Scale Bounce) */
 .photobook-fade-overlay {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 40;
   overflow: hidden;
-  border-radius: var(--ds-radius-lg);
+  border-radius: inherit;
 }
 
 .photobook-fade-overlay .fade-deck-spread {
@@ -1115,20 +1119,18 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   background: var(--ds-bg-surface);
-  border-radius: var(--ds-radius-lg);
+  border-radius: inherit;
   box-sizing: border-box;
-  will-change: opacity, transform;
-  animation: photobook-fade-in 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  will-change: opacity;
+  animation: photobook-fade-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
 @keyframes photobook-fade-in {
   0% {
     opacity: 0;
-    transform: scale(1.012);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
   }
 }
 
