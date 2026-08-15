@@ -503,18 +503,18 @@ function PhotobookFlipSpread({
           />
         </section>
 
-        {/* Split-Phase Single-Sided 3D Page Turn Layer (Zero Backface Bleed & Zero Z-Fighting) */}
+        {/* 3D Physical Flipping Leaf Overlay (Smooth Continuous Single Sheet) */}
         {spreadState.isAnimating && (
           <div
-            className="photobook-turn-animation-layer"
+            className={`photobook-3d-flipping-leaf leaf-${spreadState.direction}`}
             onAnimationEnd={(e) => {
-              if (e.animationName.includes("split-leaf-back")) {
+              if (e.target === e.currentTarget) {
                 finishFlip(spreadState.toSpread);
               }
             }}
           >
-            {/* Phase 1: Lifting Front Page (0deg -> 90deg) */}
-            <div className={`photobook-split-leaf-front ${spreadState.direction}`}>
+            {/* Front Face of Turning Sheet (Facing viewer at start: 0deg) */}
+            <div className="leaf-face leaf-face-front">
               <div className="page-paper-texture" />
               <PhotobookSpreadPageContent
                 side={spreadState.direction === "forward" ? "right" : "left"}
@@ -532,8 +532,8 @@ function PhotobookFlipSpread({
               />
             </div>
 
-            {/* Phase 2: Landing Back Page (90deg -> 0deg) */}
-            <div className={`photobook-split-leaf-back ${spreadState.direction}`}>
+            {/* Back Face of Turning Sheet (Facing desk at start: 180deg) */}
+            <div className="leaf-face leaf-face-back">
               <div className="page-paper-texture" />
               <PhotobookSpreadPageContent
                 side={spreadState.direction === "forward" ? "left" : "right"}
