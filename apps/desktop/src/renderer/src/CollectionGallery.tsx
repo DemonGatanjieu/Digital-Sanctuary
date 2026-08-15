@@ -268,7 +268,6 @@ function PhotobookFlipSpread({
   onTocOpenChange: (open: boolean) => void;
   interactionSuspended: boolean;
 }) {
-  const [spreadIndex, setSpreadIndex] = useState(0);
   const [mountStyle, setMountStyle] = useState<PhotoMountStyle>(() => {
     return normalizePhotoMountStyle(localStorage.getItem("sanctuary_photobook_mount_style"));
   });
@@ -276,13 +275,15 @@ function PhotobookFlipSpread({
   // Calculate total spreads: Spread 0 (Preface + Art 0), Spread 1+ (Art 2K-1 + Art 2K)
   const totalSpreads = getPhotobookTotalSpreads(items.length);
 
-  // Permanent 3D Leaf Transition State (Never Mount/Unmount)
-  const [transitionState, setTransitionState] = useState<{
+  // Unified Atomic Spread State Machine (Guarantees zero-desync between current spread and transition)
+  const [spreadState, setSpreadState] = useState<{
+    currentSpread: number;
     isAnimating: boolean;
     direction: "forward" | "backward";
     fromSpread: number;
     toSpread: number;
   }>({
+    currentSpread: 0,
     isAnimating: false,
     direction: "forward",
     fromSpread: 0,
@@ -306,18 +307,18 @@ function PhotobookFlipSpread({
   }, [items]);
 
   useEffect(() => {
-    const safeSpread = Math.min(spreadIndex, totalSpreads - 1);
+    const safeSpread = Math.min(spreadState.currentSpread, Math.max(0, totalSpreads - 1));
     if (fallbackTimerRef.current !== null) {
       window.clearTimeout(fallbackTimerRef.current);
       fallbackTimerRef.current = null;
     }
-    setSpreadIndex(safeSpread);
-    setTransitionState((previous) => ({
-      ...previous,
+    setSpreadState({
+      currentSpread: safeSpread,
       isAnimating: false,
+      direction: "forward",
       fromSpread: safeSpread,
       toSpread: safeSpread
-    }));
+    });
   }, [totalSpreads]);
 
   const changeMountStyle = (style: PhotoMountStyle) => {
@@ -330,10 +331,10 @@ function PhotobookFlipSpread({
       window.clearTimeout(fallbackTimerRef.current);
       fallbackTimerRef.current = null;
     }
-    setSpreadIndex(targetSpread);
-    setTransitionState((prev) => ({
-      ...prev,
+    setSpreadState((prev) => ({
+      currentSpread: targetSpread,
       isAnimating: false,
+      direction: prev.direction,
       fromSpread: targetSpread,
       toSpread: targetSpread
     }));
@@ -343,15 +344,16 @@ function PhotobookFlipSpread({
     if (
       targetSpread < 0 ||
       targetSpread >= totalSpreads ||
-      targetSpread === spreadIndex ||
-      transitionState.isAnimating
+      targetSpread === spreadState.currentSpread ||
+      spreadState.isAnimating
     )
       return;
-    const direction = targetSpread > spreadIndex ? "forward" : "backward";
-    setTransitionState({
+    const direction = targetSpread > spreadState.currentSpread ? "forward" : "backward";
+    setSpreadState({
+      currentSpread: spreadState.currentSpread,
       isAnimating: true,
       direction,
-      fromSpread: spreadIndex,
+      fromSpread: spreadState.currentSpread,
       toSpread: targetSpread
     });
 
@@ -363,8 +365,8 @@ function PhotobookFlipSpread({
     }, 750);
   };
 
-  const flipNext = () => flipToSpread(Math.min(totalSpreads - 1, spreadIndex + 1));
-  const flipPrev = () => flipToSpread(Math.max(0, spreadIndex - 1));
+  const flipNext = () => flipToSpread(Math.min(totalSpreads - 1, spreadState.currentSpread + 1));
+  const flipPrev = () => flipToSpread(Math.max(0, spreadState.currentSpread - 1));
 
   const flipToArtwork = (artIdx: number) => {
     flipToSpread(getPhotobookSpreadForArtworkIndex(artIdx));
@@ -398,18 +400,18 @@ function PhotobookFlipSpread({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [spreadIndex, isTocOpen, totalSpreads, transitionState.isAnimating, interactionSuspended]);
+  }, [spreadState.currentSpread, isTocOpen, totalSpreads, spreadState.isAnimating, interactionSuspended]);
 
   if (items.length === 0) return null;
 
-  // Active spread display indices (Pre-warmed on Layer 0 during animation)
-  const displayLeftSpread = transitionState.isAnimating
-    ? (transitionState.direction === "forward" ? transitionState.fromSpread : transitionState.toSpread)
-    : spreadIndex;
+  // Active spread display indices (Atomic synchronization)
+  const displayLeftSpread = spreadState.isAnimating
+    ? (spreadState.direction === "forward" ? spreadState.fromSpread : spreadState.toSpread)
+    : spreadState.currentSpread;
 
-  const displayRightSpread = transitionState.isAnimating
-    ? (transitionState.direction === "forward" ? transitionState.toSpread : transitionState.fromSpread)
-    : spreadIndex;
+  const displayRightSpread = spreadState.isAnimating
+    ? (spreadState.direction === "forward" ? spreadState.toSpread : spreadState.fromSpread)
+    : spreadState.currentSpread;
 
   return (
     <div className="photobook-stage-deck">
@@ -448,7 +450,7 @@ function PhotobookFlipSpread({
       </div>
 
       {/* 3D Open Hardcover Double Spread (Permanent Double Page Deck) */}
-      <div className={`photobook-double-spread ${transitionState.isAnimating ? `is-animating flip-${transitionState.direction}` : ""}`}>
+      <div className={`photobook-double-spread ${spreadState.isAnimating ? `is-animating flip-${spreadState.direction}` : ""}`}>
         {/* Left Page (Verso) */}
         <section className="photobook-page page-verso" onClick={flipPrev} title="点击左页翻至上一展对 (← / A)">
           <div className="page-paper-texture" />
@@ -502,22 +504,22 @@ function PhotobookFlipSpread({
         </section>
 
         {/* 3D Flipping Leaf Overlay during Page Flip */}
-        {transitionState.isAnimating && (
+        {spreadState.isAnimating && (
           <div
-            className={`photobook-3d-flipping-leaf leaf-${transitionState.direction}`}
+            className={`photobook-3d-flipping-leaf leaf-${spreadState.direction}`}
             onAnimationEnd={(e) => {
               if (e.target === e.currentTarget) {
-                finishFlip(transitionState.toSpread);
+                finishFlip(spreadState.toSpread);
               }
             }}
           >
             {/* Front Face of Turning Sheet (translateZ: +1.2px) */}
             <div className="leaf-face leaf-face-front">
               <div className="page-paper-texture" />
-              {transitionState.direction === "forward" ? (
+              {spreadState.direction === "forward" ? (
                 <PhotobookSpreadPageContent
                   side="right"
-                  spreadIndex={transitionState.fromSpread}
+                  spreadIndex={spreadState.fromSpread}
                   collection={collection}
                   items={items}
                   mountStyle={mountStyle}
@@ -532,7 +534,7 @@ function PhotobookFlipSpread({
               ) : (
                 <PhotobookSpreadPageContent
                   side="left"
-                  spreadIndex={transitionState.fromSpread}
+                  spreadIndex={spreadState.fromSpread}
                   collection={collection}
                   items={items}
                   mountStyle={mountStyle}
@@ -552,10 +554,10 @@ function PhotobookFlipSpread({
             {/* Back Face of Turning Sheet (rotateY: 180deg + translateZ: +1.2px) */}
             <div className="leaf-face leaf-face-back">
               <div className="page-paper-texture" />
-              {transitionState.direction === "forward" ? (
+              {spreadState.direction === "forward" ? (
                 <PhotobookSpreadPageContent
                   side="left"
-                  spreadIndex={transitionState.toSpread}
+                  spreadIndex={spreadState.toSpread}
                   collection={collection}
                   items={items}
                   mountStyle={mountStyle}
@@ -570,7 +572,7 @@ function PhotobookFlipSpread({
               ) : (
                 <PhotobookSpreadPageContent
                   side="right"
-                  spreadIndex={transitionState.toSpread}
+                  spreadIndex={spreadState.toSpread}
                   collection={collection}
                   items={items}
                   mountStyle={mountStyle}
@@ -595,7 +597,7 @@ function PhotobookFlipSpread({
         isOpen={isTocOpen}
         collection={collection}
         items={items}
-        currentSpreadIndex={spreadIndex}
+        currentSpreadIndex={spreadState.currentSpread}
         onClose={() => onTocOpenChange(false)}
         onSelectArtwork={(artIdx) => {
           flipToArtwork(artIdx);
