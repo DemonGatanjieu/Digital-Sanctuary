@@ -35,6 +35,8 @@
 | **typography-phase-2-sandbox-and-protocol** | `9625fe272d540b22b15c890725da72195c423c32` | 2026-08-15 | 实施排版与字体系统升级 Phase 2：构建零依赖 SFNT 验证解析器、userData/fonts 沙箱原子索引、sanctuary-font:// 受控特权协议与 IPC 接入，单元测试与编译全部通过。 |
 | **typography-phase-3-6-provider-and-settings** | `4df3e87ed6d54bce2c11917408caf0a7a8d79307` | 2026-08-15 | 实施排版与字体系统升级 Phase 3~6：实现 TypographyProvider 动态 CSS 变量注入与 FontFace 管理、设置中心 4 槽位选择/草稿生效/系统字体读取与导入管理面板，全产品视觉巡检验证通过。 |
 | **photobook-3d-flip-and-photo-mounts** | `ca015cfeea843c020e6ed341182e91b54180b414` | 2026-08-15 | 实施画册 3D 拟真翻页动力学引擎与多风格实体相片装裱系统：实装 4 款独特装裱风格（典藏相角/和纸手账/画廊浮雕/复古拍立得）与顶部切换胶囊，重构以书脊为轴的 180° 3D 翻页叶片、书脊动态扫光与悬停卷角诱导动效。 |
+| **photobook-flip-stutter-elimination** | `f0d4fa30fbf40908d23c0c56ecb662c031abe8b2` | 2026-08-15 | 消除画册翻页卡顿与人脑预测模型认知对齐：采用 onAnimationEnd 精准帧同步彻底消灭 DOM 替换时序撕裂，重构子组件保证翻页前后布局 100% 像素级对齐，引入符合真实纸张空气阻尼与惯性力学的 cubic-bezier(0.22, 1, 0.36, 1) 贝塞尔曲线。 |
+
 
 
 
