@@ -909,7 +909,7 @@
 }
 
 /* ==========================================================================
-   Permanent 3D Flipping Leaf (常驻 3D 翻页叶片 · 零 DOM 挂载卸载)
+   3D Flipping Leaf (3D 翻页叶片动力学引擎)
    ========================================================================== */
 
 .photobook-3d-flipping-leaf {
@@ -921,30 +921,18 @@
   transform-style: preserve-3d;
   pointer-events: none;
   contain: layout paint style;
-  will-change: transform, opacity;
-}
-
-/* Idle state: Kept warm in GPU cache, hidden from view */
-.photobook-3d-flipping-leaf.leaf-idle {
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-  transform: rotateY(0deg) translateZ(0);
+  will-change: transform;
 }
 
 /* Active Forward Flip: 0.64s Cubic Easing */
-.photobook-3d-flipping-leaf.leaf-active.leaf-forward {
-  visibility: visible;
-  opacity: 1;
+.photobook-3d-flipping-leaf.leaf-forward {
   left: 50%;
   transform-origin: left center;
   animation: leaf-flip-forward 0.64s cubic-bezier(0.18, 0.9, 0.26, 1) forwards;
 }
 
 /* Active Backward Flip: 0.64s Cubic Easing */
-.photobook-3d-flipping-leaf.leaf-active.leaf-backward {
-  visibility: visible;
-  opacity: 1;
+.photobook-3d-flipping-leaf.leaf-backward {
   left: 0;
   transform-origin: right center;
   animation: leaf-flip-backward 0.64s cubic-bezier(0.18, 0.9, 0.26, 1) forwards;
@@ -1517,6 +1505,7 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 8px;
   background: rgba(15, 23, 42, 0.78);
   backdrop-filter: blur(12px);
@@ -1527,6 +1516,8 @@
   opacity: 0.85;
   transition: opacity var(--ds-transition-fast), transform var(--ds-transition-fast);
   z-index: 10;
+  max-width: calc(100% - 24px);
+  white-space: nowrap;
 }
 
 .art-photo-mat-surface:hover .art-plate-actions {
@@ -1545,6 +1536,11 @@
   border-radius: var(--ds-radius-full);
   cursor: pointer;
   transition: all var(--ds-transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .art-action-lightbox-btn:hover {
@@ -2305,6 +2301,4 @@
 .theater-footer-stats strong {
   color: var(--ds-primary);
 }
-
-
 

@@ -70,7 +70,7 @@ export function GalleryView({
   onEditCollection: (collection: CollectionRecord) => void;
   onSaveSavedView: (draft: SavedCollectionViewDraft, id?: string) => Promise<void>;
   onDeleteSavedView: (id: string) => Promise<void>;
-  onAssignCollection: (artworkId: string, collectionId: string) => void;
+  onAssignCollection: (artworkId: string, collectionId: string) => Promise<void> | void;
   onAssignWorkCollection: (workId: string, collectionId: string) => Promise<void>;
   onUpdateCollectionCover: (collectionId: string, artworkId: string | null) => void;
   onRepairArtistAvatars: () => void;
@@ -179,6 +179,7 @@ export function GalleryView({
             onAssign={onAssignCollection}
             onOpenArtwork={setSelectedArtworkId}
             onSetCover={(artworkId) => onUpdateCollectionCover(selectedCollection.id, artworkId)}
+            lightboxOpen={Boolean(selectedArtwork)}
             onFilterInGallery={() => {
               const {
                 collectionIds: _cids,

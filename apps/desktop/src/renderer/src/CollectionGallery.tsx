@@ -3,6 +3,14 @@ import type { ArtworkRecord, CollectionRecord, SavedCollectionView } from "@sanc
 import { ArtworkCard, artworkImageUrl } from "./ArtworkCard";
 import { Button } from "./Button";
 import { DialogOverlay } from "./DialogOverlay";
+import {
+  getPhotobookArtworkIndex,
+  getPhotobookSpreadForArtworkIndex,
+  getPhotobookTotalSpreads,
+  normalizePhotoMountStyle,
+  resolvePhotobookKeyboardAction,
+  type PhotoMountStyle
+} from "./photobook-navigation";
 import { SegmentedControl } from "./SegmentedControl";
 
 export function CollectionDetailPage({
@@ -13,34 +21,45 @@ export function CollectionDetailPage({
   onAssign,
   onOpenArtwork,
   onSetCover,
-  onFilterInGallery
+  onFilterInGallery,
+  lightboxOpen = false
 }: {
   collection: CollectionRecord;
   artworks: ArtworkRecord[];
   collections: CollectionRecord[];
   onBack: () => void;
-  onAssign: (artworkId: string, collectionId: string) => void;
+  onAssign: (artworkId: string, collectionId: string) => Promise<void> | void;
   onOpenArtwork: (artworkId: string) => void;
   onSetCover: (artworkId: string) => void;
   onFilterInGallery?: () => void;
+  lightboxOpen?: boolean;
 }) {
   const items = artworks.filter((artwork) => artwork.collectionIds.includes(collection.id));
   const coverArtwork = artworks.find((a) => a.id === collection.coverArtworkId) ?? items[0];
   const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
   const [viewMode, setViewMode] = useState<"flip" | "grid" | "toc">("flip");
   const [isPickingWorks, setIsPickingWorks] = useState(false);
+  const [isPhotobookTocOpen, setIsPhotobookTocOpen] = useState(false);
 
   // Global ESC key listener to exit full-screen game artbook
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isPickingWorks) {
+      if (e.key !== "Escape" || isPickingWorks || lightboxOpen) return;
+      if (isPhotobookTocOpen) {
+        e.preventDefault();
+        setIsPhotobookTocOpen(false);
+      } else {
         e.preventDefault();
         onBack();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPickingWorks, onBack]);
+  }, [isPickingWorks, isPhotobookTocOpen, lightboxOpen, onBack]);
+
+  useEffect(() => {
+    if (viewMode !== "flip") setIsPhotobookTocOpen(false);
+  }, [viewMode]);
 
   return (
     <section className="album-fullscreen-theater" role="dialog" aria-modal="true" aria-label={`相册《${collection.name}》`}>
@@ -109,6 +128,9 @@ export function CollectionDetailPage({
             onOpenArtwork={onOpenArtwork}
             onSetCover={onSetCover}
             onOpenPicker={() => setIsPickingWorks(true)}
+            isTocOpen={isPhotobookTocOpen}
+            onTocOpenChange={setIsPhotobookTocOpen}
+            interactionSuspended={isPickingWorks || lightboxOpen}
           />
         ) : viewMode === "toc" ? (
           /* Table of Contents Mode (画册目录索引模式) */
@@ -206,7 +228,7 @@ export function CollectionDetailPage({
           onClose={() => setIsPickingWorks(false)}
           onAdd={async (selectedArtworkIds) => {
             for (const id of selectedArtworkIds) {
-              onAssign(id, collection.id);
+              await onAssign(id, collection.id);
             }
             setIsPickingWorks(false);
           }}
@@ -220,8 +242,6 @@ export function CollectionDetailPage({
    Photobook Flip Spread View (拟真画册对开翻页书台)
    ========================================================================== */
 
-export type PhotoMountStyle = "corners" | "washi-tape" | "gallery-float" | "polaroid";
-
 const MOUNT_STYLES: Array<{ id: PhotoMountStyle; label: string; icon: string; description: string }> = [
   { id: "corners", label: "典藏相角", icon: "🔲", description: "四角金属/复古相角扣件 + 相纸细腻白边 + 立体双层悬浮阴影" },
   { id: "washi-tape", label: "和纸手账", icon: "🏷️", description: "半透明磨砂和纸胶贴 + 微角度手账同人画集感" },
@@ -234,22 +254,27 @@ function PhotobookFlipSpread({
   items,
   onOpenArtwork,
   onSetCover,
-  onOpenPicker
+  onOpenPicker,
+  isTocOpen,
+  onTocOpenChange,
+  interactionSuspended
 }: {
   collection: CollectionRecord;
   items: ArtworkRecord[];
   onOpenArtwork: (artworkId: string) => void;
   onSetCover: (artworkId: string) => void;
   onOpenPicker: () => void;
+  isTocOpen: boolean;
+  onTocOpenChange: (open: boolean) => void;
+  interactionSuspended: boolean;
 }) {
   const [spreadIndex, setSpreadIndex] = useState(0);
-  const [isTocOpen, setIsTocOpen] = useState(false);
   const [mountStyle, setMountStyle] = useState<PhotoMountStyle>(() => {
-    return (localStorage.getItem("sanctuary_photobook_mount_style") as PhotoMountStyle) ?? "corners";
+    return normalizePhotoMountStyle(localStorage.getItem("sanctuary_photobook_mount_style"));
   });
 
   // Calculate total spreads: Spread 0 (Preface + Art 0), Spread 1+ (Art 2K-1 + Art 2K)
-  const totalSpreads = items.length <= 1 ? 1 : 1 + Math.ceil((items.length - 1) / 2);
+  const totalSpreads = getPhotobookTotalSpreads(items.length);
 
   // Permanent 3D Leaf Transition State (Never Mount/Unmount)
   const [transitionState, setTransitionState] = useState<{
@@ -265,6 +290,43 @@ function PhotobookFlipSpread({
   });
 
   const fallbackTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (fallbackTimerRef.current !== null) window.clearTimeout(fallbackTimerRef.current);
+  }, []);
+
+  // Pre-cache adjacent spread images into browser memory to eliminate image decoding pop
+  useEffect(() => {
+    const spreadsToPreload = [spreadIndex - 1, spreadIndex, spreadIndex + 1];
+    for (const s of spreadsToPreload) {
+      if (s < 0 || s >= totalSpreads) continue;
+      const leftIdx = getPhotobookArtworkIndex(s, "left", items.length);
+      const rightIdx = getPhotobookArtworkIndex(s, "right", items.length);
+      if (leftIdx !== null && items[leftIdx]) {
+        const img = new Image();
+        img.src = artworkImageUrl(items[leftIdx]);
+      }
+      if (rightIdx !== null && items[rightIdx]) {
+        const img = new Image();
+        img.src = artworkImageUrl(items[rightIdx]);
+      }
+    }
+  }, [spreadIndex, items, totalSpreads]);
+
+  useEffect(() => {
+    const safeSpread = Math.min(spreadIndex, totalSpreads - 1);
+    if (fallbackTimerRef.current !== null) {
+      window.clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
+    }
+    setSpreadIndex(safeSpread);
+    setTransitionState((previous) => ({
+      ...previous,
+      isAnimating: false,
+      fromSpread: safeSpread,
+      toSpread: safeSpread
+    }));
+  }, [totalSpreads]);
 
   const changeMountStyle = (style: PhotoMountStyle) => {
     setMountStyle(style);
@@ -313,34 +375,38 @@ function PhotobookFlipSpread({
   const flipPrev = () => flipToSpread(Math.max(0, spreadIndex - 1));
 
   const flipToArtwork = (artIdx: number) => {
-    const target = artIdx === 0 ? 0 : 1 + Math.floor((artIdx - 1) / 2);
-    flipToSpread(target);
+    flipToSpread(getPhotobookSpreadForArtworkIndex(artIdx));
   };
 
   // Keyboard navigation
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsTocOpen(false);
-      } else if (e.key === "KeyT" || e.key === "KeyM") {
+      const target = e.target instanceof Element ? e.target : null;
+      const action = resolvePhotobookKeyboardAction({
+        key: e.key,
+        code: e.code,
+        targetIsEditable: Boolean(target?.closest("input, textarea, select, [contenteditable='true']")),
+        interactionSuspended,
+        tocOpen: isTocOpen
+      });
+
+      if (action === "toggle-toc") {
         e.preventDefault();
-        setIsTocOpen((prev) => !prev);
-      } else if (!isTocOpen) {
-        if (e.key === "ArrowRight" || e.key === "KeyD" || e.key === " ") {
-          e.preventDefault();
-          flipNext();
-        } else if (e.key === "ArrowLeft" || e.key === "KeyA") {
-          e.preventDefault();
-          flipPrev();
-        } else if (e.key === "Home") {
-          e.preventDefault();
-          flipToSpread(0);
-        }
+        onTocOpenChange(!isTocOpen);
+      } else if (action === "next") {
+        e.preventDefault();
+        flipNext();
+      } else if (action === "previous") {
+        e.preventDefault();
+        flipPrev();
+      } else if (action === "home") {
+        e.preventDefault();
+        flipToSpread(0);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [spreadIndex, isTocOpen, totalSpreads]);
+  }, [spreadIndex, isTocOpen, totalSpreads, transitionState.isAnimating, interactionSuspended]);
 
   if (items.length === 0) return null;
 
@@ -353,10 +419,6 @@ function PhotobookFlipSpread({
     ? (transitionState.direction === "forward" ? transitionState.toSpread : transitionState.fromSpread)
     : spreadIndex;
 
-  // Permanent Leaf spread indices
-  const leafFromSpread = transitionState.isAnimating ? transitionState.fromSpread : spreadIndex;
-  const leafToSpread = transitionState.isAnimating ? transitionState.toSpread : spreadIndex;
-
   return (
     <div className="photobook-stage-deck">
       {/* Top Floating Toolbar (Mount Switcher & Quick TOC Button) */}
@@ -365,7 +427,7 @@ function PhotobookFlipSpread({
           <button
             type="button"
             className={`photobook-toc-trigger-btn ${isTocOpen ? "active" : ""}`}
-            onClick={() => setIsTocOpen((prev) => !prev)}
+            onClick={() => onTocOpenChange(!isTocOpen)}
             title="查看画集完整篇目索引目录 (快捷键: T / M)"
           >
             <span className="btn-icon">📑</span>
@@ -401,6 +463,7 @@ function PhotobookFlipSpread({
           <div className="page-corner-curl corner-verso" onClick={(e) => { e.stopPropagation(); flipPrev(); }} title="点击翻至上一展对" />
           
           <PhotobookSpreadPageContent
+            key={`desk-left-${displayLeftSpread}`}
             side="left"
             spreadIndex={displayLeftSpread}
             collection={collection}
@@ -409,7 +472,7 @@ function PhotobookFlipSpread({
             totalSpreads={totalSpreads}
             onOpenArtwork={onOpenArtwork}
             onSetCover={onSetCover}
-            onOpenToc={() => setIsTocOpen(true)}
+            onOpenToc={() => onTocOpenChange(true)}
             onFlipToSpread={flipToSpread}
             onFlipPrev={flipPrev}
             onFlipNext={flipNext}
@@ -432,6 +495,7 @@ function PhotobookFlipSpread({
           <div className="page-corner-curl corner-recto" onClick={(e) => { e.stopPropagation(); flipNext(); }} title="点击翻至下一展对" />
 
           <PhotobookSpreadPageContent
+            key={`desk-right-${displayRightSpread}`}
             side="right"
             spreadIndex={displayRightSpread}
             collection={collection}
@@ -440,102 +504,105 @@ function PhotobookFlipSpread({
             totalSpreads={totalSpreads}
             onOpenArtwork={onOpenArtwork}
             onSetCover={onSetCover}
-            onOpenToc={() => setIsTocOpen(true)}
+            onOpenToc={() => onTocOpenChange(true)}
             onFlipToSpread={flipToSpread}
             onFlipPrev={flipPrev}
             onFlipNext={flipNext}
           />
         </section>
 
-        {/* Permanent 3D Flipping Leaf Overlay (Always Present in DOM, Never Unmounted) */}
-        <div
-          className={`photobook-3d-flipping-leaf ${
-            transitionState.isAnimating
-              ? `leaf-active leaf-${transitionState.direction}`
-              : "leaf-idle"
-          }`}
-          onAnimationEnd={(e) => {
-            if (e.target === e.currentTarget && transitionState.isAnimating) {
-              finishFlip(transitionState.toSpread);
-            }
-          }}
-        >
-          {/* Front Face of Turning Sheet (translateZ: +1.2px) */}
-          <div className="leaf-face leaf-face-front">
-            <div className="page-paper-texture" />
-            {transitionState.direction === "forward" ? (
-              <PhotobookSpreadPageContent
-                side="right"
-                spreadIndex={leafFromSpread}
-                collection={collection}
-                items={items}
-                mountStyle={mountStyle}
-                totalSpreads={totalSpreads}
-                onOpenArtwork={onOpenArtwork}
-                onSetCover={onSetCover}
-                onOpenToc={() => setIsTocOpen(true)}
-                onFlipToSpread={flipToSpread}
-                onFlipPrev={flipPrev}
-                onFlipNext={flipNext}
-              />
-            ) : (
-              <PhotobookSpreadPageContent
-                side="left"
-                spreadIndex={leafFromSpread}
-                collection={collection}
-                items={items}
-                mountStyle={mountStyle}
-                totalSpreads={totalSpreads}
-                onOpenArtwork={onOpenArtwork}
-                onSetCover={onSetCover}
-                onOpenToc={() => setIsTocOpen(true)}
-                onFlipToSpread={flipToSpread}
-                onFlipPrev={flipPrev}
-                onFlipNext={flipNext}
-              />
-            )}
-            <div className="leaf-specular-sheen" />
-            <div className="leaf-shadow-sweep" />
-          </div>
+        {/* 3D Flipping Leaf Overlay during Page Flip (Keyed per transition for zero frame tearing) */}
+        {transitionState.isAnimating && (
+          <div
+            key={`leaf-${transitionState.fromSpread}->${transitionState.toSpread}-${transitionState.direction}`}
+            className={`photobook-3d-flipping-leaf leaf-${transitionState.direction}`}
+            onAnimationEnd={(e) => {
+              if (e.target === e.currentTarget) {
+                finishFlip(transitionState.toSpread);
+              }
+            }}
+          >
+            {/* Front Face of Turning Sheet (translateZ: +1.2px) */}
+            <div className="leaf-face leaf-face-front">
+              <div className="page-paper-texture" />
+              {transitionState.direction === "forward" ? (
+                <PhotobookSpreadPageContent
+                  key={`leaf-front-${transitionState.fromSpread}-right`}
+                  side="right"
+                  spreadIndex={transitionState.fromSpread}
+                  collection={collection}
+                  items={items}
+                  mountStyle={mountStyle}
+                  totalSpreads={totalSpreads}
+                  onOpenArtwork={onOpenArtwork}
+                  onSetCover={onSetCover}
+                  onOpenToc={() => onTocOpenChange(true)}
+                  onFlipToSpread={flipToSpread}
+                  onFlipPrev={flipPrev}
+                  onFlipNext={flipNext}
+                />
+              ) : (
+                <PhotobookSpreadPageContent
+                  key={`leaf-front-${transitionState.fromSpread}-left`}
+                  side="left"
+                  spreadIndex={transitionState.fromSpread}
+                  collection={collection}
+                  items={items}
+                  mountStyle={mountStyle}
+                  totalSpreads={totalSpreads}
+                  onOpenArtwork={onOpenArtwork}
+                  onSetCover={onSetCover}
+                  onOpenToc={() => onTocOpenChange(true)}
+                  onFlipToSpread={flipToSpread}
+                  onFlipPrev={flipPrev}
+                  onFlipNext={flipNext}
+                />
+              )}
+              <div className="leaf-specular-sheen" />
+              <div className="leaf-shadow-sweep" />
+            </div>
 
-          {/* Back Face of Turning Sheet (rotateY: 180deg + translateZ: +1.2px) */}
-          <div className="leaf-face leaf-face-back">
-            <div className="page-paper-texture" />
-            {transitionState.direction === "forward" ? (
-              <PhotobookSpreadPageContent
-                side="left"
-                spreadIndex={leafToSpread}
-                collection={collection}
-                items={items}
-                mountStyle={mountStyle}
-                totalSpreads={totalSpreads}
-                onOpenArtwork={onOpenArtwork}
-                onSetCover={onSetCover}
-                onOpenToc={() => setIsTocOpen(true)}
-                onFlipToSpread={flipToSpread}
-                onFlipPrev={flipPrev}
-                onFlipNext={flipNext}
-              />
-            ) : (
-              <PhotobookSpreadPageContent
-                side="right"
-                spreadIndex={leafToSpread}
-                collection={collection}
-                items={items}
-                mountStyle={mountStyle}
-                totalSpreads={totalSpreads}
-                onOpenArtwork={onOpenArtwork}
-                onSetCover={onSetCover}
-                onOpenToc={() => setIsTocOpen(true)}
-                onFlipToSpread={flipToSpread}
-                onFlipPrev={flipPrev}
-                onFlipNext={flipNext}
-              />
-            )}
-            <div className="leaf-specular-sheen" />
-            <div className="leaf-shadow-sweep" />
+            {/* Back Face of Turning Sheet (rotateY: 180deg + translateZ: +1.2px) */}
+            <div className="leaf-face leaf-face-back">
+              <div className="page-paper-texture" />
+              {transitionState.direction === "forward" ? (
+                <PhotobookSpreadPageContent
+                  key={`leaf-back-${transitionState.toSpread}-left`}
+                  side="left"
+                  spreadIndex={transitionState.toSpread}
+                  collection={collection}
+                  items={items}
+                  mountStyle={mountStyle}
+                  totalSpreads={totalSpreads}
+                  onOpenArtwork={onOpenArtwork}
+                  onSetCover={onSetCover}
+                  onOpenToc={() => onTocOpenChange(true)}
+                  onFlipToSpread={flipToSpread}
+                  onFlipPrev={flipPrev}
+                  onFlipNext={flipNext}
+                />
+              ) : (
+                <PhotobookSpreadPageContent
+                  key={`leaf-back-${transitionState.toSpread}-right`}
+                  side="right"
+                  spreadIndex={transitionState.toSpread}
+                  collection={collection}
+                  items={items}
+                  mountStyle={mountStyle}
+                  totalSpreads={totalSpreads}
+                  onOpenArtwork={onOpenArtwork}
+                  onSetCover={onSetCover}
+                  onOpenToc={() => onTocOpenChange(true)}
+                  onFlipToSpread={flipToSpread}
+                  onFlipPrev={flipPrev}
+                  onFlipNext={flipNext}
+                />
+              )}
+              <div className="leaf-specular-sheen" />
+              <div className="leaf-shadow-sweep" />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Floating Acrylic Glass Table of Contents Drawer */}
@@ -544,10 +611,10 @@ function PhotobookFlipSpread({
         collection={collection}
         items={items}
         currentSpreadIndex={spreadIndex}
-        onClose={() => setIsTocOpen(false)}
+        onClose={() => onTocOpenChange(false)}
         onSelectArtwork={(artIdx) => {
           flipToArtwork(artIdx);
-          setIsTocOpen(false);
+          onTocOpenChange(false);
         }}
       />
     </div>
@@ -659,29 +726,13 @@ function PhotobookSpreadPageContent({
   }
 
   // --- Determine which artwork belongs to this page ---
-  let artworkIndex = -1;
-  let isColophon = false;
-
-  if (spreadIndex === 0 && side === "right") {
-    artworkIndex = 0; // Cover artwork
-  } else if (spreadIndex > 0) {
-    if (side === "left") {
-      artworkIndex = (spreadIndex - 1) * 2 + 1;
-    } else {
-      artworkIndex = (spreadIndex - 1) * 2 + 2;
-    }
-  }
-
-  if (artworkIndex >= items.length || artworkIndex < 0) {
-    isColophon = true;
-  }
-
-  const artwork = !isColophon ? items[artworkIndex] : null;
+  const artworkIndex = getPhotobookArtworkIndex(spreadIndex, side, items.length);
+  const artwork = artworkIndex === null ? null : items[artworkIndex];
   const isCover = artwork && collection.coverArtworkId === artwork.id;
-  const pageNumStr = artwork ? String(artworkIndex + 1).padStart(2, "0") : "END";
+  const pageNumStr = artwork && artworkIndex !== null ? String(artworkIndex + 1).padStart(2, "0") : "END";
 
   // --- Colophon (Endplate) if no artwork on this page ---
-  if (isColophon || !artwork) {
+  if (artworkIndex === null || !artwork) {
     return (
       <>
         <header className={side === "left" ? "page-header-index" : "page-header-art"}>
