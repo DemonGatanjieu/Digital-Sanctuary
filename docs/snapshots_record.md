@@ -46,6 +46,8 @@
 | **photobook-soft-natural-paper-shadows** | `2a284cf2c55022a1d39b1720492c6e67cdae1536` | 2026-08-15 | 去除生硬的人工扫光遮罩与生硬的黑影突变：全面软化翻折关键帧阴影过渡（最大 alpha 从 0.40 降至细腻的 0.12），移除高反差镜面扫光层，呈现物理艺术画集原汁原味的柔和自然纸张起伏感。 |
 | **photobook-continuous-aerodynamics-and-spine-anchor** | `b6bb5f43536ee0705e499184dc18690ded526699` | 2026-08-15 | 根治翻页阴影中途消失后突现与分段生硬停顿：重构为单张物理纸张 0°~180° 连续 3D 空气动力学平滑翻折，将中脊装订立体阴影提升至 z-index: 60 恒定置顶锚定，精确对齐脊线 0 圆角装订边缘，杜绝任何阴影断层与撕裂感。 |
 | **photobook-clean-minimalist-gutter-seam** | `2af4e9f00f0d72b25b32981fe1df9300ffdabd42` | 2026-08-15 | 彻底废除正中突兀粗黑的重阴影竖条、点状缝线与丝带标记：全面回归现代高端艺术画册（Editorial Artbook）极简设计语言，将书台中缝净化为 1px 典雅细微中缝线，纯净还原两页对开画作本身。 |
+| **photobook-multi-turn-transitions-suite** | `f69fcbb96df3432bee1d9358a34d24e7a743dc97` | 2026-08-15 | 实装 4 套高品质可自由切换的画册翻页动画（3D 典藏翻页、平移动画、柔光渐隐、层叠抽拉）：顶部双选择器工具栏、硬件 GPU Compositor Layer 隔离与 localStorage 偏好持久化，彻底解决不同设备环境下的卡顿与生硬感。 |
+
 
 
 
