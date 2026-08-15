@@ -45,6 +45,8 @@
 | **photobook-split-phase-engine-and-doc** | `b53b381321ba7a43b55b5b7af39c10b293e6db45` | 2026-08-15 | 实装行业级双半程单面隔离折叠引擎（Split-Phase Single-Sided Folding Architecture）并输出权威图形学技术分析白皮书：废弃双面背靠背 3D 夹层，拆分为前半程右页单面起折与后半程左页单面展平，100% 免疫 Chromium backface-visibility 亚像素浮点穿透与 Z-Fighting。 |
 | **photobook-soft-natural-paper-shadows** | `2a284cf2c55022a1d39b1720492c6e67cdae1536` | 2026-08-15 | 去除生硬的人工扫光遮罩与生硬的黑影突变：全面软化翻折关键帧阴影过渡（最大 alpha 从 0.40 降至细腻的 0.12），移除高反差镜面扫光层，呈现物理艺术画集原汁原味的柔和自然纸张起伏感。 |
 | **photobook-continuous-aerodynamics-and-spine-anchor** | `b6bb5f43536ee0705e499184dc18690ded526699` | 2026-08-15 | 根治翻页阴影中途消失后突现与分段生硬停顿：重构为单张物理纸张 0°~180° 连续 3D 空气动力学平滑翻折，将中脊装订立体阴影提升至 z-index: 60 恒定置顶锚定，精确对齐脊线 0 圆角装订边缘，杜绝任何阴影断层与撕裂感。 |
+| **photobook-clean-minimalist-gutter-seam** | `2af4e9f00f0d72b25b32981fe1df9300ffdabd42` | 2026-08-15 | 彻底废除正中突兀粗黑的重阴影竖条、点状缝线与丝带标记：全面回归现代高端艺术画册（Editorial Artbook）极简设计语言，将书台中缝净化为 1px 典雅细微中缝线，纯净还原两页对开画作本身。 |
+
 
 
 
