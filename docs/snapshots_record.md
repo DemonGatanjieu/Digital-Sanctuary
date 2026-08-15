@@ -44,6 +44,8 @@
 | **photobook-atomic-spread-state-machine** | `9635e9a2fdf1000a60c6875ae39ad1aa4c5dab3d` | 2026-08-15 | 深度分析用户录屏发现翻页后左页短暂回退卷首的瞬间闪烁（Spread Reversion Glitch）：重构翻页展台为单一原子状态机（Unified Atomic State Machine），使 spread 索引更新与动画完成在同一渲染帧内完全原子化，彻底根除多状态不同步引发的闪现旧页问题。 |
 | **photobook-split-phase-engine-and-doc** | `b53b381321ba7a43b55b5b7af39c10b293e6db45` | 2026-08-15 | 实装行业级双半程单面隔离折叠引擎（Split-Phase Single-Sided Folding Architecture）并输出权威图形学技术分析白皮书：废弃双面背靠背 3D 夹层，拆分为前半程右页单面起折与后半程左页单面展平，100% 免疫 Chromium backface-visibility 亚像素浮点穿透与 Z-Fighting。 |
 | **photobook-soft-natural-paper-shadows** | `2a284cf2c55022a1d39b1720492c6e67cdae1536` | 2026-08-15 | 去除生硬的人工扫光遮罩与生硬的黑影突变：全面软化翻折关键帧阴影过渡（最大 alpha 从 0.40 降至细腻的 0.12），移除高反差镜面扫光层，呈现物理艺术画集原汁原味的柔和自然纸张起伏感。 |
+| **photobook-continuous-aerodynamics-and-spine-anchor** | `b6bb5f43536ee0705e499184dc18690ded526699` | 2026-08-15 | 根治翻页阴影中途消失后突现与分段生硬停顿：重构为单张物理纸张 0°~180° 连续 3D 空气动力学平滑翻折，将中脊装订立体阴影提升至 z-index: 60 恒定置顶锚定，精确对齐脊线 0 圆角装订边缘，杜绝任何阴影断层与撕裂感。 |
+
 
 
 
