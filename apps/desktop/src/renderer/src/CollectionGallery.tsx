@@ -472,11 +472,8 @@ function PhotobookFlipSpread({
           />
         </section>
 
-        {/* Central Book Spine Crease & Depth Shadows */}
-        <div className="photobook-spine-crease">
-          <div className="spine-stitch-line" />
-          <div className="silk-bookmark-ribbon" />
-        </div>
+        {/* Central Book Spine Gutter Seam */}
+        <div className="photobook-spine-crease" />
 
         {/* Right Page (Recto) */}
         <section

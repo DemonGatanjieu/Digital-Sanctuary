@@ -941,38 +941,30 @@
 @keyframes leaf-flip-forward-continuous {
   0% {
     transform: rotateY(0deg);
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.04);
   }
-  30% {
-    transform: rotateY(-54deg) scale(0.994);
-    box-shadow: -6px 0 16px rgba(0, 0, 0, 0.1);
-  }
-  70% {
-    transform: rotateY(-126deg) scale(0.994);
-    box-shadow: 6px 0 16px rgba(0, 0, 0, 0.1);
+  50% {
+    transform: rotateY(-90deg) scale(0.995);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   }
   100% {
     transform: rotateY(-180deg);
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
   }
 }
 
 @keyframes leaf-flip-backward-continuous {
   0% {
     transform: rotateY(0deg);
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.04);
   }
-  30% {
-    transform: rotateY(54deg) scale(0.994);
-    box-shadow: 8px 0 16px rgba(0, 0, 0, 0.1);
-  }
-  70% {
-    transform: rotateY(126deg) scale(0.994);
-    box-shadow: -8px 0 16px rgba(0, 0, 0, 0.1);
+  50% {
+    transform: rotateY(90deg) scale(0.995);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
   }
   100% {
     transform: rotateY(180deg);
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.04);
   }
 }
 
@@ -1061,9 +1053,9 @@
   border-bottom-left-radius: var(--ds-radius-lg);
   border-top-right-radius: 0;
   border-bottom-right-radius: 0;
-  border-right: none;
+  border-right: 1px solid var(--ds-border-light);
   cursor: pointer;
-  background: linear-gradient(90deg, var(--ds-bg-app) 0%, var(--ds-bg-card-subtle) 96%, rgba(0, 0, 0, 0.08) 100%);
+  background: var(--ds-bg-app);
 }
 
 .page-header-index {
@@ -1224,48 +1216,17 @@
   color: var(--ds-text-secondary);
 }
 
-/* Central Book Spine Crease & Shadow */
+/* Central Book Spine Gutter (极简清爽中缝细线) */
 .photobook-spine-crease {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 24px;
-  background: linear-gradient(
-    90deg,
-    rgba(0, 0, 0, 0.25) 0%,
-    rgba(0, 0, 0, 0.45) 35%,
-    rgba(255, 255, 255, 0.1) 50%,
-    rgba(0, 0, 0, 0.45) 65%,
-    rgba(0, 0, 0, 0.25) 100%
-  );
-  z-index: 60;
-  pointer-events: none;
-  box-shadow: 0 0 16px rgba(0, 0, 0, 0.3);
-}
-
-.spine-stitch-line {
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 50%;
-  transform: translateX(-50%);
   width: 1px;
-  border-left: 1.5px dotted rgba(255, 255, 255, 0.3);
-}
-
-.silk-bookmark-ribbon {
-  position: absolute;
-  top: -6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 10px;
-  height: 90px;
-  background: var(--ds-gradient-primary);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  border-radius: 0 0 2px 2px;
-  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%);
+  background: var(--ds-border-light);
+  z-index: 10;
+  pointer-events: none;
 }
 
 /* Right Page (Recto) */
@@ -1276,7 +1237,7 @@
   border-bottom-left-radius: 0;
   border-left: none;
   cursor: pointer;
-  background: linear-gradient(270deg, var(--ds-bg-app) 0%, var(--ds-bg-card-subtle) 96%, rgba(0, 0, 0, 0.08) 100%);
+  background: var(--ds-bg-app);
 }
 
 .page-header-art {
