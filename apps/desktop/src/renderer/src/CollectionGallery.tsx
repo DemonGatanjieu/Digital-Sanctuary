@@ -530,8 +530,6 @@ function PhotobookFlipSpread({
                 onFlipPrev={flipPrev}
                 onFlipNext={flipNext}
               />
-              <div className="leaf-specular-sheen" />
-              <div className="leaf-shadow-sweep" />
             </div>
 
             {/* Phase 2: Landing Back Page (90deg -> 0deg) */}
@@ -551,8 +549,6 @@ function PhotobookFlipSpread({
                 onFlipPrev={flipPrev}
                 onFlipNext={flipNext}
               />
-              <div className="leaf-specular-sheen" />
-              <div className="leaf-shadow-sweep" />
             </div>
           </div>
         )}
