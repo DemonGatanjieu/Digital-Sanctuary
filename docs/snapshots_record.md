@@ -38,6 +38,8 @@
 | **photobook-flip-stutter-elimination** | `f0d4fa30fbf40908d23c0c56ecb662c031abe8b2` | 2026-08-15 | 消除画册翻页卡顿与人脑预测模型认知对齐：采用 onAnimationEnd 精准帧同步彻底消灭 DOM 替换时序撕裂，重构子组件保证翻页前后布局 100% 像素级对齐，引入符合真实纸张空气阻尼与惯性力学的 cubic-bezier(0.22, 1, 0.36, 1) 贝塞尔曲线。 |
 | **photobook-flip-cushion-damping** | `dc65438ce688878cb300134d3615ad4451d8862b` | 2026-08-15 | 升级画册翻页节奏至 0.68s 并引入多阶段空气阻尼与纸张微弧度形变：重构 18% 柔和起势、48% 空间纵深扫光与 76% 气垫柔性降落，使重磅艺术画册翻折更具典藏沉浸仪式感。 |
 | **photobook-flicker-free-4deck-stage** | `092b5bcf447244037fec0f5322d625e31054f3d1` | 2026-08-15 | 彻底重构画册为常驻四层硬装书台（Permanent 4-Deck Stage）：翻页叶片在 DOM 中永久驻留（零挂载/零卸载），正面与反面分别赋予 translateZ(+1.2px) 物理厚度隔离彻底根除 Z-Fighting 与 Compositor 纹理重建闪烁，配合 0.64s 典藏空气动力学衰减曲线。 |
+| **photobook-double-spread-and-floating-toc** | `b16482a5c7468e68fee62087606235bc2f801eaf` | 2026-08-15 | 重构画册为全景双页对开画廊体系（Spread-based Layout）：第 1 展对为卷首题记与封面首作，后续内页展对左页与右页全部展示独立装裱画作，实装顶部/底部快捷入口与全局键盘快捷键 T 唤起的浮动亚克力毛玻璃篇目索引抽屉。 |
+
 
 
 
