@@ -265,7 +265,14 @@ const MOUNT_STYLES: Array<{ id: PhotoMountStyle; label: string; icon: string; de
   { id: "polaroid", label: "复古拍立得", icon: "📷", description: "经典下宽拍立得相纸留白 + 手写体篇目题记与艺术印戳" }
 ];
 
-function PhotobookFlipSpread({
+export interface PhotobookAlbumInfo {
+  id?: string;
+  name: string;
+  description?: string;
+  coverArtworkId?: string | null;
+}
+
+export function PhotobookFlipSpread({
   collection,
   items,
   onOpenArtwork,
@@ -273,16 +280,16 @@ function PhotobookFlipSpread({
   onOpenPicker,
   isTocOpen,
   onTocOpenChange,
-  interactionSuspended
+  interactionSuspended = false
 }: {
-  collection: CollectionRecord;
+  collection: PhotobookAlbumInfo | CollectionRecord;
   items: ArtworkRecord[];
   onOpenArtwork: (artworkId: string) => void;
-  onSetCover: (artworkId: string) => void;
-  onOpenPicker: () => void;
+  onSetCover?: ((artworkId: string) => void) | undefined;
+  onOpenPicker?: (() => void) | undefined;
   isTocOpen: boolean;
   onTocOpenChange: (open: boolean) => void;
-  interactionSuspended: boolean;
+  interactionSuspended?: boolean | undefined;
 }) {
   const [mountStyle, setMountStyle] = useState<PhotoMountStyle>(() => {
     return normalizePhotoMountStyle(localStorage.getItem("sanctuary_photobook_mount_style"));
@@ -917,12 +924,12 @@ function PhotobookSpreadPageContent({
 }: {
   side: "left" | "right";
   spreadIndex: number;
-  collection: CollectionRecord;
+  collection: PhotobookAlbumInfo | CollectionRecord;
   items: ArtworkRecord[];
   mountStyle: PhotoMountStyle;
   totalSpreads: number;
   onOpenArtwork: (artworkId: string) => void;
-  onSetCover: (artworkId: string) => void;
+  onSetCover?: ((artworkId: string) => void) | undefined;
   onOpenToc: () => void;
   onFlipToSpread: (spreadIdx: number) => void;
   onFlipPrev: () => void;
@@ -1115,7 +1122,7 @@ function PhotobookTocDrawer({
   onSelectArtwork
 }: {
   isOpen: boolean;
-  collection: CollectionRecord;
+  collection: PhotobookAlbumInfo | CollectionRecord;
   items: ArtworkRecord[];
   currentSpreadIndex: number;
   onClose: () => void;
@@ -1230,7 +1237,7 @@ function PhotoMountCard({
   pageIndex: number;
   isCover: boolean;
   onOpenArtwork: (artworkId: string) => void;
-  onSetCover: (artworkId: string) => void;
+  onSetCover?: ((artworkId: string) => void) | undefined;
 }) {
   const pageNumStr = String(pageIndex + 1).padStart(2, "0");
 
@@ -1275,15 +1282,17 @@ function PhotoMountCard({
             >
               🔍 全屏影院
             </button>
-            <button
-              type="button"
-              className={`art-action-cover-btn ${isCover ? "active" : ""}`}
-              onClick={() => onSetCover(artwork.id)}
-              disabled={isCover}
-              title="将此画作设为当前相册封面"
-            >
-              {isCover ? "★ 当前封面" : "设为封面"}
-            </button>
+            {onSetCover && (
+              <button
+                type="button"
+                className={`art-action-cover-btn ${isCover ? "active" : ""}`}
+                onClick={() => onSetCover(artwork.id)}
+                disabled={isCover}
+                title="将此画作设为当前相册封面"
+              >
+                {isCover ? "★ 当前封面" : "设为封面"}
+              </button>
+            )}
           </div>
         </div>
 
