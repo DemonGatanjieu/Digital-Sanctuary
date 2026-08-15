@@ -1,26 +1,32 @@
-# 01. Mandatory Git Snapshots & Verification Gate
+# 01 — Git Snapshots, Documentation, and Verification
 
-> 🔒 Dedicated Rule for Antigravity / Gemini Workspace Assistant in Digital Sanctuary (纯净领域).
+**Recommended activation:** Always On
 
----
+## Before a modifying task
 
-## 1. Mandatory Git Snapshots Before & After Tasks
-- **Pre-Task Snapshot**: Before performing any modifying code changes or launching experiments, ALWAYS execute `git add .` and `git commit -m "..."` to anchor the workspace baseline.
-- **Milestone Snapshot**: Upon completing any feature, UI/UX adjustment, or bugfix, commit the atomic change with a descriptive conventional commit message.
-- **Snapshot Ledger Synchronization**: Keep `docs/snapshots_record.md` updated with the snapshot name, commit hash, date, and core rationale.
+1. Run `git status --short` and `git rev-parse --short HEAD`.
+2. Read `ARCHITECTURE.md` and the user-named task document.
+3. If the tree is clean, use the current `HEAD` as the rollback baseline; do not create an empty commit.
+4. If the tree is dirty, identify ownership and purpose of every change:
+   - known, safe workspace changes may be captured in a descriptive pre-task snapshot;
+   - unknown, unrelated, generated, or sensitive files must not be staged;
+   - if safe separation is impossible, stop and ask the user.
 
----
+Do not use destructive reset/checkout commands to manufacture a clean tree.
 
-## 2. Architecture Synchronization
-- **Baseline Alignment**: Always read and adhere to `e:\PIxiv\ARCHITECTURE.md` before designing components.
-- **Architectural Update**: Whenever introducing new modules, protocols, stores, or UI patterns, update `ARCHITECTURE.md` to reflect the active architectural truth.
+## During the task
 
----
+- Keep edits within the approved scope.
+- Prefer targeted staging and focused tests.
+- Do not overwrite another agent's or the user's unrelated work.
+- Update architecture and plans only when their truth actually changes.
 
-## 3. Strict Verification Gate
-- **Zero Regression Principle**: Always run `npm.cmd run verify` before completing any task.
-  - Package TypeScript compilation (`build:core`)
-  - Desktop client TypeScript compilation
-  - Vitest test suite (all unit & integration tests must pass 100%)
-  - Python vision test suite (`test:python` 100% pass)
-  - Electron-Vite production build
+## Completion gate
+
+1. Run focused regression tests for the changed subsystem.
+2. Run `npm.cmd run verify` from the repository root.
+3. Inspect `git diff --check`, `git diff`, and `git status --short`.
+4. Commit the completed task atomically with a descriptive conventional message, unless the user requested pre-commit inspection.
+5. For a stable milestone, append its final hash to `docs/snapshots_record.md` in a separate documentation commit.
+
+Never describe a task as complete while required verification is failing.
