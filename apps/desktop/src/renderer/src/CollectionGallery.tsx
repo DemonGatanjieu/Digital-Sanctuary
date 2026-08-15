@@ -440,14 +440,21 @@ function PhotobookFlipSpread({
   if (items.length === 0) return null;
 
   // Active spread display indices (Atomic synchronization)
-  const is3D = turnEffect === "3d-flip";
-  const displayLeftSpread = spreadState.isAnimating
-    ? (is3D ? (spreadState.direction === "forward" ? spreadState.fromSpread : spreadState.toSpread) : spreadState.toSpread)
-    : spreadState.currentSpread;
+  let displayLeftSpread = spreadState.currentSpread;
+  let displayRightSpread = spreadState.currentSpread;
 
-  const displayRightSpread = spreadState.isAnimating
-    ? (is3D ? (spreadState.direction === "forward" ? spreadState.toSpread : spreadState.fromSpread) : spreadState.toSpread)
-    : spreadState.currentSpread;
+  if (spreadState.isAnimating) {
+    if (turnEffect === "3d-flip") {
+      displayLeftSpread = spreadState.direction === "forward" ? spreadState.fromSpread : spreadState.toSpread;
+      displayRightSpread = spreadState.direction === "forward" ? spreadState.toSpread : spreadState.fromSpread;
+    } else if (turnEffect === "slide" || turnEffect === "fade") {
+      displayLeftSpread = spreadState.fromSpread;
+      displayRightSpread = spreadState.fromSpread;
+    } else if (turnEffect === "deck-stack") {
+      displayLeftSpread = spreadState.toSpread;
+      displayRightSpread = spreadState.toSpread;
+    }
+  }
 
   return (
     <div className="photobook-stage-deck">
@@ -608,7 +615,7 @@ function PhotobookFlipSpread({
               </div>
             )}
 
-            {/* 2. Silky Horizontal Slide Animation */}
+            {/* 2. Silky Dual-Spread Horizontal Slide Track (Zero Premature Left Image Exposure) */}
             {turnEffect === "slide" && (
               <div
                 className={`photobook-slide-overlay slide-${spreadState.direction}`}
@@ -618,40 +625,160 @@ function PhotobookFlipSpread({
                   }
                 }}
               >
-                <div className="slide-deck-spread slide-spread-incoming">
-                  <section className="photobook-page page-verso">
-                    <PhotobookSpreadPageContent
-                      side="left"
-                      spreadIndex={spreadState.toSpread}
-                      collection={collection}
-                      items={items}
-                      mountStyle={mountStyle}
-                      totalSpreads={totalSpreads}
-                      onOpenArtwork={onOpenArtwork}
-                      onSetCover={onSetCover}
-                      onOpenToc={() => onTocOpenChange(true)}
-                      onFlipToSpread={flipToSpread}
-                      onFlipPrev={flipPrev}
-                      onFlipNext={flipNext}
-                    />
-                  </section>
-                  <div className="photobook-spine-crease" />
-                  <section className="photobook-page page-recto">
-                    <PhotobookSpreadPageContent
-                      side="right"
-                      spreadIndex={spreadState.toSpread}
-                      collection={collection}
-                      items={items}
-                      mountStyle={mountStyle}
-                      totalSpreads={totalSpreads}
-                      onOpenArtwork={onOpenArtwork}
-                      onSetCover={onSetCover}
-                      onOpenToc={() => onTocOpenChange(true)}
-                      onFlipToSpread={flipToSpread}
-                      onFlipPrev={flipPrev}
-                      onFlipNext={flipNext}
-                    />
-                  </section>
+                <div className="photobook-slide-track">
+                  {spreadState.direction === "forward" ? (
+                    <>
+                      {/* Outgoing Spread (fromSpread) */}
+                      <div className="slide-spread-unit">
+                        <section className="photobook-page page-verso">
+                          <PhotobookSpreadPageContent
+                            side="left"
+                            spreadIndex={spreadState.fromSpread}
+                            collection={collection}
+                            items={items}
+                            mountStyle={mountStyle}
+                            totalSpreads={totalSpreads}
+                            onOpenArtwork={onOpenArtwork}
+                            onSetCover={onSetCover}
+                            onOpenToc={() => onTocOpenChange(true)}
+                            onFlipToSpread={flipToSpread}
+                            onFlipPrev={flipPrev}
+                            onFlipNext={flipNext}
+                          />
+                        </section>
+                        <div className="photobook-spine-crease" />
+                        <section className="photobook-page page-recto">
+                          <PhotobookSpreadPageContent
+                            side="right"
+                            spreadIndex={spreadState.fromSpread}
+                            collection={collection}
+                            items={items}
+                            mountStyle={mountStyle}
+                            totalSpreads={totalSpreads}
+                            onOpenArtwork={onOpenArtwork}
+                            onSetCover={onSetCover}
+                            onOpenToc={() => onTocOpenChange(true)}
+                            onFlipToSpread={flipToSpread}
+                            onFlipPrev={flipPrev}
+                            onFlipNext={flipNext}
+                          />
+                        </section>
+                      </div>
+
+                      {/* Incoming Spread (toSpread) */}
+                      <div className="slide-spread-unit">
+                        <section className="photobook-page page-verso">
+                          <PhotobookSpreadPageContent
+                            side="left"
+                            spreadIndex={spreadState.toSpread}
+                            collection={collection}
+                            items={items}
+                            mountStyle={mountStyle}
+                            totalSpreads={totalSpreads}
+                            onOpenArtwork={onOpenArtwork}
+                            onSetCover={onSetCover}
+                            onOpenToc={() => onTocOpenChange(true)}
+                            onFlipToSpread={flipToSpread}
+                            onFlipPrev={flipPrev}
+                            onFlipNext={flipNext}
+                          />
+                        </section>
+                        <div className="photobook-spine-crease" />
+                        <section className="photobook-page page-recto">
+                          <PhotobookSpreadPageContent
+                            side="right"
+                            spreadIndex={spreadState.toSpread}
+                            collection={collection}
+                            items={items}
+                            mountStyle={mountStyle}
+                            totalSpreads={totalSpreads}
+                            onOpenArtwork={onOpenArtwork}
+                            onSetCover={onSetCover}
+                            onOpenToc={() => onTocOpenChange(true)}
+                            onFlipToSpread={flipToSpread}
+                            onFlipPrev={flipPrev}
+                            onFlipNext={flipNext}
+                          />
+                        </section>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Incoming Spread (toSpread) */}
+                      <div className="slide-spread-unit">
+                        <section className="photobook-page page-verso">
+                          <PhotobookSpreadPageContent
+                            side="left"
+                            spreadIndex={spreadState.toSpread}
+                            collection={collection}
+                            items={items}
+                            mountStyle={mountStyle}
+                            totalSpreads={totalSpreads}
+                            onOpenArtwork={onOpenArtwork}
+                            onSetCover={onSetCover}
+                            onOpenToc={() => onTocOpenChange(true)}
+                            onFlipToSpread={flipToSpread}
+                            onFlipPrev={flipPrev}
+                            onFlipNext={flipNext}
+                          />
+                        </section>
+                        <div className="photobook-spine-crease" />
+                        <section className="photobook-page page-recto">
+                          <PhotobookSpreadPageContent
+                            side="right"
+                            spreadIndex={spreadState.toSpread}
+                            collection={collection}
+                            items={items}
+                            mountStyle={mountStyle}
+                            totalSpreads={totalSpreads}
+                            onOpenArtwork={onOpenArtwork}
+                            onSetCover={onSetCover}
+                            onOpenToc={() => onTocOpenChange(true)}
+                            onFlipToSpread={flipToSpread}
+                            onFlipPrev={flipPrev}
+                            onFlipNext={flipNext}
+                          />
+                        </section>
+                      </div>
+
+                      {/* Outgoing Spread (fromSpread) */}
+                      <div className="slide-spread-unit">
+                        <section className="photobook-page page-verso">
+                          <PhotobookSpreadPageContent
+                            side="left"
+                            spreadIndex={spreadState.fromSpread}
+                            collection={collection}
+                            items={items}
+                            mountStyle={mountStyle}
+                            totalSpreads={totalSpreads}
+                            onOpenArtwork={onOpenArtwork}
+                            onSetCover={onSetCover}
+                            onOpenToc={() => onTocOpenChange(true)}
+                            onFlipToSpread={flipToSpread}
+                            onFlipPrev={flipPrev}
+                            onFlipNext={flipNext}
+                          />
+                        </section>
+                        <div className="photobook-spine-crease" />
+                        <section className="photobook-page page-recto">
+                          <PhotobookSpreadPageContent
+                            side="right"
+                            spreadIndex={spreadState.fromSpread}
+                            collection={collection}
+                            items={items}
+                            mountStyle={mountStyle}
+                            totalSpreads={totalSpreads}
+                            onOpenArtwork={onOpenArtwork}
+                            onSetCover={onSetCover}
+                            onOpenToc={() => onTocOpenChange(true)}
+                            onFlipToSpread={flipToSpread}
+                            onFlipPrev={flipPrev}
+                            onFlipNext={flipNext}
+                          />
+                        </section>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}

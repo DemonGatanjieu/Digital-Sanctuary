@@ -1039,55 +1039,63 @@
    Alternative Page Turn Transitions (平移动画 / 柔光渐变 / 层叠抽拉)
    ========================================================================== */
 
-/* 2. Slide Transition Overlay */
+/* 2. Dual-Spread Slide Track (整体无缝横向推拉) */
 .photobook-slide-overlay {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 40;
+  z-index: 45;
   overflow: hidden;
   border-radius: var(--ds-radius-lg);
+  background: var(--ds-bg-app);
 }
 
-.slide-deck-spread {
+.photobook-slide-track {
   position: absolute;
-  inset: 0;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 200%;
+  height: 100%;
+  display: flex;
+  will-change: transform;
+}
+
+.slide-spread-unit {
+  position: relative;
+  width: 50%;
+  height: 100%;
   display: grid;
   grid-template-columns: 1fr 1fr;
   background: var(--ds-bg-surface);
-  border-radius: var(--ds-radius-lg);
   box-sizing: border-box;
-  will-change: transform, opacity;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
 }
 
-.photobook-slide-overlay.slide-forward .slide-spread-incoming {
-  animation: photobook-slide-in-forward 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* Forward: Track slides from 0% to -50% */
+.photobook-slide-overlay.slide-forward .photobook-slide-track {
+  animation: photobook-slide-track-forward 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.photobook-slide-overlay.slide-backward .slide-spread-incoming {
-  animation: photobook-slide-in-backward 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes photobook-slide-in-forward {
+@keyframes photobook-slide-track-forward {
   0% {
-    transform: translateX(100%);
-    opacity: 0.8;
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Backward: Track starts at -50% and slides to 0% */
+.photobook-slide-overlay.slide-backward .photobook-slide-track {
+  animation: photobook-slide-track-backward 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes photobook-slide-track-backward {
+  0% {
+    transform: translateX(-50%);
   }
   100% {
     transform: translateX(0%);
-    opacity: 1;
-  }
-}
-
-@keyframes photobook-slide-in-backward {
-  0% {
-    transform: translateX(-100%);
-    opacity: 0.8;
-  }
-  100% {
-    transform: translateX(0%);
-    opacity: 1;
   }
 }
 
