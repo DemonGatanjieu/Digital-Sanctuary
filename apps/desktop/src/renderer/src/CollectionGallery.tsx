@@ -247,48 +247,65 @@ function PhotobookFlipSpread({
     return (localStorage.getItem("sanctuary_photobook_mount_style") as PhotoMountStyle) ?? "corners";
   });
 
-  // 3D Flipping leaf transition state
-  const [flipAnimation, setFlipAnimation] = useState<{
+  // Permanent 3D Leaf Transition State (Never Mount/Unmount)
+  const [transitionState, setTransitionState] = useState<{
+    isAnimating: boolean;
     direction: "forward" | "backward";
     fromIndex: number;
     toIndex: number;
-  } | null>(null);
+  }>({
+    isAnimating: false,
+    direction: "forward",
+    fromIndex: 0,
+    toIndex: 0
+  });
 
   const tocListRef = useRef<HTMLDivElement>(null);
-  const animationFallbackTimerRef = useRef<number | null>(null);
+  const fallbackTimerRef = useRef<number | null>(null);
 
   const changeMountStyle = (style: PhotoMountStyle) => {
     setMountStyle(style);
     localStorage.setItem("sanctuary_photobook_mount_style", style);
   };
 
-  const completeFlip = (targetIndex: number) => {
-    if (animationFallbackTimerRef.current) {
-      window.clearTimeout(animationFallbackTimerRef.current);
-      animationFallbackTimerRef.current = null;
+  const finishFlip = (targetIndex: number) => {
+    if (fallbackTimerRef.current) {
+      window.clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = null;
     }
+    // Update active page index
     setPageIndex(targetIndex);
-    setFlipAnimation(null);
+    // Smoothly return leaf to idle state without unmounting
+    setTransitionState((prev) => ({
+      ...prev,
+      isAnimating: false,
+      fromIndex: targetIndex,
+      toIndex: targetIndex
+    }));
   };
 
   const flipTo = (targetIndex: number) => {
-    if (targetIndex < 0 || targetIndex >= items.length || targetIndex === pageIndex || flipAnimation !== null) return;
+    if (targetIndex < 0 || targetIndex >= items.length || targetIndex === pageIndex || transitionState.isAnimating) return;
     const direction = targetIndex > pageIndex ? "forward" : "backward";
-    setFlipAnimation({ direction, fromIndex: pageIndex, toIndex: targetIndex });
+    setTransitionState({
+      isAnimating: true,
+      direction,
+      fromIndex: pageIndex,
+      toIndex: targetIndex
+    });
 
-    // Safety fallback timer in case animation event is dropped
-    if (animationFallbackTimerRef.current) {
-      window.clearTimeout(animationFallbackTimerRef.current);
+    if (fallbackTimerRef.current) {
+      window.clearTimeout(fallbackTimerRef.current);
     }
-    animationFallbackTimerRef.current = window.setTimeout(() => {
-      completeFlip(targetIndex);
-    }, 850);
+    fallbackTimerRef.current = window.setTimeout(() => {
+      finishFlip(targetIndex);
+    }, 750);
   };
 
   const flipNext = () => flipTo(Math.min(items.length - 1, pageIndex + 1));
   const flipPrev = () => flipTo(Math.max(0, pageIndex - 1));
 
-  // Keyboard navigation for page flip
+  // Keyboard navigation
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" || e.key === "KeyD" || e.key === " ") {
@@ -312,15 +329,22 @@ function PhotobookFlipSpread({
   const currentArtwork = items[pageIndex] ?? items[0];
   if (!currentArtwork) return null;
 
-  // During 3D flip animation:
-  // - If flipping forward: underneath Right page shows toIndex, Left page shows fromIndex
-  // - If flipping backward: underneath Left page shows toIndex, Right page shows fromIndex
-  const activeLeftIndex = flipAnimation?.direction === "forward" ? flipAnimation.fromIndex : flipAnimation?.direction === "backward" ? flipAnimation.toIndex : pageIndex;
-  const activeRightIndex = flipAnimation?.direction === "forward" ? flipAnimation.toIndex : flipAnimation?.direction === "backward" ? flipAnimation.fromIndex : pageIndex;
+  // Active spread display indices (Pre-warmed on Layer 0 during animation)
+  const displayLeftIndex = transitionState.isAnimating
+    ? (transitionState.direction === "forward" ? transitionState.fromIndex : transitionState.toIndex)
+    : pageIndex;
 
-  const leftArtwork = items[activeLeftIndex] ?? currentArtwork;
-  const rightArtwork = items[activeRightIndex] ?? currentArtwork;
+  const displayRightIndex = transitionState.isAnimating
+    ? (transitionState.direction === "forward" ? transitionState.toIndex : transitionState.fromIndex)
+    : pageIndex;
+
+  const leftArtwork = items[displayLeftIndex] ?? currentArtwork;
+  const rightArtwork = items[displayRightIndex] ?? currentArtwork;
   const isRightCover = rightArtwork && collection.coverArtworkId === rightArtwork.id;
+
+  // Permanent Leaf content indices
+  const leafFromIndex = transitionState.isAnimating ? transitionState.fromIndex : pageIndex;
+  const leafToIndex = transitionState.isAnimating ? transitionState.toIndex : pageIndex;
 
   return (
     <div className="photobook-stage-deck">
@@ -345,9 +369,9 @@ function PhotobookFlipSpread({
         </div>
       </div>
 
-      {/* 3D Open Hardcover Double Spread */}
-      <div className={`photobook-double-spread ${flipAnimation ? `is-animating flip-${flipAnimation.direction}` : ""}`}>
-        {/* Left Page (Verso): Table of Contents & Curated Index */}
+      {/* 3D Open Hardcover Double Spread (Permanent Double Page Deck) */}
+      <div className={`photobook-double-spread ${transitionState.isAnimating ? `is-animating flip-${transitionState.direction}` : ""}`}>
+        {/* Left Page (Verso) */}
         <section className="photobook-page page-verso" onClick={flipPrev} title="点击左页翻至上一张 (← / A)">
           <div className="page-paper-texture" />
           <div className="page-corner-curl corner-verso" onClick={(e) => { e.stopPropagation(); flipPrev(); }} title="点击翻至上一页" />
@@ -355,7 +379,7 @@ function PhotobookFlipSpread({
           <PhotobookVersoContent
             collection={collection}
             items={items}
-            pageIndex={activeLeftIndex}
+            pageIndex={displayLeftIndex}
             totalItems={items.length}
             onFlipTo={flipTo}
             onFlipPrev={flipPrev}
@@ -369,7 +393,7 @@ function PhotobookFlipSpread({
           <div className="silk-bookmark-ribbon" />
         </div>
 
-        {/* Right Page (Recto): Photorealistic Mounted Art Plate */}
+        {/* Right Page (Recto) */}
         <section
           className="photobook-page page-recto"
           onClick={flipNext}
@@ -381,7 +405,7 @@ function PhotobookFlipSpread({
           <PhotobookRectoContent
             artwork={rightArtwork}
             mountStyle={mountStyle}
-            pageIndex={activeRightIndex}
+            pageIndex={displayRightIndex}
             totalItems={items.length}
             isCover={isRightCover}
             onOpenArtwork={onOpenArtwork}
@@ -390,71 +414,75 @@ function PhotobookFlipSpread({
           />
         </section>
 
-        {/* 3D Flipping Leaf Overlay during Page Flip */}
-        {flipAnimation && (
-          <div
-            className={`photobook-3d-flipping-leaf leaf-${flipAnimation.direction}`}
-            onAnimationEnd={(e) => {
-              if (e.target === e.currentTarget) {
-                completeFlip(flipAnimation.toIndex);
-              }
-            }}
-          >
-            {/* Front of the turning leaf */}
-            <div className="leaf-face leaf-face-front">
-              <div className="page-paper-texture" />
-              {flipAnimation.direction === "forward" ? (
-                <PhotobookRectoContent
-                  artwork={items[flipAnimation.fromIndex] ?? currentArtwork}
-                  mountStyle={mountStyle}
-                  pageIndex={flipAnimation.fromIndex}
-                  totalItems={items.length}
-                  isCover={items[flipAnimation.fromIndex]?.id === collection.coverArtworkId}
-                  onOpenArtwork={onOpenArtwork}
-                  onSetCover={onSetCover}
-                  onFlipNext={flipNext}
-                />
-              ) : (
-                <PhotobookVersoContent
-                  collection={collection}
-                  items={items}
-                  pageIndex={flipAnimation.fromIndex}
-                  totalItems={items.length}
-                  onFlipTo={flipTo}
-                  onFlipPrev={flipPrev}
-                />
-              )}
-              <div className="leaf-shadow-sweep" />
-            </div>
-
-            {/* Back of the turning leaf */}
-            <div className="leaf-face leaf-face-back">
-              <div className="page-paper-texture" />
-              {flipAnimation.direction === "forward" ? (
-                <PhotobookVersoContent
-                  collection={collection}
-                  items={items}
-                  pageIndex={flipAnimation.toIndex}
-                  totalItems={items.length}
-                  onFlipTo={flipTo}
-                  onFlipPrev={flipPrev}
-                />
-              ) : (
-                <PhotobookRectoContent
-                  artwork={items[flipAnimation.toIndex] ?? currentArtwork}
-                  mountStyle={mountStyle}
-                  pageIndex={flipAnimation.toIndex}
-                  totalItems={items.length}
-                  isCover={items[flipAnimation.toIndex]?.id === collection.coverArtworkId}
-                  onOpenArtwork={onOpenArtwork}
-                  onSetCover={onSetCover}
-                  onFlipNext={flipNext}
-                />
-              )}
-              <div className="leaf-shadow-sweep" />
-            </div>
+        {/* Permanent 3D Flipping Leaf Overlay (Always Present in DOM, Never Unmounted) */}
+        <div
+          className={`photobook-3d-flipping-leaf ${
+            transitionState.isAnimating
+              ? `leaf-active leaf-${transitionState.direction}`
+              : "leaf-idle"
+          }`}
+          onAnimationEnd={(e) => {
+            if (e.target === e.currentTarget && transitionState.isAnimating) {
+              finishFlip(transitionState.toIndex);
+            }
+          }}
+        >
+          {/* Front Face of Turning Sheet (translateZ: +1.2px) */}
+          <div className="leaf-face leaf-face-front">
+            <div className="page-paper-texture" />
+            {transitionState.direction === "forward" ? (
+              <PhotobookRectoContent
+                artwork={items[leafFromIndex] ?? currentArtwork}
+                mountStyle={mountStyle}
+                pageIndex={leafFromIndex}
+                totalItems={items.length}
+                isCover={items[leafFromIndex]?.id === collection.coverArtworkId}
+                onOpenArtwork={onOpenArtwork}
+                onSetCover={onSetCover}
+                onFlipNext={flipNext}
+              />
+            ) : (
+              <PhotobookVersoContent
+                collection={collection}
+                items={items}
+                pageIndex={leafFromIndex}
+                totalItems={items.length}
+                onFlipTo={flipTo}
+                onFlipPrev={flipPrev}
+              />
+            )}
+            <div className="leaf-specular-sheen" />
+            <div className="leaf-shadow-sweep" />
           </div>
-        )}
+
+          {/* Back Face of Turning Sheet (rotateY: 180deg + translateZ: +1.2px) */}
+          <div className="leaf-face leaf-face-back">
+            <div className="page-paper-texture" />
+            {transitionState.direction === "forward" ? (
+              <PhotobookVersoContent
+                collection={collection}
+                items={items}
+                pageIndex={leafToIndex}
+                totalItems={items.length}
+                onFlipTo={flipTo}
+                onFlipPrev={flipPrev}
+              />
+            ) : (
+              <PhotobookRectoContent
+                artwork={items[leafToIndex] ?? currentArtwork}
+                mountStyle={mountStyle}
+                pageIndex={leafToIndex}
+                totalItems={items.length}
+                isCover={items[leafToIndex]?.id === collection.coverArtworkId}
+                onOpenArtwork={onOpenArtwork}
+                onSetCover={onSetCover}
+                onFlipNext={flipNext}
+              />
+            )}
+            <div className="leaf-specular-sheen" />
+            <div className="leaf-shadow-sweep" />
+          </div>
+        </div>
       </div>
     </div>
   );
