@@ -50,6 +50,8 @@
 | **photobook-dual-spread-slide-track** | `52df7588235b365533411fbece60b25687157858` | 2026-08-15 | 彻底根除平移动画中左页提前暴露新图的异常：重构为全画幅 200% 宽度双展对连续平移轨道（Dual-Spread Track），使旧展对与新展对作为一个整体横向无缝推拉，底台全程冻结，实现真正电影级零闪现滑行。 |
 | **photobook-rock-solid-frame-momentum-slide** | `b582e155b7d084f72ee473a83689a734881276a6` | 2026-08-15 | 彻底消除外框微缩放抖动与生硬减速阻尼：书台外框（Double Spread Frame）绝对静止（移除外部 transform 过渡，严格锁定内部 overflow 裁剪），平移采用 0.36s 纯净流体自然动量曲线 `cubic-bezier(0.25, 1, 0.5, 1)`，平移动画如丝绸般平稳顺滑。 |
 | **workspace-rules-gemini-and-agents-sync** | `1d91169cf10cef7669db3da9e414b8f5f2bd57eb` | 2026-08-15 | 注册项目根目录 `GEMINI.md` 与 `AGENTS.md` 规则规范：使 Antigravity IDE UI Customizations 面板与 Agent 底层自动化规则引擎无缝双向发现，确保每次会话与任务均自动常驻加载并严格遵守设计工程学与人类体感物理法则。 |
+| **workspace-modular-rules-directory-structure** | `39f596f43519d8acc2a709c8d957fcc7500887e8` | 2026-08-15 | 建立 `.agents/rules/` 模块化规则体系目录，拆分为 4 大专属规范文件并显式标注 Antigravity/Gemini 专属作用域，配置 `.gitignore` 放行规则保护，实现结构化组织与分层治理。 |
+
 
 
 
