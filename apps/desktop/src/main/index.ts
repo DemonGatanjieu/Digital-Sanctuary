@@ -658,9 +658,9 @@ function registerIpc(): void {
       if (!targetImageUrl) {
         try {
           const userAgent = exploreView?.webContents.getUserAgent() || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-          const response = await reviewSession.fetch(`https://www.pixiv.net/ajax/illust/${artworkId}?lang=zh`, {
+          const response = await reviewSession.fetch(`https://www.pixiv.net/ajax/illust/${trimmedArtworkId}?lang=zh`, {
             headers: {
-              Referer: `https://www.pixiv.net/artworks/${artworkId}`,
+              Referer: `https://www.pixiv.net/artworks/${trimmedArtworkId}`,
               "User-Agent": userAgent,
               Accept: "application/json"
             }
@@ -679,9 +679,13 @@ function registerIpc(): void {
       // 6. Review the discovered remote image URL
       if (targetImageUrl) {
         const normalized = normalizePixivArtworkImageUrl(targetImageUrl) || targetImageUrl;
+        mainWindow?.webContents.send("explore:open-inspector", {
+          artworkId: trimmedArtworkId,
+          url: normalized
+        });
         const outcome = await performRemoteArtworkReview(
           normalized,
-          `https://www.pixiv.net/artworks/${artworkId}`,
+          `https://www.pixiv.net/artworks/${trimmedArtworkId}`,
           reviewSession,
           {
             normalizedUrl: normalized,

@@ -143,6 +143,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (activeView === "explore" && inspectorTarget && exploreState.artworkId && /^\d+$/.test(exploreState.artworkId)) {
+      if (inspectorTarget.artworkId !== exploreState.artworkId) {
+        setInspectorTarget({ artworkId: exploreState.artworkId });
+      }
+    }
+  }, [activeView, exploreState.artworkId, inspectorTarget]);
+
+  useEffect(() => {
     let active = true;
     void (async () => {
       let changed = false;
