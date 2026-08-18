@@ -297,6 +297,23 @@ function applyOutcome(image: HTMLImageElement, outcome: ReviewResultMessage): vo
   }
 }
 
+function extractArtworkFileKey(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const match = url.match(/\/(\d+_p\d+)(?:_[^\/]+|\.[a-zA-Z0-9]+)$/);
+  return match && match[1] ? match[1] : null;
+}
+
+function findOutcomeForUrl(url: string): ReviewResultMessage | null {
+  const direct = outcomes.get(url);
+  if (direct) return direct;
+  const key = extractArtworkFileKey(url);
+  if (!key) return null;
+  for (const [candidateUrl, outcome] of outcomes) {
+    if (extractArtworkFileKey(candidateUrl) === key) return outcome;
+  }
+  return null;
+}
+
 function trackImage(image: HTMLImageElement): void {
   const nextUrl = artworkUrlForImage(image);
   const previousUrl = trackedImages.get(image);
@@ -309,7 +326,7 @@ function trackImage(image: HTMLImageElement): void {
   }
   if (!nextUrl) return;
   trackedImages.set(image, nextUrl);
-  const outcome = outcomes.get(nextUrl);
+  const outcome = findOutcomeForUrl(nextUrl);
   if (outcome) {
     applyOutcome(image, outcome);
     return;
@@ -421,8 +438,11 @@ ipcRenderer.on("explore:review-result", (_event, value: unknown) => {
     outcomes.delete(oldestUrl);
   }
   submittedPriorities.delete(normalizedUrl);
+  const incomingKey = extractArtworkFileKey(normalizedUrl);
   for (const [image, imageUrl] of trackedImages) {
-    if (imageUrl === normalizedUrl) applyOutcome(image, outcome);
+    if (imageUrl === normalizedUrl || (incomingKey && extractArtworkFileKey(imageUrl) === incomingKey)) {
+      applyOutcome(image, outcome);
+    }
   }
 });
 
