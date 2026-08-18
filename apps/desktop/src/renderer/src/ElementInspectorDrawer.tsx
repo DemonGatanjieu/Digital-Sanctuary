@@ -137,6 +137,7 @@ export function ElementInspectorDrawer({
   return (
     <aside className="element-inspector-overlay" role="dialog" aria-modal="true" aria-label="AI 元素透视与拦截">
       <div className="element-inspector-drawer">
+        {loading && <div className="inspector-scan-bar" />}
         <header className="inspector-header">
           <div>
             <p className="eyebrow">AI ELEMENT INSPECTOR</p>
@@ -145,9 +146,21 @@ export function ElementInspectorDrawer({
               {displayTargetName}
             </span>
           </div>
-          <button type="button" className="inspector-close-btn" aria-label="关闭透视抽屉 (Esc)" title="关闭 (Esc)" onClick={onClose}>
-            ✕
-          </button>
+          <div className="inspector-header-actions">
+            <button
+              type="button"
+              className="inspector-refresh-btn"
+              title="重新解析当前作品特征"
+              onClick={loadAnalysis}
+              disabled={loading}
+            >
+              <span className={`inspector-refresh-icon ${loading ? "spinning" : ""}`}>🔄</span>
+              <span>{loading ? "解析中" : "重新解析"}</span>
+            </button>
+            <button type="button" className="inspector-close-btn" aria-label="关闭透视抽屉 (Esc)" title="关闭 (Esc)" onClick={onClose}>
+              ✕
+            </button>
+          </div>
         </header>
 
         {notice && <AppNotice tone="success" onDismiss={() => setNotice("")}>{notice}</AppNotice>}
@@ -155,8 +168,24 @@ export function ElementInspectorDrawer({
 
         {loading ? (
           <div className="inspector-loading">
-            <div className="cinema-loading-spinner" />
-            <p>正在由 WD Tagger 引擎深度解析视觉特征...</p>
+            <div className="inspector-radar-container">
+              <div className="inspector-radar-sweep" />
+              <div className="inspector-radar-pulse" />
+              <span className="inspector-radar-icon">⚡</span>
+            </div>
+            <div className="inspector-loading-text">
+              <strong>正在深度解析新画作特征...</strong>
+              <span>WD Tagger 正在逐层提取当前作品的视觉特征向量</span>
+            </div>
+            <div className="inspector-skeleton-grid">
+              {Array.from({ length: 12 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="inspector-skeleton-chip"
+                  style={{ width: `${60 + (i % 5) * 22}px`, animationDelay: `${i * 0.08}s` }}
+                />
+              ))}
+            </div>
           </div>
         ) : error && !assessment ? (
           <div className="inspector-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px", marginTop: "40px" }}>
@@ -175,21 +204,24 @@ export function ElementInspectorDrawer({
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
               />
-              <span className="inspector-tag-count">共识别出 {Object.keys(assessment.labels || {}).length} 个标签</span>
+              <span className="inspector-status-badge">
+                ✨ 共识别出 {Object.keys(assessment.labels || {}).length} 个标签
+              </span>
             </div>
 
             <div className="inspector-tag-grid">
               {sortedTags.length === 0 ? (
                 <div className="inspector-empty">没有匹配的标签</div>
               ) : (
-                sortedTags.map(([tag, conf]) => {
+                sortedTags.map(([tag, conf], idx) => {
                   const isChecked = selectedTags.includes(tag);
                   const pct = Math.round(conf * 100);
                   return (
                     <button
                       key={tag}
                       type="button"
-                      className={`inspector-tag-chip ${isChecked ? "selected" : ""}`}
+                      style={{ "--chip-idx": idx } as React.CSSProperties}
+                      className={`inspector-tag-chip tag-chip-enter ${isChecked ? "selected" : ""}`}
                       onClick={() => toggleTag(tag)}
                     >
                       <span className="chip-check">{isChecked ? "✓" : "+"}</span>

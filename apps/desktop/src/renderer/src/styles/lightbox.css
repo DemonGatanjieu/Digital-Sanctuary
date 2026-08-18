@@ -562,11 +562,6 @@
   outline: none;
 }
 
-.inspector-rule-settings select option {
-  background: #1e293b;
-  color: #fff;
-}
-
 .inspector-rule-settings input[type="range"] {
   accent-color: var(--ds-primary, #0096fa);
 }
@@ -577,3 +572,196 @@
   gap: 10px;
 }
 
+.inspector-scan-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, rgba(0, 150, 250, 0.2) 20%, #0096fa 50%, #c084fc 80%, transparent 100%);
+  background-size: 200% 100%;
+  animation: scanLaser 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  z-index: 20;
+}
+
+@keyframes scanLaser {
+  0% { background-position: 150% 0; }
+  100% { background-position: -150% 0; }
+}
+
+.inspector-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.inspector-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--ds-radius-full);
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.inspector-refresh-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.inspector-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inspector-refresh-icon.spinning {
+  display: inline-block;
+  animation: spinSlow 1s linear infinite;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.inspector-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  flex: 1;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  padding: 24px 0;
+}
+
+.inspector-radar-container {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 150, 250, 0.3);
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle, rgba(0, 150, 250, 0.15) 0%, transparent 70%);
+}
+
+.inspector-radar-sweep {
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: #0096fa;
+  border-right-color: #a855f7;
+  animation: radarSweep 1.1s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+@keyframes radarSweep {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.inspector-radar-pulse {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 150, 250, 0.4);
+  animation: radarPulse 1.6s ease-out infinite;
+}
+
+@keyframes radarPulse {
+  0% { transform: scale(0.85); opacity: 0.8; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+.inspector-radar-icon {
+  font-size: 20px;
+  color: #38bdf8;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.6));
+}
+
+.inspector-loading-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.inspector-loading-text strong {
+  color: #fff;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.inspector-loading-text span {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+}
+
+.inspector-skeleton-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 320px;
+  opacity: 0.6;
+}
+
+.inspector-skeleton-chip {
+  height: 28px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.15) 50%, rgba(255, 255, 255, 0.05) 100%);
+  background-size: 200% 100%;
+  animation: shimmerSkeleton 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmerSkeleton {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.inspector-tag-chip.tag-chip-enter {
+  animation: tagChipPop 0.26s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--chip-idx, 0) * 8ms);
+}
+
+@keyframes tagChipPop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.inspector-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--ds-radius-full);
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #34d399;
+  font-size: 11px;
+  font-weight: 600;
+  animation: badgePop 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes badgePop {
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
