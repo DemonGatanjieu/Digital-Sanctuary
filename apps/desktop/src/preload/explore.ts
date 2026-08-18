@@ -41,6 +41,86 @@ const protectionCss = `
     visibility: visible !important;
     transition: filter 180ms ease, opacity 180ms ease !important;
   }
+  .sanctuary-blocked-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+    background: rgba(243, 244, 246, 0.96);
+    border: 1px solid rgba(209, 213, 219, 0.9);
+    border-radius: 8px;
+    box-sizing: border-box;
+    color: #4b5563;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    text-align: center;
+    backdrop-filter: blur(4px);
+    transition: opacity 180ms ease;
+  }
+  .sanctuary-blocked-overlay.compact {
+    padding: 4px 2px;
+    gap: 3px;
+    border-radius: 6px;
+  }
+  .sanctuary-blocked-badge {
+    font-size: 11px;
+    font-weight: 700;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    line-height: 1.2;
+  }
+  .sanctuary-blocked-overlay.compact .sanctuary-blocked-badge {
+    font-size: 10px;
+  }
+  .sanctuary-blocked-reason {
+    font-size: 10px;
+    color: #6b7280;
+    max-width: 90%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sanctuary-blocked-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 2px;
+  }
+  .sanctuary-blocked-btn {
+    padding: 3px 8px;
+    border: 1px solid #93c5fd;
+    border-radius: 4px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1.2;
+    transition: all 120ms ease;
+  }
+  .sanctuary-blocked-overlay.compact .sanctuary-blocked-btn {
+    padding: 2px 4px;
+    font-size: 9px;
+  }
+  .sanctuary-blocked-btn:hover {
+    background: #dbeafe;
+    border-color: #60a5fa;
+  }
+  .sanctuary-blocked-btn.inspect {
+    border-color: #ddd6fe;
+    background: #f5f3ff;
+    color: #6d28d9;
+  }
+  .sanctuary-blocked-btn.inspect:hover {
+    background: #ede9fe;
+    border-color: #c4b5fd;
+  }
 `;
 
 webFrame.insertCSS(protectionCss, { cssOrigin: "user" });
@@ -131,11 +211,90 @@ function reloadFailedImage(image: HTMLImageElement, normalizedUrl: string): void
   });
 }
 
+function removeBlockedOverlay(image: HTMLImageElement, url: string): void {
+  const existing = image.parentElement?.querySelector(`[data-sanctuary-blocked-overlay="${url}"]`);
+  existing?.remove();
+}
+
+function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMessage): void {
+  if (!image.parentElement) return;
+  removeBlockedOverlay(image, outcome.normalizedUrl);
+
+  const overlay = document.createElement("div");
+  overlay.setAttribute("data-sanctuary-blocked-overlay", outcome.normalizedUrl);
+  overlay.className = "sanctuary-blocked-overlay";
+
+  const rect = image.getBoundingClientRect();
+  const isCompact = (rect.width > 0 && rect.width < 140) || (rect.height > 0 && rect.height < 140);
+  if (isCompact) {
+    overlay.classList.add("compact");
+  }
+
+  const reasonText = outcome.reasons.length ? `命中：${outcome.reasons.join("、")}` : "特征黑名单拦截";
+  overlay.title = `AI 画面拦截 (${reasonText})`;
+
+  const badge = document.createElement("div");
+  badge.className = "sanctuary-blocked-badge";
+  badge.textContent = isCompact ? "🛡️ 已拦截" : "🛡️ 作品已按规则拦截";
+
+  const btnRow = document.createElement("div");
+  btnRow.className = "sanctuary-blocked-actions";
+
+  const revealBtn = document.createElement("button");
+  revealBtn.type = "button";
+  revealBtn.className = "sanctuary-blocked-btn";
+  revealBtn.textContent = isCompact ? "查看" : "仅本次查看";
+  revealBtn.title = "临时放行查看该图片";
+  revealBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ipcRenderer.send("explore:reveal-artwork", { normalizedUrl: outcome.normalizedUrl });
+    const nextOutcome: ReviewResultMessage = { normalizedUrl: outcome.normalizedUrl, state: "allowed", reasons: [] };
+    outcomes.set(outcome.normalizedUrl, nextOutcome);
+    for (const [img, url] of trackedImages) {
+      if (url === outcome.normalizedUrl) applyOutcome(img, nextOutcome);
+    }
+  });
+
+  const inspectBtn = document.createElement("button");
+  inspectBtn.type = "button";
+  inspectBtn.className = "sanctuary-blocked-btn inspect";
+  inspectBtn.textContent = isCompact ? "透视" : "🔍 元素透视";
+  inspectBtn.title = "查看该作品的 AI 视觉标签";
+  inspectBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    ipcRenderer.send("explore:inspect-url", { url: outcome.normalizedUrl });
+  });
+
+  btnRow.append(revealBtn, inspectBtn);
+  overlay.append(badge);
+
+  if (!isCompact) {
+    const reasonEl = document.createElement("div");
+    reasonEl.className = "sanctuary-blocked-reason";
+    reasonEl.textContent = reasonText;
+    overlay.append(reasonEl);
+  }
+
+  overlay.append(btnRow);
+
+  if (getComputedStyle(image.parentElement).position === "static") {
+    image.parentElement.style.position = "relative";
+  }
+  image.parentElement.appendChild(overlay);
+}
+
 function applyOutcome(image: HTMLImageElement, outcome: ReviewResultMessage): void {
   image.setAttribute(REVIEW_STATE_ATTRIBUTE, outcome.state);
   intersectionObserver.unobserve(image);
   removeImageMembership(image, outcome.normalizedUrl);
-  if (outcome.state === "allowed") reloadFailedImage(image, outcome.normalizedUrl);
+  if (outcome.state === "allowed") {
+    removeBlockedOverlay(image, outcome.normalizedUrl);
+    reloadFailedImage(image, outcome.normalizedUrl);
+  } else if (outcome.state === "blocked") {
+    renderBlockedOverlay(image, outcome);
+  }
 }
 
 function trackImage(image: HTMLImageElement): void {

@@ -877,6 +877,31 @@ function registerIpc(): void {
     if (!normalizedUrl || exploreActiveReview?.normalizedUrl === normalizedUrl) return;
     if (exploreReviewQueue.remove(normalizedUrl)) scheduleExploreState();
   });
+  ipcMain.on("explore:reveal-artwork", (event, value: unknown) => {
+    const contents = exploreView?.webContents;
+    if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) return;
+    if (!value || typeof value !== "object") return;
+    const rawUrl = (value as { normalizedUrl?: unknown }).normalizedUrl;
+    if (typeof rawUrl !== "string") return;
+    const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl);
+    if (!normalizedUrl) return;
+    remoteOneShotAllows.add(normalizedUrl);
+    contents.send("explore:review-result", {
+      normalizedUrl,
+      state: "allowed",
+      reasons: []
+    });
+  });
+  ipcMain.on("explore:inspect-url", (event, value: unknown) => {
+    const contents = exploreView?.webContents;
+    if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) return;
+    if (!value || typeof value !== "object") return;
+    const rawUrl = (value as { url?: string }).url;
+    if (typeof rawUrl === "string" && isPixivArtworkImageUrl(rawUrl)) {
+      const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl) || rawUrl;
+      mainWindow?.webContents.send("explore:open-inspector", { url: normalizedUrl });
+    }
+  });
 
   ipcMain.handle("collections:create", (_event, value: unknown) => {
     const draft = parseCollectionDraft(value);
