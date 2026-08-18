@@ -32,11 +32,16 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       const style = document.createElement("style");
       style.id = styleId;
       style.textContent = [
-        "." + placeholderClass + " { display: grid; box-sizing: border-box; min-height: 160px; width: 100%; place-items: center; align-content: center; gap: 8px; padding: 18px; border: 1px solid rgba(225,229,233,0.8); border-radius: 12px; color: #69727d; background: #f3f5f7; font: 12px/1.5 sans-serif; text-align: center; }",
+        "." + placeholderClass + " { display: grid; box-sizing: border-box; min-height: 140px; width: 100%; place-items: center; align-content: center; gap: 8px; padding: 14px; border: 1px solid rgba(225,229,233,0.8); border-radius: 12px; color: #69727d; background: #f3f5f7; font: 12px/1.4 sans-serif; text-align: center; }",
+        "." + placeholderClass + ".compact { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100% !important; height: 100% !important; width: 100% !important; padding: 4px 2px !important; gap: 3px !important; border-radius: 6px !important; }",
         "." + placeholderClass + " strong { color: #4e5863; font-size: 13px; }",
+        "." + placeholderClass + ".compact strong { font-size: 10px !important; font-weight: 700; white-space: nowrap; line-height: 1.1; }",
         "." + placeholderClass + " small { max-width: 28em; color: #818b96; }",
+        "." + placeholderClass + ".compact small { display: none !important; }",
         "." + placeholderClass + " .sanctuary-actions-row { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }",
+        "." + placeholderClass + ".compact .sanctuary-actions-row { gap: 3px !important; margin-top: 2px !important; }",
         "." + placeholderClass + " button { padding: 6px 12px; border: 1px solid #b9ddf5; border-radius: 8px; color: #087fc0; background: #eef8fe; cursor: pointer; font: inherit; transition: all .15s ease; }",
+        "." + placeholderClass + ".compact button { padding: 2px 5px !important; font-size: 9px !important; border-radius: 4px !important; }",
         "." + placeholderClass + " button:hover { background: #dff0fc; transform: translateY(-1px); }",
         "." + placeholderClass + " button.inspect-btn { border-color: #d1c4e9; color: #5e35b1; background: #f3e5f5; }",
         "." + placeholderClass + " button.inspect-btn:hover { background: #ede7f6; }",
@@ -157,12 +162,19 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       if (image.parentElement?.querySelector("[data-sanctuary-review-placeholder]")?.getAttribute("data-sanctuary-review-placeholder") === url) return;
 
       const placeholder = document.createElement("div");
-      placeholder.className = placeholderClass;
-      placeholder.setAttribute("data-sanctuary-review-placeholder", url);
       const rect = image.getBoundingClientRect();
-      if (rect.height > 20) placeholder.style.minHeight = Math.round(rect.height) + "px";
+      const isCompact = (rect.width > 0 && rect.width < 140) || (rect.height > 0 && rect.height < 140);
+      if (isCompact) {
+        placeholder.className = placeholderClass + " compact";
+        placeholder.title = "作品已按规则拦截 (命中：" + (reasons.length ? reasons.join("、") : "特征黑名单") + ")";
+      } else {
+        placeholder.className = placeholderClass;
+        if (rect.height > 20) placeholder.style.minHeight = Math.round(rect.height) + "px";
+      }
+      placeholder.setAttribute("data-sanctuary-review-placeholder", url);
+
       const title = document.createElement("strong");
-      title.textContent = "作品已按规则遮挡";
+      title.textContent = isCompact ? "🛡️ 已拦截" : "作品已按规则遮挡";
       const detail = document.createElement("small");
       detail.textContent = reasons.length ? "命中：" + reasons.join("、") : "审查未完成，默认保持遮挡";
 
@@ -171,7 +183,8 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
 
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = "仅本次查看";
+      button.textContent = isCompact ? "查看" : "仅本次查看";
+      button.title = "仅本次临时查看该画作";
       button.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -182,7 +195,8 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       const inspectButton = document.createElement("button");
       inspectButton.type = "button";
       inspectButton.className = "inspect-btn";
-      inspectButton.textContent = "🔍 元素透视";
+      inspectButton.textContent = isCompact ? "透视" : "🔍 元素透视";
+      inspectButton.title = "查看被拦截作品的 AI 视觉标签";
       inspectButton.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
