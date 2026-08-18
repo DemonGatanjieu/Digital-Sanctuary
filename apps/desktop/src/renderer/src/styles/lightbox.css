@@ -375,12 +375,32 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   min-width: 0;
   width: 100%;
 }
 
-.inspector-header > div {
+.inspector-target-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.inspector-target-thumb {
+  width: 46px;
+  height: 46px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.inspector-target-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -389,9 +409,9 @@
 }
 
 .inspector-header h3 {
-  margin: 2px 0 4px;
+  margin: 1px 0 3px;
   color: #fff;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 750;
   white-space: nowrap;
   overflow: hidden;
@@ -405,6 +425,36 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+}
+
+.inspector-conf-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.inspector-conf-tab {
+  padding: 4px 10px;
+  border-radius: var(--ds-radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.inspector-conf-tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.inspector-conf-tab.active {
+  background: var(--ds-primary, #0096fa);
+  color: #fff;
+  border-color: var(--ds-primary, #0096fa);
+  box-shadow: 0 2px 8px rgba(0, 150, 250, 0.35);
 }
 
 .inspector-close-btn {

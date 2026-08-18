@@ -93,14 +93,24 @@ export function ElementInspectorDrawer({
     return "当前探索画作";
   }, [target]);
 
-  const sortedTags = useMemo(() => {
+  const [minConfidenceFilter, setMinConfidenceFilter] = useState<number>(0.2);
+
+  const rawEntries = useMemo(() => {
     if (!assessment?.labels) return [];
     const entries = Object.entries(assessment.labels);
     entries.sort((a, b) => b[1] - a[1]);
-    if (!searchFilter.trim()) return entries;
+    return entries;
+  }, [assessment?.labels]);
+
+  const countAt20 = useMemo(() => rawEntries.filter(([, conf]) => conf >= 0.2).length, [rawEntries]);
+  const countAt40 = useMemo(() => rawEntries.filter(([, conf]) => conf >= 0.4).length, [rawEntries]);
+
+  const sortedTags = useMemo(() => {
+    const filteredByConf = rawEntries.filter(([, conf]) => conf >= minConfidenceFilter);
+    if (!searchFilter.trim()) return filteredByConf;
     const q = searchFilter.trim().toLowerCase();
-    return entries.filter(([tag]) => tag.toLowerCase().includes(q));
-  }, [assessment?.labels, searchFilter]);
+    return filteredByConf.filter(([tag]) => tag.toLowerCase().includes(q));
+  }, [rawEntries, minConfidenceFilter, searchFilter]);
 
   async function handleAddBlacklist() {
     if (!selectedTags.length) return;
@@ -139,12 +149,24 @@ export function ElementInspectorDrawer({
       <div className="element-inspector-drawer">
         {loading && <div className="inspector-scan-bar" />}
         <header className="inspector-header">
-          <div>
-            <p className="eyebrow">AI ELEMENT INSPECTOR</p>
-            <h3>AI 元素透视与特征拆解</h3>
-            <span className="inspector-target-name" title={displayTargetName}>
-              {displayTargetName}
-            </span>
+          <div className="inspector-target-info">
+            {target.url && (
+              <img
+                src={target.url}
+                alt="画作缩略图"
+                className="inspector-target-thumb"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = "none";
+                }}
+              />
+            )}
+            <div className="inspector-target-text">
+              <p className="eyebrow">AI 画面视觉特征透视</p>
+              <h3>AI 画面特征拆解</h3>
+              <span className="inspector-target-name" title={displayTargetName}>
+                {displayTargetName}
+              </span>
+            </div>
           </div>
           <div className="inspector-header-actions">
             <button
@@ -175,7 +197,7 @@ export function ElementInspectorDrawer({
             </div>
             <div className="inspector-loading-text">
               <strong>正在深度解析新画作特征...</strong>
-              <span>WD Tagger 正在逐层提取当前作品的视觉特征向量</span>
+              <span>WD Tagger 正在逐层提取当前单张画作的视觉特征向量</span>
             </div>
             <div className="inspector-skeleton-grid">
               {Array.from({ length: 12 }).map((_, i) => (
@@ -196,16 +218,40 @@ export function ElementInspectorDrawer({
           </div>
         ) : assessment ? (
           <>
+            <div className="inspector-conf-filter-row">
+              <button
+                type="button"
+                className={`inspector-conf-tab ${minConfidenceFilter === 0.2 ? "active" : ""}`}
+                onClick={() => setMinConfidenceFilter(0.2)}
+              >
+                主要特征 ({countAt20})
+              </button>
+              <button
+                type="button"
+                className={`inspector-conf-tab ${minConfidenceFilter === 0.4 ? "active" : ""}`}
+                onClick={() => setMinConfidenceFilter(0.4)}
+              >
+                高确信特征 ({countAt40})
+              </button>
+              <button
+                type="button"
+                className={`inspector-conf-tab ${minConfidenceFilter === 0.05 ? "active" : ""}`}
+                onClick={() => setMinConfidenceFilter(0.05)}
+              >
+                全部特征 ({rawEntries.length})
+              </button>
+            </div>
+
             <div className="inspector-controls-bar">
               <input
                 type="search"
                 className="inspector-search-input"
-                placeholder="搜索标签 (例如 chibi, 3d, sketch)..."
+                placeholder="搜索标签 (例如 cat_ears, 3d, swimsuit)..."
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
               />
               <span className="inspector-status-badge">
-                ✨ 共识别出 {Object.keys(assessment.labels || {}).length} 个标签
+                ✨ 显示 {sortedTags.length} 个标签
               </span>
             </div>
 
