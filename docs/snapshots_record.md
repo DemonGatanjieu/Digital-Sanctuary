@@ -52,6 +52,7 @@
 | **workspace-rules-gemini-and-agents-sync** | `1d91169cf10cef7669db3da9e414b8f5f2bd57eb` | 2026-08-15 | 注册项目根目录 `GEMINI.md` 与 `AGENTS.md` 规则规范：使 Antigravity IDE UI Customizations 面板与 Agent 底层自动化规则引擎无缝双向发现，确保每次会话与任务均自动常驻加载并严格遵守设计工程学与人类体感物理法则。 |
 | **workspace-modular-rules-directory-structure** | `39f596f43519d8acc2a709c8d957fcc7500887e8` | 2026-08-15 | 建立 `.agents/rules/` 模块化规则体系目录，拆分为 4 大专属规范文件并显式标注 Antigravity/Gemini 专属作用域，配置 `.gitignore` 放行规则保护，实现结构化组织与分层治理。 |
 | **workspace-agent-governance-consolidated** | `236f9b7422459cd758805536252b1fe044bf921a` | 2026-08-15 | 去除 `GEMINI.md`、`AGENTS.md` 与模块规则三重重复，建立入口、跨模型底线和按作用域规则三层治理；收紧 Git 快照安全边界、GPU 合成适用范围，并明确画册 4 种装裱风格与 4 种翻页效果。 |
+| **vision-element-inspector-and-triage-studio** | `3522bf7e` | 2026-08-18 | 实现交互式单图 AI 元素透视抽屉、自定义黑名单拦截规则、Pixiv 探索悬浮毛玻璃控制胶囊与独立智能清洗排查工坊 (Triage Studio)。 |
 
 
 
