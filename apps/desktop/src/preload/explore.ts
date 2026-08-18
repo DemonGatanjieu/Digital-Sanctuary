@@ -123,6 +123,15 @@ const protectionCss = `
     transform: translateY(-1px);
     box-shadow: 0 3px 6px rgba(0,0,0,0.1);
   }
+  .sanctuary-blocked-btn.calibrate {
+    border-color: #a7f3d0;
+    background: #ecfdf5;
+    color: #047857;
+  }
+  .sanctuary-blocked-btn.calibrate:hover {
+    background: #d1fae5;
+    border-color: #10b981;
+  }
   .sanctuary-blocked-btn.inspect {
     border-color: #ddd6fe;
     background: #f5f3ff;
@@ -297,6 +306,32 @@ function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMess
     }
   });
 
+  const calibrateBtn = document.createElement("button");
+  calibrateBtn.type = "button";
+  calibrateBtn.className = "sanctuary-blocked-btn calibrate";
+  calibrateBtn.textContent = isCompact ? "不再隐藏" : "💡 不再隐藏";
+  calibrateBtn.title = "自动微调拦截阈值，今后永久放行此类画作";
+  calibrateBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    calibrateBtn.textContent = "已放行...";
+    calibrateBtn.disabled = true;
+    try {
+      await ipcRenderer.invoke("explore:calibrate-rule-threshold", { normalizedUrl: outcome.normalizedUrl });
+    } catch (err) {
+      console.warn("[explore] failed to calibrate threshold", err);
+    }
+    const nextOutcome: ReviewResultMessage = { normalizedUrl: outcome.normalizedUrl, state: "allowed", reasons: [] };
+    outcomes.set(outcome.normalizedUrl, nextOutcome);
+    overlay.remove();
+    const outcomeKey = extractArtworkFileKey(outcome.normalizedUrl);
+    for (const [img, url] of trackedImages) {
+      if (url === outcome.normalizedUrl || (outcomeKey && extractArtworkFileKey(url) === outcomeKey)) {
+        applyOutcome(img, nextOutcome);
+      }
+    }
+  });
+
   const inspectBtn = document.createElement("button");
   inspectBtn.type = "button";
   inspectBtn.className = "sanctuary-blocked-btn inspect";
@@ -308,7 +343,7 @@ function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMess
     ipcRenderer.send("explore:inspect-url", { url: outcome.normalizedUrl });
   });
 
-  btnRow.append(revealBtn, inspectBtn);
+  btnRow.append(revealBtn, calibrateBtn, inspectBtn);
   overlay.append(badge);
 
   if (!isCompact) {

@@ -1032,6 +1032,37 @@ export class LibraryDatabase {
     };
   }
 
+  getLatestRemoteImageReview(normalizedUrl: string): RemoteImageReviewRecord | null {
+    if (!normalizedUrl) return null;
+    const row = this.#database
+      .prepare(
+        `SELECT normalized_url, content_hash, engine, engine_version,
+                rules_fingerprint, assessment_json, decision_json,
+                byte_length, reviewed_at
+           FROM remote_image_reviews
+          WHERE normalized_url = ?
+          ORDER BY reviewed_at DESC
+          LIMIT 1`
+      )
+      .get(normalizedUrl) as RemoteImageReviewRow | undefined;
+    if (!row) return null;
+
+    const assessment = parseJson<VisionAssessment>(row.assessment_json);
+    const decision = parseJson<FilterDecision>(row.decision_json);
+    if (!assessment || assessment.status !== "complete" || !decision) return null;
+    return {
+      normalizedUrl: row.normalized_url,
+      contentHash: row.content_hash,
+      engine: row.engine,
+      engineVersion: row.engine_version,
+      rulesFingerprint: row.rules_fingerprint,
+      assessment,
+      decision,
+      byteLength: row.byte_length,
+      reviewedAt: row.reviewed_at
+    };
+  }
+
   findRemoteImageReviewByArtworkId(artworkId: string): RemoteImageReviewRecord | null {
     if (!artworkId || !/^\d+$/.test(artworkId)) return null;
     const row = this.#database

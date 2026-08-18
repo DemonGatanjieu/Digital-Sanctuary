@@ -25,6 +25,7 @@ import {
   buildElementFilterRules,
   decideFilter,
   DEFAULT_LIBRARY_PREFERENCES,
+  ELEMENT_BLACKLIST_GROUPS,
   isCustomElementGroup,
   isElementFilterSetting,
   isLibraryPreferences,
@@ -947,6 +948,79 @@ function registerIpc(): void {
       reasons: []
     });
   });
+  ipcMain.handle("explore:calibrate-rule-threshold", async (event, value: unknown) => {
+    const contents = exploreView?.webContents;
+    if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) return { success: false };
+    if (!database) throw new Error("Database is not ready");
+    if (!value || typeof value !== "object") throw new Error("Invalid payload");
+    const rawUrl = (value as { normalizedUrl?: string }).normalizedUrl;
+    if (typeof rawUrl !== "string") throw new Error("Missing normalizedUrl");
+    const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl) || rawUrl;
+
+    let reviewRecord: RemoteImageReviewRecord | undefined = undefined;
+    const dbReview = database.getLatestRemoteImageReview(normalizedUrl);
+    if (dbReview) {
+      reviewRecord = dbReview;
+    } else {
+      const artworkIdMatch = normalizedUrl.match(/\/(\d+)_(?:p\d+|_|\.)/);
+      if (artworkIdMatch && artworkIdMatch[1]) {
+        reviewRecord = database.findRemoteImageReviewByArtworkId(artworkIdMatch[1]) ?? undefined;
+      }
+    }
+
+    const calibratedList: Array<{ groupName: string; oldThreshold: number; newThreshold: number }> = [];
+    const currentSettings = database.listElementFilterSettings();
+    const settingsMap = new Map(currentSettings.map((s) => [s.groupId, s]));
+
+    if (reviewRecord?.assessment?.labels && reviewRecord?.decision?.reasons?.length) {
+      for (const reason of reviewRecord.decision.reasons) {
+        const label = reason.label;
+        const conf = reviewRecord.assessment.labels[label] ?? reason.confidence;
+
+        const builtInGroup = ELEMENT_BLACKLIST_GROUPS.find((g) => g.tags.includes(label));
+        const customGroups = customElementGroups();
+        const customGroup = customGroups.find((g) => g.tags.includes(label) || (g.aliases && g.aliases.includes(label)));
+        const targetGroup = builtInGroup || customGroup;
+
+        if (targetGroup) {
+          const existingSetting = settingsMap.get(targetGroup.id);
+          const oldThreshold = existingSetting ? existingSetting.minimumConfidence : targetGroup.defaultThreshold;
+          const newThreshold = Math.min(0.99, Math.max(oldThreshold, Math.ceil(conf * 100 + 1) / 100));
+
+          database.saveElementFilterSetting({
+            groupId: targetGroup.id,
+            enabled: true,
+            minimumConfidence: newThreshold
+          });
+          settingsMap.set(targetGroup.id, {
+            groupId: targetGroup.id,
+            enabled: true,
+            minimumConfidence: newThreshold
+          });
+          calibratedList.push({
+            groupName: targetGroup.name,
+            oldThreshold: Math.round(oldThreshold * 100),
+            newThreshold: Math.round(newThreshold * 100)
+          });
+        }
+      }
+    }
+
+    database.clearRemoteImageReviews();
+    recalculateStoredDecisions(database);
+    remoteReviewCache.clear();
+
+    contents.send("explore:review-result", {
+      normalizedUrl,
+      state: "allowed",
+      reasons: []
+    });
+
+    return {
+      success: true,
+      calibratedList
+    };
+  });
   ipcMain.on("explore:inspect-url", (event, value: unknown) => {
     const contents = exploreView?.webContents;
     if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) return;
@@ -1320,10 +1394,12 @@ function ensureExploreView(): WebContentsView {
     scheduleExploreState();
   });
   contents.on("did-navigate", () => {
+    resetExploreReviewQueue();
     void installPixivDomAdapter(contents);
     scheduleExploreState();
   });
   contents.on("did-navigate-in-page", () => {
+    resetExploreReviewQueue();
     void installPixivDomAdapter(contents);
     scheduleExploreState();
   });
