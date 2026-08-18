@@ -28,7 +28,8 @@ import type {
   VisionEvaluationKind,
   VisionEvaluationStatus,
   VisionEvaluationScope,
-  VisionDimensionScore
+  VisionDimensionScore,
+  TriageQueryResultItem
 } from "@sanctuary/domain";
 import { SavedCollectionViewStore } from "./saved-collection-view-store.js";
 import {
@@ -1365,6 +1366,72 @@ export class LibraryDatabase {
     const params = suiteId ? [dimensionKey, minScore, maxScore, suiteId] : [dimensionKey, minScore, maxScore];
     const rows = this.#database.prepare(query).all(...params) as unknown as Array<{ work_id: string }>;
     return rows.map((r) => r.work_id);
+  }
+
+  queryWorksByTags(
+    tags: string[],
+    minConfidence = 0.4,
+    scope?: AnalysisScope
+  ): TriageQueryResultItem[] {
+    if (!tags.length) return [];
+    const normalizedTags = tags.map((t) => t.trim().toLowerCase().replaceAll(" ", "_"));
+    const workIds = scope ? this.#workIdsForAnalysisScope(scope) : null;
+
+    const whereWorkIds = workIds && workIds.length > 0
+      ? `AND a.work_id IN (${workIds.map(() => "?").join(",")})`
+      : "";
+
+    const query = `
+      SELECT DISTINCT a.work_id, ar.assessment_json
+        FROM analysis_asset_results ar
+        JOIN assets a ON a.id = ar.asset_id
+       WHERE a.media_type = 'image' AND a.file_state = 'available' ${whereWorkIds}
+    `;
+
+    const rows = (workIds && workIds.length > 0
+      ? this.#database.prepare(query).all(...workIds)
+      : this.#database.prepare(query).all()) as Array<{ work_id: string; assessment_json: string }>;
+
+    const resultMap = new Map<string, Array<{ tag: string; confidence: number }>>();
+
+    for (const row of rows) {
+      try {
+        const assessment = JSON.parse(row.assessment_json);
+        const labels: Record<string, number> = assessment?.labels || {};
+        const matched: Array<{ tag: string; confidence: number }> = [];
+
+        for (const tag of normalizedTags) {
+          const conf = labels[tag];
+          if (typeof conf === "number" && conf >= minConfidence) {
+            matched.push({ tag, confidence: conf });
+          }
+        }
+
+        if (matched.length > 0) {
+          const current = resultMap.get(row.work_id) || [];
+          for (const m of matched) {
+            const existing = current.find((item) => item.tag === m.tag);
+            if (!existing) {
+              current.push(m);
+            } else if (m.confidence > existing.confidence) {
+              existing.confidence = m.confidence;
+            }
+          }
+          resultMap.set(row.work_id, current);
+        }
+      } catch {}
+    }
+
+    if (resultMap.size === 0) return [];
+
+    const matchedWorkIds = Array.from(resultMap.keys());
+    const works = this.queryWorks({ limit: matchedWorkIds.length });
+    const matchingWorks = works.items.filter((w) => resultMap.has(w.id));
+
+    return matchingWorks.map((work) => ({
+      work,
+      matchedTags: resultMap.get(work.id) || []
+    }));
   }
 
   recordExternalVisionRequest(req: {

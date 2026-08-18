@@ -17,8 +17,12 @@ describe("Pixiv DOM adapter", () => {
     expect(script).toContain("仅本次查看");
     expect(script).toContain("sanctuary-reveal:");
     expect(script).toContain("sanctuary-download:");
+    expect(script).toContain("sanctuary-inspect:");
+    expect(script).toContain("sanctuary-inspect-url:");
     expect(script).toContain("保存到本地画廊");
+    expect(script).toContain("AI 元素透视");
     expect(script).toContain("sanctuary-pixiv-download");
+    expect(script).toContain("sanctuary-pixiv-inspect");
     expect(script).not.toContain("isPromotionImage");
     expect(script).not.toContain("promotionImages");
     expect(script).not.toContain("booth.pm");

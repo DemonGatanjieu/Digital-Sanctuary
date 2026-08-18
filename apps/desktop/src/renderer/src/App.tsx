@@ -16,6 +16,7 @@ import {
 import type { ExploreState } from "../../preload/index";
 import { CollectionEditor, type CollectionDraft } from "./CollectionEditor";
 import { BookmarkDownloadDialog } from "./BookmarkDownloadDialog";
+import { ElementInspectorDrawer, type ElementInspectorTarget } from "./ElementInspectorDrawer";
 import { SettingsView } from "./SettingsView";
 import { AnalysisView } from "./AnalysisView";
 import { ExploreView, initialExploreState } from "./ExploreView";
@@ -69,6 +70,7 @@ export function App() {
   const [exploreState, setExploreState] = useState<ExploreState>(initialExploreState);
   const [galleryMode, setGalleryMode] = useState<GalleryMode>("flat");
   const [analysisWorkIds, setAnalysisWorkIds] = useState<string[]>([]);
+  const [inspectorTarget, setInspectorTarget] = useState<ElementInspectorTarget | null>(null);
   const showError = useCallback((caught: unknown) => {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
@@ -100,6 +102,9 @@ export function App() {
 
     const unsubTheme = window.sanctuary.onThemeChanged((event) => {
       applyThemeCss(event.cssContent);
+    });
+    const unsubInspector = window.sanctuary.onExploreOpenInspector((data) => {
+      setInspectorTarget(data);
     });
 
     void Promise.all([
@@ -133,6 +138,7 @@ export function App() {
 
     return () => {
       unsubTheme();
+      unsubInspector();
     };
   }, []);
 
@@ -495,6 +501,13 @@ export function App() {
           />
         )}
       </main>
+      {inspectorTarget && (
+        <ElementInspectorDrawer
+          target={inspectorTarget}
+          onClose={() => setInspectorTarget(null)}
+          onBlacklistUpdated={(groups) => setCustomElementGroups(groups)}
+        />
+      )}
       {collectionEditor && (
         <CollectionEditor
           collection={collectionEditor === "new" ? null : collectionEditor}

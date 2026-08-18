@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { ArtworkRecord, VisionEvaluationResult } from "@sanctuary/domain";
 import { artworkImageUrl } from "./ArtworkCard";
 import { VisionRadarChart } from "./VisionRadarChart";
+import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 
 export function ArtworkLightbox({
   artwork,
@@ -27,6 +28,7 @@ export function ArtworkLightbox({
   const [imageFailed, setImageFailed] = useState<boolean>(false);
   const [hudVisible, setHudVisible] = useState<boolean>(true);
   const [showRadar, setShowRadar] = useState<boolean>(false);
+  const [showInspector, setShowInspector] = useState<boolean>(false);
   const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
 
   const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -211,9 +213,18 @@ export function ArtworkLightbox({
             type="button"
             className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
             title="查看多维视觉雷达图画像"
-            onClick={() => setShowRadar((prev) => !prev)}
+            onClick={() => { setShowRadar((prev) => !prev); if (!showRadar) setShowInspector(false); }}
           >
             📊 雷达画像 {evaluations.length > 0 ? `(${evaluations.length})` : ""}
+          </button>
+
+          <button
+            type="button"
+            className={`cinema-btn-fit ${showInspector ? "active" : ""}`}
+            title="查看当前画作 AI 视觉标签并设置拦截黑名单"
+            onClick={() => { setShowInspector((prev) => !prev); if (!showInspector) setShowRadar(false); }}
+          >
+            🔍 元素透视
           </button>
 
           <button
@@ -227,6 +238,17 @@ export function ArtworkLightbox({
           </button>
         </div>
       </header>
+
+      {/* Element Inspector Drawer */}
+      {showInspector && (
+        <ElementInspectorDrawer
+          target={{
+            workId: artwork.id,
+            title: artwork.source?.title ?? artwork.fileName
+          }}
+          onClose={() => setShowInspector(false)}
+        />
+      )}
 
       {/* Radar Overlay Drawer */}
       {showRadar && (

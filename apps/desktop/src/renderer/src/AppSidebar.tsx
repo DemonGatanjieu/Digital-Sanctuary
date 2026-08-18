@@ -61,8 +61,8 @@ export function AppSidebar({
         <button aria-current={activeView === "gallery" ? "page" : undefined} className={`nav-item ${activeView === "gallery" ? "active" : ""}`} data-nav="gallery" onClick={() => void onOpenGallery()}>
           画廊
         </button>
-        <button aria-current={activeView === "organize" ? "page" : undefined} className={`nav-item ${activeView === "organize" ? "active" : ""}`} data-nav="organize" onClick={() => onViewChange("organize")}>
-          模型整理
+        <button aria-current={activeView === "organize" ? "page" : undefined} className={`nav-item ${activeView === "organize" ? "active" : ""}`} data-nav="organize" title="智能清洗排查与模型整理工坊" onClick={() => onViewChange("organize")}>
+          智能工坊
         </button>
         <button aria-current={activeView === "explore" ? "page" : undefined} className={`nav-item ${activeView === "explore" ? "active" : ""}`} data-nav="explore" onClick={() => onViewChange("explore")}>
           探索

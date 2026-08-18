@@ -80,6 +80,19 @@ export function registerAnalysisIpc(
     return { collectionIds, affectedWorkCount: affected.size };
   });
 
+  ipc.handle("analysis:triage-query", (_event, payload: unknown) => {
+    if (!payload || typeof payload !== "object") throw new Error("Invalid triage query payload");
+    const { tags, minConfidence, scope } = payload as { tags?: unknown; minConfidence?: unknown; scope?: unknown };
+    if (!Array.isArray(tags) || !tags.every((t) => typeof t === "string")) {
+      throw new Error("Invalid tags list for triage");
+    }
+    const safeConfidence = typeof minConfidence === "number" && minConfidence >= 0.05 && minConfidence <= 0.95
+      ? minConfidence
+      : 0.4;
+    const safeScope = isAnalysisScope(scope) ? scope : undefined;
+    return database.queryWorksByTags(tags, safeConfidence, safeScope);
+  });
+
   // Vision & External AI Radar Handlers
   ipc.handle("vision:get-config", (_event, providerId: unknown): ExternalVisionPublicConfig => {
     if (typeof providerId !== "string" || !externalVisionService) {

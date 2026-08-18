@@ -27,7 +27,9 @@ import type {
   ExternalVisionPublicConfig,
   VisionEvaluationResult,
   TypographyFontDescriptor,
-  TypographyPreferencesV1
+  TypographyPreferencesV1,
+  TriageQueryResultItem,
+  VisionAssessment
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -129,6 +131,9 @@ export interface SanctuaryApi {
   deleteExternalVisionApiKey(providerId: string): Promise<void>;
   testExternalVisionConnection(providerId: string): Promise<{ success: boolean; latencyMs: number; error?: string }>;
   listVisionEvaluationsForWork(workId: string): Promise<VisionEvaluationResult[]>;
+  inspectArtwork(params: { workId?: string; artworkId?: string; url?: string }): Promise<VisionAssessment | null>;
+  addCustomBlacklistTag(payload: { tag: string; threshold?: number; action?: "blur" | "hide"; groupName?: string }): Promise<CustomElementGroup[]>;
+  queryTriageWorks(params: { tags: string[]; minConfidence?: number; scope?: AnalysisScope }): Promise<TriageQueryResultItem[]>;
   showExplore(bounds: ExploreBounds): Promise<ExploreState>;
   setExploreBounds(bounds: ExploreBounds): Promise<boolean>;
   hideExplore(): Promise<void>;
@@ -143,6 +148,7 @@ export interface SanctuaryApi {
   getTypographyPreferences(): Promise<TypographyPreferencesV1>;
   saveTypographyPreferences(preferences: TypographyPreferencesV1): Promise<TypographyPreferencesV1>;
   onExploreState(listener: (state: ExploreState) => void): () => void;
+  onExploreOpenInspector(listener: (data: { artworkId?: string; url?: string }) => void): () => void;
   status(): Promise<{
     visionEngine: string;
     visionProvider: string;
@@ -157,6 +163,12 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:query-works", query) as Promise<WorkQueryResult>,
   getWork: (workId) =>
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
+  inspectArtwork: (params) =>
+    ipcRenderer.invoke("vision:inspect-artwork", params) as Promise<VisionAssessment | null>,
+  addCustomBlacklistTag: (payload) =>
+    ipcRenderer.invoke("filters:add-blacklist-tag", payload) as Promise<CustomElementGroup[]>,
+  queryTriageWorks: (params) =>
+    ipcRenderer.invoke("analysis:triage-query", params) as Promise<TriageQueryResultItem[]>,
   generateThumbnails: () =>
     ipcRenderer.invoke("library:generate-thumbnails") as Promise<ThumbnailBatchResult>,
   createLibraryBackup: () =>
@@ -296,6 +308,11 @@ const api: SanctuaryApi = {
     const wrapped = (_event: Electron.IpcRendererEvent, state: ExploreState) => listener(state);
     ipcRenderer.on("explore:state-changed", wrapped);
     return () => ipcRenderer.removeListener("explore:state-changed", wrapped);
+  },
+  onExploreOpenInspector: (listener) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, data: { artworkId?: string; url?: string }) => listener(data);
+    ipcRenderer.on("explore:open-inspector", wrapped);
+    return () => ipcRenderer.removeListener("explore:open-inspector", wrapped);
   },
   status: () => ipcRenderer.invoke("app:status") as ReturnType<SanctuaryApi["status"]>
 };

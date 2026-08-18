@@ -21,6 +21,7 @@ import {
 } from "electron";
 import { LibraryDatabase, type RemoteImageReviewRecord } from "@sanctuary/database";
 import {
+  addTagToCustomGroups,
   buildElementFilterRules,
   decideFilter,
   DEFAULT_LIBRARY_PREFERENCES,
@@ -536,6 +537,114 @@ function registerIpc(): void {
     recalculateStoredDecisions(database);
     return value;
   });
+  ipcMain.handle("filters:add-blacklist-tag", async (_event, value: unknown): Promise<CustomElementGroup[]> => {
+    if (!database) throw new Error("Database is not ready");
+    if (!value || typeof value !== "object") throw new Error("Invalid tag blacklist payload");
+    const { tag, threshold, action, groupName } = value as { tag?: unknown; threshold?: unknown; action?: unknown; groupName?: unknown };
+    if (typeof tag !== "string" || !tag.trim()) throw new Error("Tag must be a non-empty string");
+
+    const current = customElementGroups();
+    const options: { threshold?: number; action?: "blur" | "hide"; groupName?: string } = {
+      action: action === "blur" ? "blur" : "hide"
+    };
+    if (typeof threshold === "number") options.threshold = threshold;
+    if (typeof groupName === "string" && groupName.trim()) options.groupName = groupName.trim();
+
+    const nextGroups = addTagToCustomGroups(current, tag, options);
+
+    database.setPreference("filters.custom-groups", nextGroups);
+    const existingSettings = new Map(database.listElementFilterSettings().map((setting) => [setting.groupId, setting]));
+    for (const group of nextGroups) {
+      if (!existingSettings.has(group.id)) {
+        database.saveElementFilterSetting({ groupId: group.id, enabled: true, minimumConfidence: group.defaultThreshold });
+      }
+    }
+    database.clearRemoteImageReviews();
+    recalculateStoredDecisions(database);
+    remoteReviewCache.clear();
+    return nextGroups;
+  });
+  ipcMain.handle("vision:inspect-artwork", async (_event, value: unknown): Promise<VisionAssessment | null> => {
+    if (!database || !vision) throw new Error("Vision service is not ready");
+    if (!value || typeof value !== "object") throw new Error("Invalid inspect payload");
+    const { workId, artworkId, url } = value as { workId?: unknown; artworkId?: unknown; url?: unknown };
+
+    if (typeof url === "string" && url.trim()) {
+      const normalizedUrl = normalizePixivArtworkImageUrl(url) || url;
+      const persisted = database.getRemoteImageReview({
+        normalizedUrl,
+        engine: vision.engine,
+        engineVersion: vision.engineVersion,
+        rulesFingerprint: rulesFingerprint(database.listElementFilterSettings(), customElementGroups())
+      });
+      if (persisted?.assessment) return persisted.assessment;
+
+      const reviewSession = exploreView?.webContents.session ?? session.defaultSession;
+      try {
+        const outcome = await performRemoteArtworkReview(
+          normalizedUrl,
+          PIXIV_HOME_URL,
+          reviewSession,
+          {
+            normalizedUrl,
+            engine: vision.engine,
+            engineVersion: vision.engineVersion,
+            rulesFingerprint: rulesFingerprint(database.listElementFilterSettings(), customElementGroups())
+          },
+          database.listElementFilterSettings()
+        );
+        return outcome.assessment;
+      } catch (err) {
+        console.error("[vision-inspect] failed to inspect remote url", err);
+        return null;
+      }
+    }
+
+    if (typeof workId === "string" && workId.trim()) {
+      const work = database.getWork(workId);
+      const asset = work?.assets[0];
+      if (asset?.path && existsSync(asset.path)) {
+        return await classifyFailClosed(vision, asset.path, 30_000);
+      }
+    }
+
+    if (typeof artworkId === "string" && artworkId.trim()) {
+      const works = database.queryWorks({ search: artworkId, limit: 1 });
+      const localAsset = works.items[0]?.coverAsset;
+      if (localAsset?.path && existsSync(localAsset.path)) {
+        return await classifyFailClosed(vision, localAsset.path, 30_000);
+      }
+      const reviewSession = exploreView?.webContents.session ?? session.defaultSession;
+      try {
+        const response = await reviewSession.fetch(`https://www.pixiv.net/ajax/illust/${artworkId}?lang=zh`, {
+          headers: { Referer: `https://www.pixiv.net/artworks/${artworkId}` }
+        });
+        if (response.ok) {
+          const data = (await response.json()) as { body?: { urls?: { regular?: string; small?: string; thumb?: string } } };
+          const imageUrl = data?.body?.urls?.regular || data?.body?.urls?.small || data?.body?.urls?.thumb;
+          if (imageUrl) {
+            const outcome = await performRemoteArtworkReview(
+              imageUrl,
+              `https://www.pixiv.net/artworks/${artworkId}`,
+              reviewSession,
+              {
+                normalizedUrl: imageUrl,
+                engine: vision.engine,
+                engineVersion: vision.engineVersion,
+                rulesFingerprint: rulesFingerprint(database.listElementFilterSettings(), customElementGroups())
+              },
+              database.listElementFilterSettings()
+            );
+            return outcome.assessment;
+          }
+        }
+      } catch (err) {
+        console.error("[vision-inspect] failed to inspect artwork ID", err);
+      }
+    }
+
+    return null;
+  });
   ipcMain.handle("filters:test-image", async (): Promise<RuleSandboxResult | null> => {
     if (!database || !vision || !mainWindow) throw new Error("Application is not ready");
     const selected = await dialog.showOpenDialog(mainWindow, {
@@ -978,6 +1087,20 @@ function ensureExploreView(): WebContentsView {
         return;
       }
       void downloadCurrentPixivArtwork().catch(() => undefined);
+      return;
+    }
+    const inspectPrefix = `sanctuary-inspect:${pixivRevealToken}:`;
+    if (message.startsWith(inspectPrefix)) {
+      const artworkId = message.slice(inspectPrefix.length);
+      mainWindow?.webContents.send("explore:open-inspector", { artworkId });
+      return;
+    }
+    const inspectUrlPrefix = `sanctuary-inspect-url:${pixivRevealToken}:`;
+    if (message.startsWith(inspectUrlPrefix)) {
+      try {
+        const decodedUrl = decodeURIComponent(message.slice(inspectUrlPrefix.length));
+        mainWindow?.webContents.send("explore:open-inspector", { url: decodedUrl });
+      } catch {}
       return;
     }
     const prefix = `sanctuary-reveal:${pixivRevealToken}:`;

@@ -32,13 +32,20 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       const style = document.createElement("style");
       style.id = styleId;
       style.textContent = [
-        "." + placeholderClass + " { display: grid; box-sizing: border-box; min-height: 160px; width: 100%; place-items: center; align-content: center; gap: 8px; padding: 18px; border: 1px solid #e1e5e9; border-radius: 12px; color: #69727d; background: #f3f5f7; font: 12px/1.5 sans-serif; text-align: center; }",
+        "." + placeholderClass + " { display: grid; box-sizing: border-box; min-height: 160px; width: 100%; place-items: center; align-content: center; gap: 8px; padding: 18px; border: 1px solid rgba(225,229,233,0.8); border-radius: 12px; color: #69727d; background: #f3f5f7; font: 12px/1.5 sans-serif; text-align: center; }",
         "." + placeholderClass + " strong { color: #4e5863; font-size: 13px; }",
         "." + placeholderClass + " small { max-width: 28em; color: #818b96; }",
-        "." + placeholderClass + " button { padding: 6px 10px; border: 1px solid #b9ddf5; border-radius: 8px; color: #087fc0; background: #eef8fe; cursor: pointer; font: inherit; }",
-        "#sanctuary-pixiv-download { position: fixed; right: 22px; bottom: 22px; z-index: 2147483646; display: flex; align-items: center; gap: 8px; padding: 11px 15px; border: 1px solid rgba(0,150,250,.35); border-radius: 999px; color: #fff; background: #0096fa; box-shadow: 0 8px 28px rgba(0,90,160,.28); cursor: pointer; font: 650 12px/1.2 sans-serif; }",
+        "." + placeholderClass + " .sanctuary-actions-row { display: flex; gap: 8px; justify-content: center; margin-top: 4px; }",
+        "." + placeholderClass + " button { padding: 6px 12px; border: 1px solid #b9ddf5; border-radius: 8px; color: #087fc0; background: #eef8fe; cursor: pointer; font: inherit; transition: all .15s ease; }",
+        "." + placeholderClass + " button:hover { background: #dff0fc; transform: translateY(-1px); }",
+        "." + placeholderClass + " button.inspect-btn { border-color: #d1c4e9; color: #5e35b1; background: #f3e5f5; }",
+        "." + placeholderClass + " button.inspect-btn:hover { background: #ede7f6; }",
+        "#sanctuary-pixiv-floating-island { position: fixed; right: 22px; bottom: 22px; z-index: 2147483646; display: flex; align-items: center; gap: 8px; padding: 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 999px; background: rgba(20, 24, 32, 0.75); backdrop-filter: blur(16px); box-shadow: 0 10px 30px rgba(0,0,0,0.35); font: 600 12px/1.2 sans-serif; }",
+        "#sanctuary-pixiv-download { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border: none; border-radius: 999px; color: #fff; background: #0096fa; cursor: pointer; font: inherit; transition: all .15s ease; }",
         "#sanctuary-pixiv-download:hover { background: #0088e6; transform: translateY(-1px); }",
-        "#sanctuary-pixiv-download::before { content: '↓'; display: grid; width: 19px; height: 19px; place-items: center; border-radius: 50%; color: #0088e6; background: #fff; font-size: 13px; }"
+        "#sanctuary-pixiv-download::before { content: '↓'; display: grid; width: 16px; height: 16px; place-items: center; border-radius: 50%; color: #0088e6; background: #fff; font-size: 11px; }",
+        "#sanctuary-pixiv-inspect { display: flex; align-items: center; gap: 5px; padding: 8px 14px; border: 1px solid rgba(255,255,255,0.2); border-radius: 999px; color: #e2e8f0; background: rgba(255,255,255,0.08); cursor: pointer; font: inherit; transition: all .15s ease; }",
+        "#sanctuary-pixiv-inspect:hover { background: rgba(255,255,255,0.18); color: #fff; transform: translateY(-1px); }"
       ].join("\\n");
       (document.head || document.documentElement).appendChild(style);
     }
@@ -68,6 +75,13 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
         state.downloadButton = null;
         return;
       }
+      let island = document.getElementById("sanctuary-pixiv-floating-island");
+      if (!island) {
+        island = document.createElement("div");
+        island.id = "sanctuary-pixiv-floating-island";
+        (document.body || document.documentElement).appendChild(island);
+      }
+
       let button = document.getElementById("sanctuary-pixiv-download");
       if (!(button instanceof HTMLButtonElement)) {
         button = document.createElement("button");
@@ -85,10 +99,28 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
             if (button?.isConnected) button.textContent = "保存到本地画廊";
           }, 1600);
         });
-        (document.body || document.documentElement).appendChild(button);
+        island.appendChild(button);
       }
       button.dataset.artworkId = artworkId;
       if (!button.textContent) button.textContent = "保存到本地画廊";
+
+      let inspectBtn = document.getElementById("sanctuary-pixiv-inspect");
+      if (!(inspectBtn instanceof HTMLButtonElement)) {
+        inspectBtn = document.createElement("button");
+        inspectBtn.id = "sanctuary-pixiv-inspect";
+        inspectBtn.type = "button";
+        inspectBtn.title = "查看当前作品的 AI 视觉标签并设置拦截规则";
+        inspectBtn.textContent = "🔍 AI 元素透视";
+        inspectBtn.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const selectedArtworkId = currentArtworkId();
+          if (!selectedArtworkId) return;
+          console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId);
+        });
+        island.appendChild(inspectBtn);
+      }
+
       state.downloadButton = button;
     };
 
@@ -121,6 +153,10 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
       title.textContent = "作品已按规则遮挡";
       const detail = document.createElement("small");
       detail.textContent = reasons.length ? "命中：" + reasons.join("、") : "审查未完成，默认保持遮挡";
+
+      const actionsRow = document.createElement("div");
+      actionsRow.className = "sanctuary-actions-row";
+
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = "仅本次查看";
@@ -130,7 +166,19 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
         state.revealedUrls.add(url);
         if (revealToken) console.info("sanctuary-reveal:" + revealToken + ":" + encodeURIComponent(url));
       });
-      placeholder.append(title, detail, button);
+
+      const inspectButton = document.createElement("button");
+      inspectButton.type = "button";
+      inspectButton.className = "inspect-btn";
+      inspectButton.textContent = "🔍 元素透视";
+      inspectButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (revealToken) console.info("sanctuary-inspect-url:" + revealToken + ":" + encodeURIComponent(url));
+      });
+
+      actionsRow.append(button, inspectButton);
+      placeholder.append(title, detail, actionsRow);
       image.parentElement?.insertBefore(placeholder, image);
     };
 

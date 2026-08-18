@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_ELEMENT_FILTER_SETTINGS,
   DEFAULT_FILTER_RULES,
+  addTagToCustomGroups,
   buildElementFilterRules,
   decideFilter,
   isCustomElementGroup,
@@ -113,5 +114,23 @@ describe("decideFilter", () => {
     expect(isAnalysisScope({ type: "selected", workIds: ["work-1"] })).toBe(true);
     expect(isAnalysisScope({ type: "artist", artistId: "" })).toBe(false);
     expect(isAnalysisScope({ type: "selected", workIds: [42] })).toBe(false);
+  });
+
+  it("adds tags to custom groups correctly", () => {
+    const initialGroups: any[] = [];
+    const after1 = addTagToCustomGroups(initialGroups, "chibi", { action: "hide", threshold: 0.5 });
+    expect(after1).toHaveLength(1);
+    expect(after1[0]?.tags).toEqual(["chibi"]);
+    expect(after1[0]?.action).toBe("hide");
+
+    // Adding duplicate tag does not duplicate
+    const after2 = addTagToCustomGroups(after1, "chibi");
+    expect(after2).toHaveLength(1);
+    expect(after2[0]?.tags).toEqual(["chibi"]);
+
+    // Adding another tag appends to existing group with same name
+    const after3 = addTagToCustomGroups(after2, "ai_generated");
+    expect(after3).toHaveLength(1);
+    expect(after3[0]?.tags).toEqual(["chibi", "ai_generated"]);
   });
 });

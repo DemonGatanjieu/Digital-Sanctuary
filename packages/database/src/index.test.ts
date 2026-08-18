@@ -761,6 +761,28 @@ describe("LibraryDatabase", () => {
         status: "success",
         latencyMs: 340
       });
+
+      // 7. Query works by tags for triage
+      const triageJob = database.createAnalysisJob({ type: "all" }, "test-tagger");
+      const nextItem = database.claimNextAnalysisItem(triageJob.id);
+      expect(nextItem).not.toBeNull();
+      if (nextItem) {
+        database.completeAnalysisItem(
+          nextItem,
+          {
+            status: "complete",
+            engine: "test-tagger",
+            engineVersion: "1.0",
+            labels: { chibi: 0.85, sketch: 0.72 },
+            elapsedMs: 10
+          },
+          false
+        );
+      }
+
+      const triageMatches = database.queryWorksByTags(["chibi"], 0.5);
+      expect(triageMatches.length).toBeGreaterThanOrEqual(1);
+      expect(triageMatches[0]?.matchedTags).toContainEqual({ tag: "chibi", confidence: 0.85 });
     } finally {
       database.close();
       rmSync(directory, { recursive: true, force: true });

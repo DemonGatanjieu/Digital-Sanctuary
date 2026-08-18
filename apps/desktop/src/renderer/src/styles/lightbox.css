@@ -327,3 +327,228 @@
   padding: 1px 3px;
   border-radius: 2px;
 }
+
+/* ==========================================================================
+   Element Inspector Drawer (AI 元素透视抽屉)
+   ========================================================================== */
+
+@keyframes drawerSlideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.element-inspector-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483640;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  animation: cinemaFadeIn 0.2s ease both;
+}
+
+.element-inspector-drawer {
+  position: relative;
+  width: 500px;
+  max-width: 92vw;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  background: rgba(16, 20, 28, 0.94);
+  backdrop-filter: blur(28px);
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: -12px 0 48px rgba(0, 0, 0, 0.6);
+  color: #f8fafc;
+  animation: drawerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.inspector-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.inspector-header h3 {
+  margin: 2px 0 4px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 750;
+}
+
+.inspector-target-name {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+}
+
+.inspector-close-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.inspector-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.inspector-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex: 1;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.inspector-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.inspector-search-input {
+  flex: 1;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--ds-radius-full);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.inspector-search-input:focus {
+  border-color: var(--ds-primary, #0096fa);
+  box-shadow: 0 0 12px var(--ds-primary-glow);
+}
+
+.inspector-tag-count {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.inspector-tag-grid {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+.inspector-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--ds-radius-full);
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  font-size: 11.5px;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.inspector-tag-chip:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.inspector-tag-chip.selected {
+  border-color: var(--ds-primary, #0096fa);
+  color: #fff;
+  background: var(--ds-primary, #0096fa);
+  box-shadow: 0 2px 10px rgba(0, 150, 250, 0.4);
+}
+
+.chip-check {
+  font-weight: 800;
+  font-size: 11px;
+}
+
+.chip-score {
+  font-size: 10px;
+  opacity: 0.75;
+  margin-left: 2px;
+}
+
+.inspector-empty {
+  width: 100%;
+  padding: 32px 0;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+}
+
+.inspector-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.inspector-rule-settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.inspector-rule-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.inspector-rule-settings select {
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--ds-radius-md);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 11.5px;
+  outline: none;
+}
+
+.inspector-rule-settings select option {
+  background: #1e293b;
+  color: #fff;
+}
+
+.inspector-rule-settings input[type="range"] {
+  accent-color: var(--ds-primary, #0096fa);
+}
+
+.inspector-action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+

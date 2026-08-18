@@ -385,6 +385,11 @@ export interface AnalysisApplyResult {
   affectedWorkCount: number;
 }
 
+export interface TriageQueryResultItem {
+  work: WorkListItem;
+  matchedTags: Array<{ tag: string; confidence: number }>;
+}
+
 export const ELEMENT_BLACKLIST_GROUPS: ElementBlacklistGroup[] = [
   {
     id: "guro",
@@ -533,6 +538,60 @@ export function isAnalysisScope(value: unknown): value is AnalysisScope {
   if (candidate.type === "artist") return typeof candidate.artistId === "string" && candidate.artistId.length > 0 && candidate.artistId.length <= 200;
   if (candidate.type === "collection") return typeof candidate.collectionId === "string" && candidate.collectionId.length > 0 && candidate.collectionId.length <= 200;
   return candidate.type === "selected" && Array.isArray(candidate.workIds) && candidate.workIds.length <= 10_000 && candidate.workIds.every((id) => typeof id === "string" && id.length > 0 && id.length <= 200);
+}
+
+export function addTagToCustomGroups(
+  groups: readonly CustomElementGroup[],
+  tag: string,
+  options?: {
+    threshold?: number;
+    action?: "blur" | "hide";
+    groupName?: string;
+  }
+): CustomElementGroup[] {
+  const normalizedTag = tag.trim().toLowerCase().replaceAll(" ", "_");
+  if (!normalizedTag) return [...groups];
+
+  const targetAction = options?.action ?? "hide";
+  const targetThreshold = options?.threshold !== undefined
+    ? Math.min(0.95, Math.max(0.05, options.threshold))
+    : 0.4;
+  const groupName = options?.groupName?.trim() || "自定义拦截规则";
+
+  const existingGroupIndex = groups.findIndex(
+    (g) => g.name === groupName || g.id === "custom-user-blacklist" || g.tags.includes(normalizedTag) || g.aliases.includes(normalizedTag)
+  );
+
+  if (existingGroupIndex >= 0) {
+    const existing = groups[existingGroupIndex];
+    if (existing && (existing.tags.includes(normalizedTag) || existing.aliases.includes(normalizedTag))) {
+      return [...groups];
+    }
+    if (existing) {
+      const updated: CustomElementGroup = {
+        id: existing.id,
+        name: existing.name,
+        description: existing.description,
+        defaultThreshold: existing.defaultThreshold,
+        aliases: existing.aliases ?? [],
+        action: existing.action,
+        tags: [...existing.tags, normalizedTag]
+      };
+      return groups.map((g, idx) => (idx === existingGroupIndex ? updated : g));
+    }
+  }
+
+  const newGroup: CustomElementGroup = {
+    id: `custom-user-${Date.now().toString(36)}`,
+    name: groupName,
+    description: "通过元素透视或智能排查添加的自定义拦截标签",
+    tags: [normalizedTag],
+    aliases: [],
+    defaultThreshold: targetThreshold,
+    action: targetAction
+  };
+
+  return [...groups, newGroup];
 }
 
 export const DEFAULT_FILTER_RULES: FilterRule[] = buildElementFilterRules();
