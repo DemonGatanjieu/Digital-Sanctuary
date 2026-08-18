@@ -2079,13 +2079,6 @@ async function publishRemoteReviewOutcome(
     state: outcome.allowed ? "allowed" : "blocked",
     reasons: outcome.reasons
   });
-  if (outcome.allowed) return;
-  await contents.executeJavaScript(
-    buildPixivBlockedReviewScript(normalizedUrl, outcome.reasons),
-    true
-  ).catch((error: unknown) => {
-    console.error("[pixiv-placeholder] failed to install", error);
-  });
 }
 
 function resetExploreReviewQueue(): void {

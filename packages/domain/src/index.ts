@@ -428,7 +428,7 @@ export const ELEMENT_BLACKLIST_GROUPS: ElementBlacklistGroup[] = [
       "blood_on_hands",
       "blood_on_weapon"
     ],
-    defaultThreshold: 0.35
+    defaultThreshold: 0.45
   },
   {
     id: "dismemberment",

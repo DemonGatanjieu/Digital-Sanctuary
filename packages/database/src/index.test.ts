@@ -130,7 +130,7 @@ describe("LibraryDatabase", () => {
     const bloodDefaults = database
       .listElementFilterSettings()
       .find((setting) => setting.groupId === "blood");
-    expect(bloodDefaults).toMatchObject({ enabled: true, minimumConfidence: 0.35 });
+    expect(bloodDefaults).toMatchObject({ enabled: true, minimumConfidence: 0.45 });
     database.saveElementFilterSetting({
       groupId: "blood",
       enabled: false,

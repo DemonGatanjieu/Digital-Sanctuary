@@ -44,21 +44,25 @@ const protectionCss = `
   .sanctuary-blocked-overlay {
     position: absolute;
     inset: 0;
-    z-index: 20;
+    z-index: 2147483640;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 8px;
-    background: rgba(243, 244, 246, 0.96);
+    gap: 8px;
+    padding: 12px;
+    background: rgba(245, 247, 250, 0.96);
     border: 1px solid rgba(209, 213, 219, 0.9);
     border-radius: 8px;
     box-sizing: border-box;
-    color: #4b5563;
+    color: #374151;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     text-align: center;
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+    cursor: default;
+    min-height: 100%;
+    min-width: 100%;
     transition: opacity 180ms ease;
   }
   .sanctuary-blocked-overlay.compact {
@@ -67,50 +71,57 @@ const protectionCss = `
     border-radius: 6px;
   }
   .sanctuary-blocked-badge {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 700;
-    color: #374151;
+    color: #1f2937;
     display: flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
     line-height: 1.2;
   }
   .sanctuary-blocked-overlay.compact .sanctuary-blocked-badge {
     font-size: 10px;
   }
   .sanctuary-blocked-reason {
-    font-size: 10px;
-    color: #6b7280;
+    font-size: 11px;
+    color: #4b5563;
     max-width: 90%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 2px 8px;
+    border-radius: 4px;
   }
   .sanctuary-blocked-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
-    margin-top: 2px;
+    gap: 8px;
+    margin-top: 4px;
   }
   .sanctuary-blocked-btn {
-    padding: 3px 8px;
+    padding: 6px 14px;
     border: 1px solid #93c5fd;
-    border-radius: 4px;
+    border-radius: 6px;
     background: #eff6ff;
     color: #1d4ed8;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     line-height: 1.2;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     transition: all 120ms ease;
   }
   .sanctuary-blocked-overlay.compact .sanctuary-blocked-btn {
-    padding: 2px 4px;
+    padding: 2px 5px;
     font-size: 9px;
+    border-radius: 4px;
   }
   .sanctuary-blocked-btn:hover {
     background: #dbeafe;
-    border-color: #60a5fa;
+    border-color: #3b82f6;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
   }
   .sanctuary-blocked-btn.inspect {
     border-color: #ddd6fe;
@@ -119,7 +130,7 @@ const protectionCss = `
   }
   .sanctuary-blocked-btn.inspect:hover {
     background: #ede9fe;
-    border-color: #c4b5fd;
+    border-color: #8b5cf6;
   }
 `;
 
@@ -211,20 +222,46 @@ function reloadFailedImage(image: HTMLImageElement, normalizedUrl: string): void
   });
 }
 
+function findImageCardContainer(image: HTMLImageElement): HTMLElement {
+  const card = image.closest('figure, [role="presentation"], div[class*="gtm-"], a[href*="/artworks/"]');
+  if (card instanceof HTMLElement && card.isConnected) {
+    return card;
+  }
+  let current: HTMLElement | null = image.parentElement;
+  while (current && current !== document.body) {
+    const rect = current.getBoundingClientRect();
+    if (rect.height > 60 && rect.width > 60) return current;
+    current = current.parentElement;
+  }
+  return image.parentElement || image;
+}
+
 function removeBlockedOverlay(image: HTMLImageElement, url: string): void {
-  const existing = image.parentElement?.querySelector(`[data-sanctuary-blocked-overlay="${url}"]`);
-  existing?.remove();
+  const targetKey = extractArtworkFileKey(url);
+  const container = findImageCardContainer(image);
+  const existing = container.querySelector(`[data-sanctuary-blocked-overlay]`);
+  if (existing) existing.remove();
+  for (const el of document.querySelectorAll(`[data-sanctuary-blocked-overlay]`)) {
+    const elUrl = el.getAttribute("data-sanctuary-blocked-overlay");
+    if (elUrl === url || (targetKey && extractArtworkFileKey(elUrl) === targetKey)) {
+      el.remove();
+    }
+  }
 }
 
 function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMessage): void {
-  if (!image.parentElement) return;
+  const container = findImageCardContainer(image);
+  if (!container || !container.isConnected) return;
   removeBlockedOverlay(image, outcome.normalizedUrl);
 
   const overlay = document.createElement("div");
   overlay.setAttribute("data-sanctuary-blocked-overlay", outcome.normalizedUrl);
   overlay.className = "sanctuary-blocked-overlay";
+  overlay.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
 
-  const rect = image.getBoundingClientRect();
+  const rect = container.getBoundingClientRect();
   const isCompact = (rect.width > 0 && rect.width < 140) || (rect.height > 0 && rect.height < 140);
   if (isCompact) {
     overlay.classList.add("compact");
@@ -251,8 +288,12 @@ function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMess
     ipcRenderer.send("explore:reveal-artwork", { normalizedUrl: outcome.normalizedUrl });
     const nextOutcome: ReviewResultMessage = { normalizedUrl: outcome.normalizedUrl, state: "allowed", reasons: [] };
     outcomes.set(outcome.normalizedUrl, nextOutcome);
+    overlay.remove();
+    const outcomeKey = extractArtworkFileKey(outcome.normalizedUrl);
     for (const [img, url] of trackedImages) {
-      if (url === outcome.normalizedUrl) applyOutcome(img, nextOutcome);
+      if (url === outcome.normalizedUrl || (outcomeKey && extractArtworkFileKey(url) === outcomeKey)) {
+        applyOutcome(img, nextOutcome);
+      }
     }
   });
 
@@ -279,10 +320,10 @@ function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMess
 
   overlay.append(btnRow);
 
-  if (getComputedStyle(image.parentElement).position === "static") {
-    image.parentElement.style.position = "relative";
+  if (getComputedStyle(container).position === "static") {
+    container.style.setProperty("position", "relative", "important");
   }
-  image.parentElement.appendChild(overlay);
+  container.appendChild(overlay);
 }
 
 function applyOutcome(image: HTMLImageElement, outcome: ReviewResultMessage): void {
@@ -291,6 +332,9 @@ function applyOutcome(image: HTMLImageElement, outcome: ReviewResultMessage): vo
   removeImageMembership(image, outcome.normalizedUrl);
   if (outcome.state === "allowed") {
     removeBlockedOverlay(image, outcome.normalizedUrl);
+    image.style.visibility = "visible";
+    image.style.opacity = "1";
+    image.style.filter = "none";
     reloadFailedImage(image, outcome.normalizedUrl);
   } else if (outcome.state === "blocked") {
     renderBlockedOverlay(image, outcome);
