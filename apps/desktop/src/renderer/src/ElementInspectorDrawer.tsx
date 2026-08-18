@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CustomElementGroup, VisionAssessment } from "@sanctuary/domain";
 import { Button } from "./Button";
 import { AppNotice } from "./AppNotice";
@@ -29,15 +29,8 @@ export function ElementInspectorDrawer({
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    if (!target) {
-      setAssessment(null);
-      setError("");
-      setSelectedTags([]);
-      setNotice("");
-      return;
-    }
-    let active = true;
+  const loadAnalysis = useCallback(() => {
+    if (!target) return;
     setLoading(true);
     setError("");
     setNotice("");
@@ -51,27 +44,32 @@ export function ElementInspectorDrawer({
     window.sanctuary
       .inspectArtwork(inspectParams)
       .then((res) => {
-        if (!active) return;
         if (!res) {
-          setError("未能获取该画作的视觉标签分析（可能文件不可读或网络超时）。");
+          setError("未能获取该画作的视觉标签分析。可能该作品为多图/动图、需要会员/登录权限，或网络请求超时。");
           setAssessment(null);
         } else {
           setAssessment(res);
         }
       })
       .catch((err) => {
-        if (!active) return;
         setError(err instanceof Error ? err.message : "分析失败");
         setAssessment(null);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        setLoading(false);
       });
-
-    return () => {
-      active = false;
-    };
   }, [target]);
+
+  useEffect(() => {
+    if (!target) {
+      setAssessment(null);
+      setError("");
+      setSelectedTags([]);
+      setNotice("");
+      return;
+    }
+    loadAnalysis();
+  }, [loadAnalysis, target]);
 
   const sortedTags = useMemo(() => {
     if (!assessment?.labels) return [];
@@ -137,6 +135,13 @@ export function ElementInspectorDrawer({
           <div className="inspector-loading">
             <div className="cinema-loading-spinner" />
             <p>正在由 WD Tagger 引擎深度解析视觉特征...</p>
+          </div>
+        ) : error && !assessment ? (
+          <div className="inspector-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px", marginTop: "40px" }}>
+            <p style={{ maxWidth: "320px", lineHeight: 1.5 }}>{error}</p>
+            <Button variant="primary" onClick={loadAnalysis}>
+              🔄 重新尝试解析
+            </Button>
           </div>
         ) : assessment ? (
           <>

@@ -1032,6 +1032,38 @@ export class LibraryDatabase {
     };
   }
 
+  findRemoteImageReviewByArtworkId(artworkId: string): RemoteImageReviewRecord | null {
+    if (!artworkId || !/^\d+$/.test(artworkId)) return null;
+    const row = this.#database
+      .prepare(
+        `SELECT normalized_url, content_hash, engine, engine_version,
+                rules_fingerprint, assessment_json, decision_json,
+                byte_length, reviewed_at
+           FROM remote_image_reviews
+          WHERE normalized_url LIKE '%/' || ? || '_p%'
+             OR normalized_url LIKE '%/' || ? || '.%'
+          ORDER BY reviewed_at DESC
+          LIMIT 1`
+      )
+      .get(artworkId, artworkId) as RemoteImageReviewRow | undefined;
+    if (!row) return null;
+
+    const assessment = parseJson<VisionAssessment>(row.assessment_json);
+    const decision = parseJson<FilterDecision>(row.decision_json);
+    if (!assessment || assessment.status !== "complete" || !decision) return null;
+    return {
+      normalizedUrl: row.normalized_url,
+      contentHash: row.content_hash,
+      engine: row.engine,
+      engineVersion: row.engine_version,
+      rulesFingerprint: row.rules_fingerprint,
+      assessment,
+      decision,
+      byteLength: row.byte_length,
+      reviewedAt: row.reviewed_at
+    };
+  }
+
   saveRemoteImageReview(review: RemoteImageReviewRecord): void {
     if (review.assessment.status !== "complete") return;
     this.#database
@@ -1424,14 +1456,36 @@ export class LibraryDatabase {
 
     if (resultMap.size === 0) return [];
 
-    const matchedWorkIds = Array.from(resultMap.keys());
-    const works = this.queryWorks({ limit: matchedWorkIds.length });
-    const matchingWorks = works.items.filter((w) => resultMap.has(w.id));
+    const items: TriageQueryResultItem[] = [];
+    for (const [workId, matchedTags] of resultMap.entries()) {
+      const work = this.getWork(workId);
+      if (work) {
+        const coverAsset = (work.coverAssetId ? work.assets.find((a) => a.id === work.coverAssetId) : null) ?? work.assets[0] ?? null;
+        const workItem: WorkListItem = {
+          id: work.id,
+          sourcePlatform: work.sourcePlatform,
+          sourceWorkId: work.sourceWorkId,
+          title: work.title,
+          workType: work.workType,
+          publishedAt: work.publishedAt,
+          ownership: work.ownership,
+          artistId: work.artistId,
+          artistName: work.artistName,
+          pageCount: work.pageCount,
+          favorite: work.favorite,
+          totalByteLength: work.assets.reduce((sum, a) => sum + (a.byteLength || 0), 0),
+          coverAsset,
+          collectionIds: work.collectionIds,
+          savedAt: work.savedAt
+        };
+        items.push({
+          work: workItem,
+          matchedTags
+        });
+      }
+    }
 
-    return matchingWorks.map((work) => ({
-      work,
-      matchedTags: resultMap.get(work.id) || []
-    }));
+    return items;
   }
 
   recordExternalVisionRequest(req: {

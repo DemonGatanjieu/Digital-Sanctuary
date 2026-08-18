@@ -116,7 +116,13 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
           event.stopPropagation();
           const selectedArtworkId = currentArtworkId();
           if (!selectedArtworkId) return;
-          console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId);
+          const candidateImg = document.querySelector("main figure img, [role='presentation'] img, img[src*='i.pximg.net']");
+          const imgSrc = candidateImg ? (candidateImg.getAttribute("src") || candidateImg.currentSrc || candidateImg.src) : "";
+          if (imgSrc) {
+            console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId + ":" + encodeURIComponent(imgSrc));
+          } else {
+            console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId);
+          }
         });
         island.appendChild(inspectBtn);
       }
