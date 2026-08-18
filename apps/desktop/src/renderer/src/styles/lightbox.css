@@ -376,6 +376,16 @@
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+  min-width: 0;
+  width: 100%;
+}
+
+.inspector-header > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .inspector-header h3 {
@@ -383,14 +393,22 @@
   color: #fff;
   font-size: 18px;
   font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .inspector-target-name {
   color: rgba(255, 255, 255, 0.6);
   font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 
 .inspector-close-btn {
+  flex-shrink: 0;
   display: grid;
   place-items: center;
   width: 32px;
@@ -402,6 +420,7 @@
   cursor: pointer;
   font-size: 14px;
   transition: all 0.15s ease;
+  z-index: 10;
 }
 
 .inspector-close-btn:hover {

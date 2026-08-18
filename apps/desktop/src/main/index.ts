@@ -1057,7 +1057,7 @@ function ensureExploreView(): WebContentsView {
     (details, callback) => {
       if (details.resourceType === "image" && isPixivArtworkImageUrl(details.url)) {
         const normalizedUrl = normalizePixivArtworkImageUrl(details.url);
-        if (normalizedUrl && remoteOneShotAllows.delete(normalizedUrl)) {
+        if (remoteOneShotAllows.delete(details.url) || (normalizedUrl && remoteOneShotAllows.delete(normalizedUrl))) {
           callback({ cancel: false });
           return;
         }
@@ -1133,15 +1133,33 @@ function ensureExploreView(): WebContentsView {
     }
     const inspectPrefix = `sanctuary-inspect:${pixivRevealToken}:`;
     if (message.startsWith(inspectPrefix)) {
-      const artworkId = message.slice(inspectPrefix.length);
-      mainWindow?.webContents.send("explore:open-inspector", { artworkId });
+      const rest = message.slice(inspectPrefix.length);
+      const colonIdx = rest.indexOf(":");
+      let rawArtworkId = "";
+      let decodedUrl: string | undefined = undefined;
+      if (colonIdx !== -1) {
+        rawArtworkId = rest.slice(0, colonIdx);
+        try {
+          const u = decodeURIComponent(rest.slice(colonIdx + 1));
+          if (isPixivArtworkImageUrl(u)) decodedUrl = u;
+        } catch {}
+      } else {
+        rawArtworkId = rest;
+      }
+      const artworkId = rawArtworkId.trim();
+      const payload: { artworkId?: string; url?: string } = {};
+      if (/^\d+$/.test(artworkId)) payload.artworkId = artworkId;
+      if (decodedUrl) payload.url = decodedUrl;
+      mainWindow?.webContents.send("explore:open-inspector", payload);
       return;
     }
     const inspectUrlPrefix = `sanctuary-inspect-url:${pixivRevealToken}:`;
     if (message.startsWith(inspectUrlPrefix)) {
       try {
         const decodedUrl = decodeURIComponent(message.slice(inspectUrlPrefix.length));
-        mainWindow?.webContents.send("explore:open-inspector", { url: decodedUrl });
+        if (isPixivArtworkImageUrl(decodedUrl)) {
+          mainWindow?.webContents.send("explore:open-inspector", { url: decodedUrl });
+        }
       } catch {}
       return;
     }
@@ -2132,6 +2150,9 @@ async function performRemoteArtworkReview(
 
   const safeReferrer = isAllowedPixivNavigation(referrer) ? referrer : PIXIV_HOME_URL;
   const userAgent = exploreView?.webContents.getUserAgent() || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+  const normalized = normalizePixivArtworkImageUrl(imageUrl) || imageUrl;
+  remoteOneShotAllows.add(imageUrl);
+  if (normalized) remoteOneShotAllows.add(normalized);
   const response = await exploreSession.fetch(imageUrl, {
     referrer: safeReferrer,
     headers: {

@@ -116,9 +116,14 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
           event.stopPropagation();
           const selectedArtworkId = currentArtworkId();
           if (!selectedArtworkId) return;
-          const candidateImg = document.querySelector("main figure img, [role='presentation'] img, img[src*='i.pximg.net']");
-          const imgSrc = candidateImg ? (candidateImg.getAttribute("src") || candidateImg.currentSrc || candidateImg.src) : "";
-          if (imgSrc) {
+          const isArtworkUrl = (u: string) => Boolean(u && (u.includes("/img-master/") || u.includes("/img-original/") || u.includes("/custom-thumb/")));
+          const imgs = Array.from(document.querySelectorAll("main figure img, [role='presentation'] img, img[src*='pximg.net']"));
+          const candidateImg = imgs.find((el) => {
+            const s = el.getAttribute("src") || (el as HTMLImageElement).currentSrc || (el as HTMLImageElement).src || "";
+            return isArtworkUrl(s);
+          });
+          const imgSrc = candidateImg ? (candidateImg.getAttribute("src") || (candidateImg as HTMLImageElement).currentSrc || (candidateImg as HTMLImageElement).src || "") : "";
+          if (imgSrc && isArtworkUrl(imgSrc)) {
             console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId + ":" + encodeURIComponent(imgSrc));
           } else {
             console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId);

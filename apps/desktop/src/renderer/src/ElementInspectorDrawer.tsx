@@ -60,8 +60,10 @@ export function ElementInspectorDrawer({
       });
   }, [target]);
 
+  const targetKey = target ? `${target.workId ?? ""}:${target.artworkId ?? ""}:${target.url ?? ""}` : "";
+
   useEffect(() => {
-    if (!target) {
+    if (!targetKey) {
       setAssessment(null);
       setError("");
       setSelectedTags([]);
@@ -69,7 +71,26 @@ export function ElementInspectorDrawer({
       return;
     }
     loadAnalysis();
-  }, [loadAnalysis, target]);
+  }, [loadAnalysis, targetKey]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const displayTargetName = useMemo(() => {
+    if (!target) return "";
+    if (target.title) return target.title;
+    if (target.artworkId && /^\d+$/.test(target.artworkId)) {
+      return `Pixiv 作品 · ${target.artworkId}`;
+    }
+    return "当前探索画作";
+  }, [target]);
 
   const sortedTags = useMemo(() => {
     if (!assessment?.labels) return [];
@@ -119,11 +140,11 @@ export function ElementInspectorDrawer({
           <div>
             <p className="eyebrow">AI ELEMENT INSPECTOR</p>
             <h3>AI 元素透视与特征拆解</h3>
-            <span className="inspector-target-name">
-              {target.title || (target.artworkId ? `Pixiv 作品 · ${target.artworkId}` : "当前画作")}
+            <span className="inspector-target-name" title={displayTargetName}>
+              {displayTargetName}
             </span>
           </div>
-          <button type="button" className="inspector-close-btn" aria-label="关闭" onClick={onClose}>
+          <button type="button" className="inspector-close-btn" aria-label="关闭透视抽屉 (Esc)" title="关闭 (Esc)" onClick={onClose}>
             ✕
           </button>
         </header>
