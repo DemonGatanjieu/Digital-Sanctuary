@@ -496,6 +496,8 @@ export function App() {
           <ExploreView
             state={exploreState}
             error={error}
+            isDrawerOpen={Boolean(inspectorTarget)}
+            isModalOpen={Boolean(bookmarkPreview || collectionEditor)}
             onStateChange={setExploreState}
             onError={showError}
           />

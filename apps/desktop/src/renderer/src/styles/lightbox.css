@@ -343,25 +343,31 @@
   z-index: 2147483640;
   display: flex;
   justify-content: flex-end;
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(12px);
-  animation: cinemaFadeIn 0.2s ease both;
+  pointer-events: none;
 }
 
 .element-inspector-drawer {
   position: relative;
-  width: 500px;
-  max-width: 92vw;
+  width: 480px;
+  max-width: 90vw;
   height: 100%;
   display: flex;
   flex-direction: column;
   padding: 24px;
-  background: rgba(16, 20, 28, 0.94);
+  background: rgba(16, 20, 28, 0.96);
   backdrop-filter: blur(28px);
   border-left: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: -12px 0 48px rgba(0, 0, 0, 0.6);
   color: #f8fafc;
+  pointer-events: auto;
   animation: drawerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (max-width: 960px) {
+  .element-inspector-drawer {
+    width: 50vw;
+    min-width: 340px;
+  }
 }
 
 .inspector-header {

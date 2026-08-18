@@ -44,9 +44,18 @@ export function downloadPhaseLabel(phase: ExploreState["download"]["phase"]): st
   return "等待下载";
 }
 
-export function ExploreView({ state, error, onStateChange, onError }: {
+export function ExploreView({
+  state,
+  error,
+  isDrawerOpen = false,
+  isModalOpen = false,
+  onStateChange,
+  onError
+}: {
   state: ExploreState;
   error: string;
+  isDrawerOpen?: boolean;
+  isModalOpen?: boolean;
   onStateChange: (state: ExploreState) => void;
   onError: (caught: unknown) => void;
 }) {
@@ -67,6 +76,13 @@ export function ExploreView({ state, error, onStateChange, onError }: {
     };
 
     const syncBounds = () => {
+      if (isModalOpen) {
+        if (shown) {
+          shown = false;
+          void window.sanctuary.hideExplore();
+        }
+        return;
+      }
       const bounds = measure();
       if (!bounds) return;
       if (!shown) {
@@ -94,7 +110,7 @@ export function ExploreView({ state, error, onStateChange, onError }: {
       unsubscribe();
       void window.sanctuary.hideExplore();
     };
-  }, [onError, onStateChange]);
+  }, [isDrawerOpen, isModalOpen, onError, onStateChange]);
 
   async function runCommand(command: ExploreCommand) {
     try {
@@ -150,7 +166,7 @@ export function ExploreView({ state, error, onStateChange, onError }: {
         </div>
       )}
       {(state.error || error) && <AppNotice tone="error" className="explore-error">{state.error || error}</AppNotice>}
-      <div className="explore-surface" ref={surfaceRef}>
+      <div className={`explore-surface ${isDrawerOpen ? "with-drawer" : ""}`} ref={surfaceRef}>
         <div className="explore-placeholder">
           <span>◇</span>
           <strong>正在建立隔离的 Pixiv 会话</strong>

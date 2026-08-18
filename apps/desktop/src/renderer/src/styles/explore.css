@@ -148,6 +148,17 @@
   flex: 1;
   overflow: hidden;
   background: transparent;
+  transition: margin-right var(--ds-transition-normal, 0.2s ease);
+}
+
+.explore-surface.with-drawer {
+  margin-right: 480px;
+}
+
+@media (max-width: 960px) {
+  .explore-surface.with-drawer {
+    margin-right: 50vw;
+  }
 }
 
 .explore-placeholder {
