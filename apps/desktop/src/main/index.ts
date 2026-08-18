@@ -1121,7 +1121,7 @@ function ensureExploreView(): WebContentsView {
           return;
         }
         const cached = findCachedRemoteReview(normalizedUrl);
-        callback({ cancel: cached ? !cached.allowed : true });
+        callback({ cancel: cached ? !cached.allowed : false });
         if (cached) void publishRemoteReviewOutcome(contents, normalizedUrl, cached);
         return;
       }
