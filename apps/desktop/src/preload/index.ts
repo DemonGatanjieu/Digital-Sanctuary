@@ -29,7 +29,9 @@ import type {
   TypographyFontDescriptor,
   TypographyPreferencesV1,
   TriageQueryResultItem,
-  VisionAssessment
+  VisionAssessment,
+  InspectArtworkPage,
+  InspectArtworkResponse
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -131,7 +133,7 @@ export interface SanctuaryApi {
   deleteExternalVisionApiKey(providerId: string): Promise<void>;
   testExternalVisionConnection(providerId: string): Promise<{ success: boolean; latencyMs: number; error?: string }>;
   listVisionEvaluationsForWork(workId: string): Promise<VisionEvaluationResult[]>;
-  inspectArtwork(params: { workId?: string; artworkId?: string; url?: string }): Promise<VisionAssessment | null>;
+  inspectArtwork(params: { workId?: string; artworkId?: string; url?: string; pageIndex?: number }): Promise<InspectArtworkResponse | null>;
   addCustomBlacklistTag(payload: { tag: string; threshold?: number; action?: "blur" | "hide"; groupName?: string }): Promise<CustomElementGroup[]>;
   queryTriageWorks(params: { tags: string[]; minConfidence?: number; scope?: AnalysisScope }): Promise<TriageQueryResultItem[]>;
   showExplore(bounds: ExploreBounds): Promise<ExploreState>;
@@ -148,7 +150,7 @@ export interface SanctuaryApi {
   getTypographyPreferences(): Promise<TypographyPreferencesV1>;
   saveTypographyPreferences(preferences: TypographyPreferencesV1): Promise<TypographyPreferencesV1>;
   onExploreState(listener: (state: ExploreState) => void): () => void;
-  onExploreOpenInspector(listener: (data: { artworkId?: string; url?: string }) => void): () => void;
+  onExploreOpenInspector(listener: (data: { artworkId?: string; url?: string; pageIndex?: number }) => void): () => void;
   status(): Promise<{
     visionEngine: string;
     visionProvider: string;
@@ -164,7 +166,7 @@ const api: SanctuaryApi = {
   getWork: (workId) =>
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
   inspectArtwork: (params) =>
-    ipcRenderer.invoke("vision:inspect-artwork", params) as Promise<VisionAssessment | null>,
+    ipcRenderer.invoke("vision:inspect-artwork", params) as Promise<InspectArtworkResponse | null>,
   addCustomBlacklistTag: (payload) =>
     ipcRenderer.invoke("filters:add-blacklist-tag", payload) as Promise<CustomElementGroup[]>,
   queryTriageWorks: (params) =>

@@ -10,6 +10,22 @@ export interface VisionAssessment {
   error?: string;
 }
 
+export interface InspectArtworkPage {
+  pageIndex: number;
+  thumbUrl: string;
+  regularUrl: string;
+}
+
+export interface InspectArtworkResponse {
+  assessment: VisionAssessment | null;
+  artworkId?: string | undefined;
+  url?: string | undefined;
+  title?: string | undefined;
+  pageCount: number;
+  activePageIndex: number;
+  pages: InspectArtworkPage[];
+}
+
 export interface FilterRule {
   id: string;
   name: string;

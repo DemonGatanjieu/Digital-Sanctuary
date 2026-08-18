@@ -427,6 +427,70 @@
   max-width: 100%;
 }
 
+.inspector-multi-page-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.inspector-focus-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.35;
+}
+
+.inspector-focus-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.inspector-focus-text strong {
+  color: var(--ds-accent-primary, #60a5fa);
+  font-weight: 700;
+}
+
+.inspector-page-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.inspector-page-pill {
+  flex-shrink: 0;
+  padding: 4px 11px;
+  border-radius: var(--ds-radius-full);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.inspector-page-pill:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.inspector-page-pill.active {
+  background: var(--ds-accent-primary, #3b82f6);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.35);
+}
+
 .inspector-conf-filter-row {
   display: flex;
   align-items: center;

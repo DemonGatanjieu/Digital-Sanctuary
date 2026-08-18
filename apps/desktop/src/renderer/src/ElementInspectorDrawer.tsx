@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { CustomElementGroup, VisionAssessment } from "@sanctuary/domain";
+import type { CustomElementGroup, InspectArtworkPage, VisionAssessment } from "@sanctuary/domain";
 import { Button } from "./Button";
 import { AppNotice } from "./AppNotice";
 
@@ -8,6 +8,7 @@ export interface ElementInspectorTarget {
   artworkId?: string;
   url?: string;
   title?: string;
+  pageIndex?: number;
 }
 
 export function ElementInspectorDrawer({
@@ -21,6 +22,10 @@ export function ElementInspectorDrawer({
 }) {
   const [loading, setLoading] = useState(true);
   const [assessment, setAssessment] = useState<VisionAssessment | null>(null);
+  const [pages, setPages] = useState<InspectArtworkPage[]>([]);
+  const [pageCount, setPageCount] = useState<number>(1);
+  const [activePageIndex, setActivePageIndex] = useState<number>(0);
+  const [currentThumbUrl, setCurrentThumbUrl] = useState<string>("");
   const [error, setError] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -28,8 +33,9 @@ export function ElementInspectorDrawer({
   const [threshold, setThreshold] = useState<number>(0.4);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [minConfidenceFilter, setMinConfidenceFilter] = useState<number>(0.2);
 
-  const loadAnalysis = useCallback(() => {
+  const loadAnalysis = useCallback((overridePageIndex?: number) => {
     if (!target) return;
     setLoading(true);
     setAssessment(null);
@@ -37,19 +43,27 @@ export function ElementInspectorDrawer({
     setNotice("");
     setSelectedTags([]);
 
-    const inspectParams: { workId?: string; artworkId?: string; url?: string } = {};
+    const pageIdx = overridePageIndex !== undefined ? overridePageIndex : target.pageIndex;
+    const inspectParams: { workId?: string; artworkId?: string; url?: string; pageIndex?: number } = {};
     if (target.workId) inspectParams.workId = target.workId;
     if (target.artworkId) inspectParams.artworkId = target.artworkId;
     if (target.url) inspectParams.url = target.url;
+    if (pageIdx !== undefined) inspectParams.pageIndex = pageIdx;
 
     window.sanctuary
       .inspectArtwork(inspectParams)
       .then((res) => {
-        if (!res) {
+        if (!res || !res.assessment) {
           setError("未能获取该画作的视觉标签分析。可能该作品为多图/动图、需要会员/登录权限，或网络请求超时。");
           setAssessment(null);
         } else {
-          setAssessment(res);
+          setAssessment(res.assessment);
+          setPages(res.pages || []);
+          setPageCount(res.pageCount || 1);
+          const activeIdx = res.activePageIndex ?? 0;
+          setActivePageIndex(activeIdx);
+          const thumb = res.pages?.[activeIdx]?.thumbUrl || res.pages?.[activeIdx]?.regularUrl || res.url || target.url || "";
+          setCurrentThumbUrl(thumb);
         }
       })
       .catch((err) => {
@@ -61,11 +75,15 @@ export function ElementInspectorDrawer({
       });
   }, [target]);
 
-  const targetKey = target ? `${target.workId ?? ""}:${target.artworkId ?? ""}:${target.url ?? ""}` : "";
+  const targetKey = target ? `${target.workId ?? ""}:${target.artworkId ?? ""}:${target.url ?? ""}:${target.pageIndex ?? ""}` : "";
 
   useEffect(() => {
     if (!targetKey) {
       setAssessment(null);
+      setPages([]);
+      setPageCount(1);
+      setActivePageIndex(0);
+      setCurrentThumbUrl("");
       setError("");
       setSelectedTags([]);
       setNotice("");
@@ -93,8 +111,6 @@ export function ElementInspectorDrawer({
     return "当前探索画作";
   }, [target]);
 
-  const [minConfidenceFilter, setMinConfidenceFilter] = useState<number>(0.2);
-
   const rawEntries = useMemo(() => {
     if (!assessment?.labels) return [];
     const entries = Object.entries(assessment.labels);
@@ -111,6 +127,16 @@ export function ElementInspectorDrawer({
     const q = searchFilter.trim().toLowerCase();
     return filteredByConf.filter(([tag]) => tag.toLowerCase().includes(q));
   }, [rawEntries, minConfidenceFilter, searchFilter]);
+
+  const handleSelectPage = (pageIdx: number) => {
+    if (pageIdx === activePageIndex && assessment) return;
+    setActivePageIndex(pageIdx);
+    const selectedPage = pages[pageIdx];
+    if (selectedPage) {
+      setCurrentThumbUrl(selectedPage.thumbUrl || selectedPage.regularUrl);
+    }
+    loadAnalysis(pageIdx);
+  };
 
   async function handleAddBlacklist() {
     if (!selectedTags.length) return;
@@ -150,9 +176,9 @@ export function ElementInspectorDrawer({
         {loading && <div className="inspector-scan-bar" />}
         <header className="inspector-header">
           <div className="inspector-target-info">
-            {target.url && (
+            {(currentThumbUrl || target.url) && (
               <img
-                src={target.url}
+                src={currentThumbUrl || target.url}
                 alt="画作缩略图"
                 className="inspector-target-thumb"
                 onError={(e) => {
@@ -172,8 +198,8 @@ export function ElementInspectorDrawer({
             <button
               type="button"
               className="inspector-refresh-btn"
-              title="重新解析当前作品特征"
-              onClick={loadAnalysis}
+              title="重新解析当前单页特征"
+              onClick={() => loadAnalysis(activePageIndex)}
               disabled={loading}
             >
               <span className={`inspector-refresh-icon ${loading ? "spinning" : ""}`}>🔄</span>
@@ -188,6 +214,32 @@ export function ElementInspectorDrawer({
         {notice && <AppNotice tone="success" onDismiss={() => setNotice("")}>{notice}</AppNotice>}
         {error && <AppNotice tone="error">{error}</AppNotice>}
 
+        {pageCount > 1 && pages.length > 1 && (
+          <div className="inspector-multi-page-section">
+            <div className="inspector-focus-notice">
+              <span className="inspector-focus-icon">💡</span>
+              <span className="inspector-focus-text">
+                已自动匹配视口焦点单页 <strong>(P{activePageIndex + 1})</strong> · 多图作品可在下方自由切换单页
+              </span>
+            </div>
+            <div className="inspector-page-picker-row" role="tablist" aria-label="多图分页选择器">
+              {pages.map((p) => (
+                <button
+                  key={p.pageIndex}
+                  type="button"
+                  role="tab"
+                  aria-selected={activePageIndex === p.pageIndex}
+                  className={`inspector-page-pill ${activePageIndex === p.pageIndex ? "active" : ""}`}
+                  onClick={() => handleSelectPage(p.pageIndex)}
+                  title={`查看第 ${p.pageIndex + 1} 页的 AI 视觉特征`}
+                >
+                  {p.pageIndex === 0 ? `P1 (主图)` : `P${p.pageIndex + 1}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="inspector-loading">
             <div className="inspector-radar-container">
@@ -196,7 +248,7 @@ export function ElementInspectorDrawer({
               <span className="inspector-radar-icon">⚡</span>
             </div>
             <div className="inspector-loading-text">
-              <strong>正在深度解析新画作特征...</strong>
+              <strong>正在深度解析 P{activePageIndex + 1} 单页特征...</strong>
               <span>WD Tagger 正在逐层提取当前单张画作的视觉特征向量</span>
             </div>
             <div className="inspector-skeleton-grid">
@@ -212,7 +264,7 @@ export function ElementInspectorDrawer({
         ) : error && !assessment ? (
           <div className="inspector-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px", marginTop: "40px" }}>
             <p style={{ maxWidth: "320px", lineHeight: 1.5 }}>{error}</p>
-            <Button variant="primary" onClick={loadAnalysis}>
+            <Button variant="primary" onClick={() => loadAnalysis(activePageIndex)}>
               🔄 重新尝试解析
             </Button>
           </div>
@@ -250,74 +302,78 @@ export function ElementInspectorDrawer({
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
               />
-              <span className="inspector-status-badge">
-                ✨ 显示 {sortedTags.length} 个标签
+              <span className="inspector-count-chip">
+                {sortedTags.length} / {rawEntries.length}
               </span>
             </div>
 
-            <div className="inspector-tag-grid">
+            <div className="inspector-tags-grid">
               {sortedTags.length === 0 ? (
-                <div className="inspector-empty">没有匹配的标签</div>
+                <div className="inspector-no-tags">
+                  <span>🍃 当前筛选条件或搜索无匹配标签</span>
+                </div>
               ) : (
-                sortedTags.map(([tag, conf], idx) => {
-                  const isChecked = selectedTags.includes(tag);
-                  const pct = Math.round(conf * 100);
+                sortedTags.map(([tag, confidence]) => {
+                  const isSelected = selectedTags.includes(tag);
+                  const pct = Math.round(confidence * 100);
+                  const isHigh = confidence >= 0.7;
+                  const isMedium = confidence >= 0.4 && confidence < 0.7;
                   return (
                     <button
                       key={tag}
                       type="button"
-                      style={{ "--chip-idx": idx } as React.CSSProperties}
-                      className={`inspector-tag-chip tag-chip-enter ${isChecked ? "selected" : ""}`}
+                      className={`inspector-tag-pill ${isSelected ? "selected" : ""} ${isHigh ? "high-conf" : isMedium ? "med-conf" : ""}`}
                       onClick={() => toggleTag(tag)}
+                      title={`置信度: ${pct}% · 点击选择以加入拦截`}
                     >
-                      <span className="chip-check">{isChecked ? "✓" : "+"}</span>
-                      <span className="chip-label">{tag.replaceAll("_", " ")}</span>
-                      <span className="chip-score">{pct}%</span>
+                      <span className="inspector-tag-name">{tag}</span>
+                      <span className="inspector-tag-conf">{pct}%</span>
+                      <span className="inspector-tag-check">{isSelected ? "✓" : "+"}</span>
                     </button>
                   );
                 })
               )}
             </div>
 
-            <footer className="inspector-footer">
-              <div className="inspector-rule-settings">
-                <label>
-                  <span>触发动作</span>
-                  <select value={action} onChange={(e) => setAction(e.target.value as "hide" | "blur")}>
-                    <option value="hide">完全遮挡 / 隐藏 (Hide)</option>
-                    <option value="blur">毛玻璃模糊 (Blur)</option>
+            <div className="inspector-action-footer">
+              <div className="inspector-action-header">
+                <strong>🛡️ 自定义拦截规则设定</strong>
+                <span>选中 {selectedTags.length} 个标签</span>
+              </div>
+              <div className="inspector-rule-inputs">
+                <div className="inspector-input-group">
+                  <label>拦截动作</label>
+                  <select
+                    className="inspector-select"
+                    value={action}
+                    onChange={(e) => setAction(e.target.value as "hide" | "blur")}
+                  >
+                    <option value="hide">完全遮挡 / 隐藏</option>
+                    <option value="blur">高斯模糊保护</option>
                   </select>
-                </label>
-                <label>
-                  <span>置信度阈值 ({Math.round(threshold * 100)}%)</span>
+                </div>
+                <div className="inspector-input-group">
+                  <label>触发阈值 ({Math.round(threshold * 100)}%)</label>
                   <input
                     type="range"
                     min="0.1"
                     max="0.9"
                     step="0.05"
                     value={threshold}
-                    onChange={(e) => setThreshold(Number(e.target.value))}
+                    className="inspector-slider"
+                    onChange={(e) => setThreshold(parseFloat(e.target.value))}
                   />
-                </label>
+                </div>
               </div>
-
-              <div className="inspector-action-row">
-                <Button
-                  variant="primary"
-                  disabled={!selectedTags.length || saving}
-                  busy={saving}
-                  busyLabel="正在保存规则..."
-                  onClick={() => void handleAddBlacklist()}
-                >
-                  🚫 将所选 {selectedTags.length > 0 ? `(${selectedTags.length})` : ""} 加入拦截黑名单
-                </Button>
-                {selectedTags.length > 0 && (
-                  <Button variant="ghost" size="small" onClick={() => setSelectedTags([])}>
-                    清空选择
-                  </Button>
-                )}
-              </div>
-            </footer>
+              <Button
+                variant="primary"
+                disabled={selectedTags.length === 0 || saving}
+                onClick={handleAddBlacklist}
+                className="inspector-submit-btn"
+              >
+                {saving ? "正在生效..." : `🚫 将选中的 ${selectedTags.length} 个标签加入拦截规则`}
+              </Button>
+            </div>
           </>
         ) : null}
       </div>

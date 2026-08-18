@@ -127,7 +127,23 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
             (u.includes("/" + selectedArtworkId + "_") || u.includes("/" + selectedArtworkId + "."))
           );
           const imgs = Array.from(document.querySelectorAll("main figure img, main [role='presentation'] img, img[src*='pximg.net']"));
-          const candidateImg = imgs.find((el) => isArtworkUrlForId(el.getAttribute("src") || el.currentSrc || el.src || ""));
+          const artworkImgs = imgs.filter((el) => isArtworkUrlForId(el.getAttribute("src") || el.currentSrc || el.src || ""));
+
+          let candidateImg = null;
+          if (artworkImgs.length > 0) {
+            let minDistance = Infinity;
+            const viewCenter = window.innerHeight / 2;
+            for (const el of artworkImgs) {
+              const rect = el.getBoundingClientRect();
+              const centerY = rect.top + rect.height / 2;
+              const dist = Math.abs(centerY - viewCenter);
+              if (dist < minDistance) {
+                minDistance = dist;
+                candidateImg = el;
+              }
+            }
+          }
+
           const imgSrc = candidateImg ? (candidateImg.getAttribute("src") || candidateImg.currentSrc || candidateImg.src || "") : "";
           if (imgSrc && isArtworkUrlForId(imgSrc)) {
             console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId + ":" + encodeURIComponent(imgSrc));

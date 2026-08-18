@@ -37,7 +37,9 @@ import {
   type RuleSandboxResult,
   type VisionAssessment,
   type WorkDeletionPreview,
-  type WorkDeletionResult
+  type WorkDeletionResult,
+  type InspectArtworkPage,
+  type InspectArtworkResponse
 } from "@sanctuary/domain";
 import { VisionClient } from "./vision-client.js";
 import type { VisionProcessOptions } from "./vision-client.js";
@@ -564,142 +566,195 @@ function registerIpc(): void {
     remoteReviewCache.clear();
     return nextGroups;
   });
-  ipcMain.handle("vision:inspect-artwork", async (_event, value: unknown): Promise<VisionAssessment | null> => {
+  ipcMain.handle("vision:inspect-artwork", async (_event, value: unknown): Promise<InspectArtworkResponse | null> => {
     if (!database || !vision) throw new Error("Vision service is not ready");
     if (!value || typeof value !== "object") throw new Error("Invalid inspect payload");
-    const { workId, artworkId, url } = value as { workId?: unknown; artworkId?: unknown; url?: unknown };
+    const { workId, artworkId, url, pageIndex } = value as {
+      workId?: unknown;
+      artworkId?: unknown;
+      url?: unknown;
+      pageIndex?: unknown;
+    };
 
     const fingerprint = rulesFingerprint(database.listElementFilterSettings(), customElementGroups());
     const reviewSession = exploreView?.webContents.session ?? session.defaultSession;
+    const requestedPageIndex = typeof pageIndex === "number" && pageIndex >= 0 ? pageIndex : undefined;
 
-    const trimmedArtworkId = typeof artworkId === "string" && /^\d+$/.test(artworkId.trim()) ? artworkId.trim() : "";
-
-    // 1. Direct URL Cache & Fetch (strictly for this artworkId if provided)
-    if (typeof url === "string" && url.trim()) {
-      const isMatchingArtwork = !trimmedArtworkId || url.includes(`/${trimmedArtworkId}_`) || url.includes(`/${trimmedArtworkId}.`);
-      if (isMatchingArtwork) {
-        const normalizedUrl = normalizePixivArtworkImageUrl(url) || url;
-        const persisted = database.getRemoteImageReview({
-          normalizedUrl,
-          engine: vision.engine,
-          engineVersion: vision.engineVersion,
-          rulesFingerprint: fingerprint
-        });
-        if (persisted?.assessment && persisted.assessment.status === "complete") {
-          return persisted.assessment;
-        }
-
-        try {
-          const outcome = await performRemoteArtworkReview(
-            normalizedUrl,
-            trimmedArtworkId ? `https://www.pixiv.net/artworks/${trimmedArtworkId}` : PIXIV_HOME_URL,
-            reviewSession,
-            {
-              normalizedUrl,
-              engine: vision.engine,
-              engineVersion: vision.engineVersion,
-              rulesFingerprint: fingerprint
-            },
-            database.listElementFilterSettings()
-          );
-          return outcome.assessment;
-        } catch (err) {
-          console.warn("[vision-inspect] failed to inspect direct url:", err);
-        }
-      }
-    }
-
-    // 2. Check cached reviews by Artwork ID
-    if (trimmedArtworkId) {
-      const cached = database.findRemoteImageReviewByArtworkId(trimmedArtworkId);
-      if (cached?.assessment && cached.assessment.status === "complete") {
-        return cached.assessment;
-      }
-    }
-
-    // 3. Check Local Database Assets
+    // 1. Local Database Work
     if (typeof workId === "string" && workId.trim()) {
       const work = database.getWork(workId);
-      const asset = work?.assets[0];
-      if (asset?.path && existsSync(asset.path)) {
-        return await classifyFailClosed(vision, asset.path, 30_000);
+      if (work) {
+        const pages: InspectArtworkPage[] = work.assets.map((a, i) => ({
+          pageIndex: i,
+          thumbUrl: a.path,
+          regularUrl: a.path
+        }));
+        const activeIdx = requestedPageIndex !== undefined && requestedPageIndex < pages.length ? requestedPageIndex : 0;
+        const activeAsset = work.assets[activeIdx] || work.assets[0];
+        let assessment: VisionAssessment | null = null;
+        if (activeAsset?.path && existsSync(activeAsset.path)) {
+          assessment = await classifyFailClosed(vision, activeAsset.path, 30_000);
+        }
+        return {
+          assessment,
+          artworkId: work.id,
+          title: work.title,
+          url: activeAsset?.path || "",
+          pageCount: Math.max(1, pages.length),
+          activePageIndex: activeIdx,
+          pages: pages.length > 0 ? pages : [{ pageIndex: 0, thumbUrl: activeAsset?.path || "", regularUrl: activeAsset?.path || "" }]
+        };
       }
     }
 
+    let trimmedArtworkId = typeof artworkId === "string" && /^\d+$/.test(artworkId.trim()) ? artworkId.trim() : "";
+    if (!trimmedArtworkId && typeof url === "string") {
+      const match = url.match(/\/(\d+)_(?:p\d+|_|\.)/);
+      if (match && match[1]) trimmedArtworkId = match[1];
+    }
+
+    // 2. Multi-page Metadata Discovery via Pixiv Ajax API
+    let pages: InspectArtworkPage[] = [];
+    let illustTitle = "";
+    let totalPageCount = 1;
+
     if (trimmedArtworkId) {
+      try {
+        const userAgent = exploreView?.webContents.getUserAgent() || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
+        const response = await reviewSession.fetch(`https://www.pixiv.net/ajax/illust/${trimmedArtworkId}?lang=zh`, {
+          headers: {
+            Referer: `https://www.pixiv.net/artworks/${trimmedArtworkId}`,
+            "User-Agent": userAgent,
+            Accept: "application/json"
+          }
+        });
+        if (response.ok) {
+          const data = (await response.json()) as {
+            error?: boolean;
+            body?: {
+              title?: string;
+              pageCount?: number;
+              urls?: { regular?: string; small?: string; thumb?: string; original?: string };
+            };
+          };
+          if (!data.error && data.body) {
+            illustTitle = data.body.title || "";
+            totalPageCount = data.body.pageCount || 1;
+            if (totalPageCount > 1) {
+              const pagesResp = await reviewSession.fetch(`https://www.pixiv.net/ajax/illust/${trimmedArtworkId}/pages?lang=zh`, {
+                headers: {
+                  Referer: `https://www.pixiv.net/artworks/${trimmedArtworkId}`,
+                  "User-Agent": userAgent,
+                  Accept: "application/json"
+                }
+              });
+              if (pagesResp.ok) {
+                const pagesData = (await pagesResp.json()) as {
+                  error?: boolean;
+                  body?: Array<{ urls?: { thumb_mini?: string; small?: string; regular?: string; original?: string } }>;
+                };
+                if (!pagesData.error && Array.isArray(pagesData.body)) {
+                  pages = pagesData.body.map((p, i) => ({
+                    pageIndex: i,
+                    thumbUrl: p.urls?.thumb_mini || p.urls?.small || p.urls?.regular || "",
+                    regularUrl: p.urls?.regular || p.urls?.original || p.urls?.small || ""
+                  }));
+                }
+              }
+            } else if (data.body.urls) {
+              const u = data.body.urls;
+              pages = [{
+                pageIndex: 0,
+                thumbUrl: u.thumb || u.small || u.regular || "",
+                regularUrl: u.regular || u.original || u.small || ""
+              }];
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[vision-inspect] failed to fetch pixiv ajax illust:", err);
+      }
+    }
+
+    // Determine active page index
+    let activePageIndex = 0;
+    if (requestedPageIndex !== undefined && pages.length > 0 && requestedPageIndex < pages.length) {
+      activePageIndex = requestedPageIndex;
+    } else if (typeof url === "string" && url.trim()) {
+      const pageMatch = url.match(/_p(\d+)_/);
+      if (pageMatch && pageMatch[1]) {
+        const parsed = parseInt(pageMatch[1], 10);
+        if (pages.length === 0 || parsed < pages.length) activePageIndex = parsed;
+      }
+    }
+
+    const targetImageUrl = pages[activePageIndex]?.regularUrl || (typeof url === "string" ? url : "") || (pages[0]?.regularUrl || "");
+    if (!targetImageUrl && trimmedArtworkId) {
       const works = database.queryWorks({ search: trimmedArtworkId, limit: 1 });
       const localMatch = works.items.find((w) => w.sourceWorkId === trimmedArtworkId || w.id === trimmedArtworkId);
       const localAsset = localMatch?.coverAsset;
       if (localAsset?.path && existsSync(localAsset.path)) {
-        return await classifyFailClosed(vision, localAsset.path, 30_000);
-      }
-
-      // 4. Try extracting active image src from live ExploreView DOM
-      let targetImageUrl: string | null = null;
-      if (exploreView && !exploreView.webContents.isDestroyed()) {
-        try {
-          const domUrl = await exploreView.webContents.executeJavaScript(`
-            (() => {
-              const imgs = Array.from(document.querySelectorAll('main figure img, main [role="presentation"] img, img[src*="${trimmedArtworkId}"]'));
-              const match = imgs.find(img => {
-                const src = img.getAttribute('src') || img.currentSrc || img.src || '';
-                return src.includes('/${trimmedArtworkId}_') || src.includes('/${trimmedArtworkId}.');
-              });
-              return match ? (match.getAttribute('src') || match.currentSrc || match.src) : null;
-            })()
-          `);
-          if (typeof domUrl === "string" && domUrl.includes("pximg.net")) {
-            targetImageUrl = domUrl;
-          }
-        } catch {}
-      }
-
-      // 5. Try Pixiv Ajax Illust API
-      if (!targetImageUrl) {
-        try {
-          const userAgent = exploreView?.webContents.getUserAgent() || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-          const response = await reviewSession.fetch(`https://www.pixiv.net/ajax/illust/${trimmedArtworkId}?lang=zh`, {
-            headers: {
-              Referer: `https://www.pixiv.net/artworks/${trimmedArtworkId}`,
-              "User-Agent": userAgent,
-              Accept: "application/json"
-            }
-          });
-          if (response.ok) {
-            const data = (await response.json()) as { error?: boolean; body?: { urls?: { regular?: string; small?: string; thumb?: string; original?: string } } };
-            if (!data.error && data.body?.urls) {
-              targetImageUrl = data.body.urls.regular || data.body.urls.small || data.body.urls.original || data.body.urls.thumb || null;
-            }
-          }
-        } catch (err) {
-          console.warn("[vision-inspect] failed to fetch pixiv ajax illust:", err);
-        }
-      }
-
-      // 6. Review the discovered remote image URL
-      if (targetImageUrl) {
-        const normalized = normalizePixivArtworkImageUrl(targetImageUrl) || targetImageUrl;
-        mainWindow?.webContents.send("explore:open-inspector", {
+        const assessment = await classifyFailClosed(vision, localAsset.path, 30_000);
+        return {
+          assessment,
           artworkId: trimmedArtworkId,
-          url: normalized
-        });
-        const outcome = await performRemoteArtworkReview(
-          normalized,
-          `https://www.pixiv.net/artworks/${trimmedArtworkId}`,
-          reviewSession,
-          {
-            normalizedUrl: normalized,
-            engine: vision.engine,
-            engineVersion: vision.engineVersion,
-            rulesFingerprint: fingerprint
-          },
-          database.listElementFilterSettings()
-        );
-        return outcome.assessment;
+          title: localMatch?.title || "",
+          url: localAsset.path,
+          pageCount: 1,
+          activePageIndex: 0,
+          pages: [{ pageIndex: 0, thumbUrl: localAsset.path, regularUrl: localAsset.path }]
+        };
       }
     }
 
-    return null;
+    if (!targetImageUrl) return null;
+
+    const normalizedUrl = normalizePixivArtworkImageUrl(targetImageUrl) || targetImageUrl;
+
+    const persisted = database.getRemoteImageReview({
+      normalizedUrl,
+      engine: vision.engine,
+      engineVersion: vision.engineVersion,
+      rulesFingerprint: fingerprint
+    });
+    if (persisted?.assessment && persisted.assessment.status === "complete") {
+      return {
+        assessment: persisted.assessment,
+        artworkId: trimmedArtworkId || undefined,
+        title: illustTitle || undefined,
+        url: targetImageUrl,
+        pageCount: Math.max(1, pages.length || totalPageCount || 1),
+        activePageIndex,
+        pages: pages.length > 0 ? pages : [{ pageIndex: 0, thumbUrl: targetImageUrl, regularUrl: targetImageUrl }]
+      };
+    }
+
+    try {
+      const outcome = await performRemoteArtworkReview(
+        normalizedUrl,
+        trimmedArtworkId ? `https://www.pixiv.net/artworks/${trimmedArtworkId}` : PIXIV_HOME_URL,
+        reviewSession,
+        {
+          normalizedUrl,
+          engine: vision.engine,
+          engineVersion: vision.engineVersion,
+          rulesFingerprint: fingerprint
+        },
+        database.listElementFilterSettings()
+      );
+      return {
+        assessment: outcome.assessment,
+        artworkId: trimmedArtworkId || undefined,
+        title: illustTitle || undefined,
+        url: targetImageUrl,
+        pageCount: Math.max(1, pages.length || totalPageCount || 1),
+        activePageIndex,
+        pages: pages.length > 0 ? pages : [{ pageIndex: 0, thumbUrl: targetImageUrl, regularUrl: targetImageUrl }]
+      };
+    } catch (err) {
+      console.warn("[vision-inspect] failed to perform remote review:", err);
+      return null;
+    }
   });
   ipcMain.handle("filters:test-image", async (): Promise<RuleSandboxResult | null> => {
     if (!database || !vision || !mainWindow) throw new Error("Application is not ready");
@@ -899,7 +954,15 @@ function registerIpc(): void {
     const rawUrl = (value as { url?: string }).url;
     if (typeof rawUrl === "string" && isPixivArtworkImageUrl(rawUrl)) {
       const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl) || rawUrl;
-      mainWindow?.webContents.send("explore:open-inspector", { url: normalizedUrl });
+      const artworkIdMatch = normalizedUrl.match(/\/(\d+)_(?:p\d+|_|\.)/);
+      const artworkId = artworkIdMatch && artworkIdMatch[1] ? artworkIdMatch[1] : undefined;
+      const pageMatch = normalizedUrl.match(/_p(\d+)_/);
+      const pageIndex = pageMatch && pageMatch[1] ? parseInt(pageMatch[1], 10) : undefined;
+      mainWindow?.webContents.send("explore:open-inspector", {
+        artworkId,
+        url: normalizedUrl,
+        pageIndex
+      });
     }
   });
 
