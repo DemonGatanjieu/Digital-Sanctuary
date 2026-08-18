@@ -36,4 +36,15 @@ describe("Pixiv DOM adapter", () => {
     expect(buildPixivReviewReleaseScript("https://i.pximg.net/img-original/1.jpg"))
       .toContain("releaseOneShot");
   });
+
+  it("is syntactically valid JavaScript without compilation errors", () => {
+    const adapterScript = buildPixivDomAdapterScript("test-token");
+    expect(() => new Function(adapterScript)).not.toThrow();
+
+    const blockedScript = buildPixivBlockedReviewScript("https://i.pximg.net/img-original/1.jpg", ["blood"]);
+    expect(() => new Function(blockedScript)).not.toThrow();
+
+    const releaseScript = buildPixivReviewReleaseScript("https://i.pximg.net/img-original/1.jpg");
+    expect(() => new Function(releaseScript)).not.toThrow();
+  });
 });
