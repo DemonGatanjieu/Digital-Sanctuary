@@ -572,41 +572,46 @@ function registerIpc(): void {
     const fingerprint = rulesFingerprint(database.listElementFilterSettings(), customElementGroups());
     const reviewSession = exploreView?.webContents.session ?? session.defaultSession;
 
-    // 1. Direct URL Cache & Fetch
-    if (typeof url === "string" && url.trim()) {
-      const normalizedUrl = normalizePixivArtworkImageUrl(url) || url;
-      const persisted = database.getRemoteImageReview({
-        normalizedUrl,
-        engine: vision.engine,
-        engineVersion: vision.engineVersion,
-        rulesFingerprint: fingerprint
-      });
-      if (persisted?.assessment && persisted.assessment.status === "complete") {
-        return persisted.assessment;
-      }
+    const trimmedArtworkId = typeof artworkId === "string" && /^\d+$/.test(artworkId.trim()) ? artworkId.trim() : "";
 
-      try {
-        const outcome = await performRemoteArtworkReview(
+    // 1. Direct URL Cache & Fetch (strictly for this artworkId if provided)
+    if (typeof url === "string" && url.trim()) {
+      const isMatchingArtwork = !trimmedArtworkId || url.includes(`/${trimmedArtworkId}_`) || url.includes(`/${trimmedArtworkId}.`);
+      if (isMatchingArtwork) {
+        const normalizedUrl = normalizePixivArtworkImageUrl(url) || url;
+        const persisted = database.getRemoteImageReview({
           normalizedUrl,
-          typeof artworkId === "string" && artworkId ? `https://www.pixiv.net/artworks/${artworkId}` : PIXIV_HOME_URL,
-          reviewSession,
-          {
+          engine: vision.engine,
+          engineVersion: vision.engineVersion,
+          rulesFingerprint: fingerprint
+        });
+        if (persisted?.assessment && persisted.assessment.status === "complete") {
+          return persisted.assessment;
+        }
+
+        try {
+          const outcome = await performRemoteArtworkReview(
             normalizedUrl,
-            engine: vision.engine,
-            engineVersion: vision.engineVersion,
-            rulesFingerprint: fingerprint
-          },
-          database.listElementFilterSettings()
-        );
-        return outcome.assessment;
-      } catch (err) {
-        console.warn("[vision-inspect] failed to inspect direct url:", err);
+            trimmedArtworkId ? `https://www.pixiv.net/artworks/${trimmedArtworkId}` : PIXIV_HOME_URL,
+            reviewSession,
+            {
+              normalizedUrl,
+              engine: vision.engine,
+              engineVersion: vision.engineVersion,
+              rulesFingerprint: fingerprint
+            },
+            database.listElementFilterSettings()
+          );
+          return outcome.assessment;
+        } catch (err) {
+          console.warn("[vision-inspect] failed to inspect direct url:", err);
+        }
       }
     }
 
     // 2. Check cached reviews by Artwork ID
-    if (typeof artworkId === "string" && artworkId.trim()) {
-      const cached = database.findRemoteImageReviewByArtworkId(artworkId.trim());
+    if (trimmedArtworkId) {
+      const cached = database.findRemoteImageReviewByArtworkId(trimmedArtworkId);
       if (cached?.assessment && cached.assessment.status === "complete") {
         return cached.assessment;
       }
@@ -621,9 +626,10 @@ function registerIpc(): void {
       }
     }
 
-    if (typeof artworkId === "string" && artworkId.trim()) {
-      const works = database.queryWorks({ search: artworkId.trim(), limit: 1 });
-      const localAsset = works.items[0]?.coverAsset;
+    if (trimmedArtworkId) {
+      const works = database.queryWorks({ search: trimmedArtworkId, limit: 1 });
+      const localMatch = works.items.find((w) => w.sourceWorkId === trimmedArtworkId || w.id === trimmedArtworkId);
+      const localAsset = localMatch?.coverAsset;
       if (localAsset?.path && existsSync(localAsset.path)) {
         return await classifyFailClosed(vision, localAsset.path, 30_000);
       }
@@ -634,8 +640,12 @@ function registerIpc(): void {
         try {
           const domUrl = await exploreView.webContents.executeJavaScript(`
             (() => {
-              const img = document.querySelector('main figure img, [role="presentation"] img, img[src*="${artworkId}"]');
-              return img ? (img.getAttribute('src') || img.currentSrc || img.src) : null;
+              const imgs = Array.from(document.querySelectorAll('main figure img, main [role="presentation"] img, img[src*="${trimmedArtworkId}"]'));
+              const match = imgs.find(img => {
+                const src = img.getAttribute('src') || img.currentSrc || img.src || '';
+                return src.includes('/${trimmedArtworkId}_') || src.includes('/${trimmedArtworkId}.');
+              });
+              return match ? (match.getAttribute('src') || match.currentSrc || match.src) : null;
             })()
           `);
           if (typeof domUrl === "string" && domUrl.includes("pximg.net")) {

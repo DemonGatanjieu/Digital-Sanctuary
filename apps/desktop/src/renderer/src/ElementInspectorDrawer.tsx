@@ -32,6 +32,7 @@ export function ElementInspectorDrawer({
   const loadAnalysis = useCallback(() => {
     if (!target) return;
     setLoading(true);
+    setAssessment(null);
     setError("");
     setNotice("");
     setSelectedTags([]);

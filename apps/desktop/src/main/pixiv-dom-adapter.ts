@@ -116,11 +116,15 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
           event.stopPropagation();
           const selectedArtworkId = currentArtworkId();
           if (!selectedArtworkId) return;
-          const isArtworkUrl = (u) => Boolean(u && (u.includes("/img-master/") || u.includes("/img-original/") || u.includes("/custom-thumb/")));
-          const imgs = Array.from(document.querySelectorAll("main figure img, [role='presentation'] img, img[src*='pximg.net']"));
-          const candidateImg = imgs.find((el) => isArtworkUrl(el.getAttribute("src") || el.currentSrc || el.src || ""));
+          const isArtworkUrlForId = (u) => Boolean(
+            u &&
+            (u.includes("/img-master/") || u.includes("/img-original/") || u.includes("/custom-thumb/")) &&
+            (u.includes("/" + selectedArtworkId + "_") || u.includes("/" + selectedArtworkId + "."))
+          );
+          const imgs = Array.from(document.querySelectorAll("main figure img, main [role='presentation'] img, img[src*='pximg.net']"));
+          const candidateImg = imgs.find((el) => isArtworkUrlForId(el.getAttribute("src") || el.currentSrc || el.src || ""));
           const imgSrc = candidateImg ? (candidateImg.getAttribute("src") || candidateImg.currentSrc || candidateImg.src || "") : "";
-          if (imgSrc && isArtworkUrl(imgSrc)) {
+          if (imgSrc && isArtworkUrlForId(imgSrc)) {
             console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId + ":" + encodeURIComponent(imgSrc));
           } else {
             console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId);
