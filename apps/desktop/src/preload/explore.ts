@@ -1,4 +1,5 @@
 import { ipcRenderer, webFrame } from "electron";
+import { applyProtectionModeAttribute } from "./explore-dom.js";
 
 type ReviewPriority = "visible" | "near";
 type ReviewState = "allowed" | "blocked" | "unavailable";
@@ -68,7 +69,12 @@ const submittedPriorities = new Map<string, ReviewPriority>();
 let protectionEnabled = true;
 let activeDislikePopoverUrl: string | null = null;
 let activeDislikePopoverCleanup: (() => void) | null = null;
-document.documentElement.setAttribute("data-sanctuary-protection-mode", "on");
+
+function syncProtectionModeAttribute(): void {
+  applyProtectionModeAttribute(document.documentElement, protectionEnabled);
+}
+
+syncProtectionModeAttribute();
 
 const protectionCss = `
   html[data-sanctuary-protection-mode="on"] img[src*="i.pximg.net"][src*="/img-master/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
@@ -258,6 +264,14 @@ const protectionCss = `
     transition: opacity 150ms ease, transform 150ms ease, background 150ms ease;
     cursor: pointer;
     backdrop-filter: blur(14px);
+    box-sizing: border-box !important;
+    width: auto !important;
+    min-width: max-content !important;
+    max-width: none !important;
+    height: 30px !important;
+    white-space: nowrap !important;
+    writing-mode: horizontal-tb !important;
+    line-height: 1 !important;
   }
   *:hover > .sanctuary-dislike-control,
   *:focus-within > .sanctuary-dislike-control,
@@ -1036,6 +1050,7 @@ function handleImageLifecycle(event: Event): void {
 }
 
 function startObserver(): void {
+  syncProtectionModeAttribute();
   for (const image of document.images) trackImage(image);
   const mutationObserver = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
@@ -1064,12 +1079,12 @@ function startObserver(): void {
 }
 
 function setProtectionEnabled(enabled: boolean): void {
-  if (protectionEnabled === enabled) return;
+  if (protectionEnabled === enabled) {
+    syncProtectionModeAttribute();
+    return;
+  }
   protectionEnabled = enabled;
-  document.documentElement.setAttribute(
-    "data-sanctuary-protection-mode",
-    enabled ? "on" : "off"
-  );
+  syncProtectionModeAttribute();
   outcomes.clear();
   submittedPriorities.clear();
   nearImages.clear();
