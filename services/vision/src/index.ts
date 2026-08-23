@@ -15,13 +15,35 @@ input.on("line", async (line) => {
     const request: unknown = JSON.parse(line);
     if (!isVisionRequest(request)) throw new Error("Invalid vision request");
     id = request.id;
-    const assessment = await engine.classify(request.payload.imagePath);
-    write({
-      version: VISION_PROTOCOL_VERSION,
-      id,
-      type: "classify-image-result",
-      payload: assessment
-    });
+    if (request.type === "health-check") {
+      write({
+        version: VISION_PROTOCOL_VERSION,
+        id,
+        type: "health-check-result",
+        payload: {
+          status: "ready",
+          engine: "filename-probe",
+          engineVersion: "0.1.0",
+          executionProvider: "development-probe"
+        }
+      });
+    } else if (request.type === "compute-technical-profile") {
+      const payload = await engine.computeTechnicalProfile(request.payload.imagePath);
+      write({
+        version: VISION_PROTOCOL_VERSION,
+        id,
+        type: "compute-technical-profile-result",
+        payload
+      });
+    } else {
+      const assessment = await engine.classify(request.payload.imagePath);
+      write({
+        version: VISION_PROTOCOL_VERSION,
+        id,
+        type: "classify-image-result",
+        payload: assessment
+      });
+    }
   } catch (error) {
     write({
       version: VISION_PROTOCOL_VERSION,
@@ -41,4 +63,3 @@ function write(response: VisionResponse): void {
 
 export * from "./fixtures.js";
 export * from "./engine.js";
-

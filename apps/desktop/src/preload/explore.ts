@@ -1,12 +1,24 @@
 import { ipcRenderer, webFrame } from "electron";
 
 type ReviewPriority = "visible" | "near";
-type ReviewState = "allowed" | "blocked";
+type ReviewState = "allowed" | "blocked" | "unavailable";
 
 interface ReviewResultMessage {
   normalizedUrl: string;
   state: ReviewState;
   reasons: string[];
+}
+
+interface PreferenceCalibrationResult {
+  success: boolean;
+  feedbackId: string | null;
+  pageKey: string;
+  changes: Array<{
+    label: string;
+    confidence: number;
+    oldThreshold: number;
+    newThreshold: number;
+  }>;
 }
 
 const REVIEW_STATE_ATTRIBUTE = "data-sanctuary-review-state";
@@ -18,20 +30,23 @@ const trackedImages = new Map<HTMLImageElement, string>();
 const nearImages = new Map<string, Set<HTMLImageElement>>();
 const visibleImages = new Map<string, Set<HTMLImageElement>>();
 const submittedPriorities = new Map<string, ReviewPriority>();
+let protectionEnabled = true;
+document.documentElement.setAttribute("data-sanctuary-protection-mode", "on");
 
 const protectionCss = `
-  img[src*="i.pximg.net"][src*="/img-master/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
-  img[src*="i.pximg.net"][src*="/img-original/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
-  img[src*="i.pximg.net"][src*="/custom-thumb/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
-  img[srcset*="i.pximg.net"][srcset*="/img-master/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
-  img[srcset*="i.pximg.net"][srcset*="/img-original/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
-  img[srcset*="i.pximg.net"][srcset*="/custom-thumb/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
-  img[${REVIEW_STATE_ATTRIBUTE}="pending"] {
-    filter: blur(32px) saturate(0.65) !important;
-    opacity: 0.16 !important;
-    transition: filter 180ms ease, opacity 180ms ease !important;
+  html[data-sanctuary-protection-mode="on"] img[src*="i.pximg.net"][src*="/img-master/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
+  html[data-sanctuary-protection-mode="on"] img[src*="i.pximg.net"][src*="/img-original/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
+  html[data-sanctuary-protection-mode="on"] img[src*="i.pximg.net"][src*="/custom-thumb/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
+  html[data-sanctuary-protection-mode="on"] img[srcset*="i.pximg.net"][srcset*="/img-master/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
+  html[data-sanctuary-protection-mode="on"] img[srcset*="i.pximg.net"][srcset*="/img-original/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
+  html[data-sanctuary-protection-mode="on"] img[srcset*="i.pximg.net"][srcset*="/custom-thumb/"]:not([${REVIEW_STATE_ATTRIBUTE}="allowed"]),
+  html[data-sanctuary-protection-mode="on"] img[${REVIEW_STATE_ATTRIBUTE}="pending"],
+  html[data-sanctuary-protection-mode="on"] img[${REVIEW_STATE_ATTRIBUTE}="unavailable"] {
+    filter: blur(18px) saturate(0.72) !important;
+    opacity: 0.08 !important;
+    transition: filter 220ms ease, opacity 220ms ease !important;
   }
-  img[${REVIEW_STATE_ATTRIBUTE}="blocked"] {
+  html[data-sanctuary-protection-mode="on"] img[${REVIEW_STATE_ATTRIBUTE}="blocked"] {
     visibility: hidden !important;
     opacity: 0 !important;
   }
@@ -41,7 +56,10 @@ const protectionCss = `
     visibility: visible !important;
     transition: filter 180ms ease, opacity 180ms ease !important;
   }
-  .sanctuary-blocked-overlay {
+  html[data-sanctuary-protection-mode="off"] .sanctuary-review-overlay {
+    display: none !important;
+  }
+  .sanctuary-review-overlay {
     position: absolute;
     inset: 0;
     z-index: 2147483640;
@@ -49,23 +67,30 @@ const protectionCss = `
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 12px;
-    background: rgba(245, 247, 250, 0.96);
-    border: 1px solid rgba(209, 213, 219, 0.9);
-    border-radius: 8px;
+    gap: 9px;
+    padding: 14px;
+    background:
+      radial-gradient(circle at 18% 12%, rgba(0, 150, 250, 0.1), transparent 42%),
+      rgba(250, 251, 253, 0.965);
+    border: 1px solid rgba(199, 207, 218, 0.72);
+    border-radius: 12px;
     box-sizing: border-box;
-    color: #374151;
+    color: #344054;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     text-align: center;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(14px);
     pointer-events: auto;
     cursor: default;
     min-height: 100%;
     min-width: 100%;
     transition: opacity 180ms ease;
+    box-shadow: inset 0 1px rgba(255,255,255,0.8);
   }
-  .sanctuary-blocked-overlay.compact {
+  .sanctuary-review-overlay.unavailable {
+    background: rgba(249, 250, 251, 0.97);
+    border-style: dashed;
+  }
+  .sanctuary-review-overlay.compact {
     padding: 4px 2px;
     gap: 3px;
     border-radius: 6px;
@@ -79,7 +104,7 @@ const protectionCss = `
     gap: 4px;
     line-height: 1.2;
   }
-  .sanctuary-blocked-overlay.compact .sanctuary-blocked-badge {
+  .sanctuary-review-overlay.compact .sanctuary-blocked-badge {
     font-size: 10px;
   }
   .sanctuary-blocked-reason {
@@ -112,7 +137,7 @@ const protectionCss = `
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     transition: all 120ms ease;
   }
-  .sanctuary-blocked-overlay.compact .sanctuary-blocked-btn {
+  .sanctuary-review-overlay.compact .sanctuary-blocked-btn {
     padding: 2px 5px;
     font-size: 9px;
     border-radius: 4px;
@@ -140,6 +165,38 @@ const protectionCss = `
   .sanctuary-blocked-btn.inspect:hover {
     background: #ede9fe;
     border-color: #8b5cf6;
+  }
+  .sanctuary-review-overlay.compact .sanctuary-blocked-btn.inspect {
+    display: none;
+  }
+  .sanctuary-preference-toast {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 2147483646;
+    display: flex;
+    max-width: min(460px, calc(100vw - 48px));
+    align-items: center;
+    gap: 12px;
+    padding: 13px 15px;
+    border: 1px solid rgba(16, 185, 129, 0.28);
+    border-radius: 14px;
+    color: #065f46;
+    background: rgba(236, 253, 245, 0.97);
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+    font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    backdrop-filter: blur(16px);
+  }
+  .sanctuary-preference-toast span { flex: 1; }
+  .sanctuary-preference-toast button {
+    padding: 5px 9px;
+    border: 1px solid rgba(5, 150, 105, 0.36);
+    border-radius: 8px;
+    color: #047857;
+    background: rgba(255,255,255,0.72);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 700;
   }
 `;
 
@@ -190,6 +247,7 @@ function removeImageMembership(image: HTMLImageElement, url: string): void {
 }
 
 function syncCandidate(normalizedUrl: string): void {
+  if (!protectionEnabled) return;
   if (outcomes.has(normalizedUrl)) {
     submittedPriorities.delete(normalizedUrl);
     return;
@@ -245,13 +303,13 @@ function findImageCardContainer(image: HTMLImageElement): HTMLElement {
   return image.parentElement || image;
 }
 
-function removeBlockedOverlay(image: HTMLImageElement, url: string): void {
+function removeReviewOverlay(image: HTMLImageElement, url: string): void {
   const targetKey = extractArtworkFileKey(url);
   const container = findImageCardContainer(image);
-  const existing = container.querySelector(`[data-sanctuary-blocked-overlay]`);
+  const existing = container.querySelector(`[data-sanctuary-review-overlay]`);
   if (existing) existing.remove();
-  for (const el of document.querySelectorAll(`[data-sanctuary-blocked-overlay]`)) {
-    const elUrl = el.getAttribute("data-sanctuary-blocked-overlay");
+  for (const el of document.querySelectorAll(`[data-sanctuary-review-overlay]`)) {
+    const elUrl = el.getAttribute("data-sanctuary-review-overlay");
     if (elUrl === url || (targetKey && extractArtworkFileKey(elUrl) === targetKey)) {
       el.remove();
     }
@@ -261,11 +319,11 @@ function removeBlockedOverlay(image: HTMLImageElement, url: string): void {
 function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMessage): void {
   const container = findImageCardContainer(image);
   if (!container || !container.isConnected) return;
-  removeBlockedOverlay(image, outcome.normalizedUrl);
+  removeReviewOverlay(image, outcome.normalizedUrl);
 
   const overlay = document.createElement("div");
-  overlay.setAttribute("data-sanctuary-blocked-overlay", outcome.normalizedUrl);
-  overlay.className = "sanctuary-blocked-overlay";
+  overlay.setAttribute("data-sanctuary-review-overlay", outcome.normalizedUrl);
+  overlay.className = "sanctuary-review-overlay blocked";
   overlay.addEventListener("click", (e) => {
     e.stopPropagation();
   });
@@ -281,7 +339,7 @@ function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMess
 
   const badge = document.createElement("div");
   badge.className = "sanctuary-blocked-badge";
-  badge.textContent = isCompact ? "🛡️ 已拦截" : "🛡️ 作品已按规则拦截";
+  badge.textContent = isCompact ? "已隐藏" : "已按你的规则隐藏";
 
   const btnRow = document.createElement("div");
   btnRow.className = "sanctuary-blocked-actions";
@@ -309,17 +367,24 @@ function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMess
   const calibrateBtn = document.createElement("button");
   calibrateBtn.type = "button";
   calibrateBtn.className = "sanctuary-blocked-btn calibrate";
-  calibrateBtn.textContent = isCompact ? "不再隐藏" : "💡 不再隐藏";
-  calibrateBtn.title = "自动微调拦截阈值，今后永久放行此类画作";
+  calibrateBtn.textContent = isCompact ? "记住偏好" : "这张不该隐藏";
+  calibrateBtn.title = "永久放行这张，并逐步学习你的元素偏好";
   calibrateBtn.addEventListener("click", async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    calibrateBtn.textContent = "已放行...";
+    calibrateBtn.textContent = "正在记住…";
     calibrateBtn.disabled = true;
     try {
-      await ipcRenderer.invoke("explore:calibrate-rule-threshold", { normalizedUrl: outcome.normalizedUrl });
+      const result = await ipcRenderer.invoke(
+        "explore:mark-false-positive",
+        { normalizedUrl: outcome.normalizedUrl }
+      ) as PreferenceCalibrationResult;
+      showPreferenceToast(result);
     } catch (err) {
-      console.warn("[explore] failed to calibrate threshold", err);
+      console.warn("[explore] failed to remember preference", err);
+      calibrateBtn.textContent = isCompact ? "重试" : "记忆失败，请重试";
+      calibrateBtn.disabled = false;
+      return;
     }
     const nextOutcome: ReviewResultMessage = { normalizedUrl: outcome.normalizedUrl, state: "allowed", reasons: [] };
     outcomes.set(outcome.normalizedUrl, nextOutcome);
@@ -361,18 +426,99 @@ function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMess
   container.appendChild(overlay);
 }
 
+function renderUnavailableOverlay(image: HTMLImageElement, outcome: ReviewResultMessage): void {
+  const container = findImageCardContainer(image);
+  if (!container || !container.isConnected) return;
+  removeReviewOverlay(image, outcome.normalizedUrl);
+
+  const overlay = document.createElement("div");
+  overlay.setAttribute("data-sanctuary-review-overlay", outcome.normalizedUrl);
+  overlay.className = "sanctuary-review-overlay unavailable";
+  overlay.addEventListener("click", (event) => event.stopPropagation());
+
+  const rect = container.getBoundingClientRect();
+  const isCompact = (rect.width > 0 && rect.width < 140) || (rect.height > 0 && rect.height < 140);
+  if (isCompact) overlay.classList.add("compact");
+
+  const badge = document.createElement("div");
+  badge.className = "sanctuary-blocked-badge";
+  badge.textContent = isCompact ? "暂未检查" : "这张图片暂未完成检查";
+  overlay.appendChild(badge);
+
+  if (!isCompact) {
+    const reason = document.createElement("div");
+    reason.className = "sanctuary-blocked-reason";
+    reason.textContent = "这不是拦截结论，可以稍后重试";
+    overlay.appendChild(reason);
+  }
+
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "sanctuary-blocked-btn";
+  retry.textContent = "重新检查";
+  retry.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    outcomes.delete(outcome.normalizedUrl);
+    submittedPriorities.delete(outcome.normalizedUrl);
+    overlay.remove();
+    image.setAttribute(REVIEW_STATE_ATTRIBUTE, "pending");
+    intersectionObserver.observe(image);
+  });
+  overlay.appendChild(retry);
+
+  if (getComputedStyle(container).position === "static") {
+    container.style.setProperty("position", "relative", "important");
+  }
+  container.appendChild(overlay);
+}
+
+function showPreferenceToast(result: PreferenceCalibrationResult): void {
+  document.querySelector(".sanctuary-preference-toast")?.remove();
+  const toast = document.createElement("div");
+  toast.className = "sanctuary-preference-toast";
+  const message = document.createElement("span");
+  message.textContent = result.changes.length
+    ? `已永久放行本图；${result.changes.map((change) => `${change.label} ${change.oldThreshold}%→${change.newThreshold}%`).join("，")}`
+    : "已永久放行这张图片；本次没有修改其他规则。";
+  toast.appendChild(message);
+
+  if (result.feedbackId) {
+    const undo = document.createElement("button");
+    undo.type = "button";
+    undo.textContent = "撤销";
+    undo.addEventListener("click", async () => {
+      undo.disabled = true;
+      try {
+        await ipcRenderer.invoke("explore:undo-preference-feedback", {
+          feedbackId: result.feedbackId
+        });
+        location.reload();
+      } catch (error) {
+        console.warn("[explore] failed to undo preference feedback", error);
+        undo.textContent = "撤销失败";
+      }
+    });
+    toast.appendChild(undo);
+  }
+  document.documentElement.appendChild(toast);
+  window.setTimeout(() => toast.remove(), 9_000);
+}
+
 function applyOutcome(image: HTMLImageElement, outcome: ReviewResultMessage): void {
   image.setAttribute(REVIEW_STATE_ATTRIBUTE, outcome.state);
   intersectionObserver.unobserve(image);
   removeImageMembership(image, outcome.normalizedUrl);
   if (outcome.state === "allowed") {
-    removeBlockedOverlay(image, outcome.normalizedUrl);
+    removeReviewOverlay(image, outcome.normalizedUrl);
     image.style.visibility = "visible";
     image.style.opacity = "1";
     image.style.filter = "none";
     reloadFailedImage(image, outcome.normalizedUrl);
   } else if (outcome.state === "blocked") {
     renderBlockedOverlay(image, outcome);
+  } else {
+    renderUnavailableOverlay(image, outcome);
   }
 }
 
@@ -405,6 +551,15 @@ function trackImage(image: HTMLImageElement): void {
   }
   if (!nextUrl) return;
   trackedImages.set(image, nextUrl);
+  if (!protectionEnabled) {
+    intersectionObserver.unobserve(image);
+    removeReviewOverlay(image, nextUrl);
+    image.setAttribute(REVIEW_STATE_ATTRIBUTE, "allowed");
+    image.style.visibility = "visible";
+    image.style.opacity = "1";
+    image.style.filter = "none";
+    return;
+  }
   const outcome = findOutcomeForUrl(nextUrl);
   if (outcome) {
     applyOutcome(image, outcome);
@@ -493,13 +648,47 @@ function startObserver(): void {
   }, { once: true });
 }
 
+function setProtectionEnabled(enabled: boolean): void {
+  if (protectionEnabled === enabled) return;
+  protectionEnabled = enabled;
+  document.documentElement.setAttribute(
+    "data-sanctuary-protection-mode",
+    enabled ? "on" : "off"
+  );
+  outcomes.clear();
+  submittedPriorities.clear();
+  nearImages.clear();
+  visibleImages.clear();
+  for (const [image, url] of trackedImages) {
+    intersectionObserver.unobserve(image);
+    removeReviewOverlay(image, url);
+    image.removeAttribute(REVIEW_RELOAD_ATTRIBUTE);
+    if (enabled) {
+      image.removeAttribute(REVIEW_STATE_ATTRIBUTE);
+      trackImage(image);
+    } else {
+      image.setAttribute(REVIEW_STATE_ATTRIBUTE, "allowed");
+      image.style.visibility = "visible";
+      image.style.opacity = "1";
+      image.style.filter = "none";
+      reloadFailedImage(image, url);
+    }
+  }
+}
+
+ipcRenderer.on("explore:protection-mode", (_event, value: unknown) => {
+  if (!value || typeof value !== "object") return;
+  const enabled = (value as { enabled?: unknown }).enabled;
+  if (typeof enabled === "boolean") setProtectionEnabled(enabled);
+});
+
 ipcRenderer.on("explore:review-result", (_event, value: unknown) => {
   if (!value || typeof value !== "object") return;
   const candidate = value as Partial<ReviewResultMessage>;
   const normalizedUrl = normalizeArtworkUrl(candidate.normalizedUrl);
   if (
     !normalizedUrl ||
-    (candidate.state !== "allowed" && candidate.state !== "blocked") ||
+    (candidate.state !== "allowed" && candidate.state !== "blocked" && candidate.state !== "unavailable") ||
     !Array.isArray(candidate.reasons)
   ) {
     return;

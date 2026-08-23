@@ -1,11 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ArtworkRecord, CollectionRecord, FilterAction } from "@sanctuary/domain";
-
-const actionText: Record<FilterAction, string> = {
-  allow: "清晰",
-  blur: "已模糊",
-  hide: "已隐藏"
-};
+import type { ArtworkRecord, CollectionRecord } from "@sanctuary/domain";
 
 export function ArtworkCard({
   artwork,
@@ -18,40 +12,28 @@ export function ArtworkCard({
   onAssign: (artworkId: string, collectionId: string) => void;
   onOpen: (artworkId: string) => void;
 }) {
-  const action = artwork.decision?.action ?? "blur";
   const imageUrl = artworkImageUrl(artwork);
   const reason = artwork.decision?.reasons[0];
   const analysisFailed = artwork.assessment?.status === "error";
-  const trustedByUser = artwork.decision?.action === "allow" && !artwork.assessment;
-  const detail = trustedByUser
-    ? "Pixiv 主动下载 · 用户信任"
+  const detail = !artwork.assessment
+    ? "本地资源 · 原图可见"
     : analysisFailed
-      ? `分析失败 · ${artwork.assessment?.error ?? "未知错误"}`
+      ? "AI 分析暂不可用 · 不影响本地画廊"
       : reason
-        ? `${reason.label} · ${Math.round(reason.confidence * 100)}%`
-        : artwork.assessment?.engine ?? "等待审查";
+        ? `AI 记录：${reason.label} · ${Math.round(reason.confidence * 100)}%`
+        : artwork.assessment?.engine
+          ? `AI 记录：${artwork.assessment.engine}`
+          : "本地画廊 · 原图可见";
 
   return (
-    <article className={`art-card action-${action}`}>
-      {action === "hide" ? (
-        <div className="art-preview">
-          <div className="shield"><span>◇</span><strong>内容已隐藏</strong></div>
-          <span className={`decision-badge ${action}`}>{actionText[action]}</span>
-        </div>
-      ) : (
-        <button
-          className="art-preview art-preview-button"
-          aria-label={`放大 ${artwork.source?.title ?? artwork.fileName}`}
-          onClick={() => onOpen(artwork.id)}
-        >
-          <LazyArtworkImage src={imageUrl} className={action === "blur" ? "blurred" : ""} />
-          {action !== "allow" && (
-            <span className={`decision-badge ${action}`}>
-              {analysisFailed ? "分析失败" : actionText[action]}
-            </span>
-          )}
-        </button>
-      )}
+    <article className="art-card">
+      <button
+        className="art-preview art-preview-button"
+        aria-label={`放大 ${artwork.source?.title ?? artwork.fileName}`}
+        onClick={() => onOpen(artwork.id)}
+      >
+        <LazyArtworkImage src={imageUrl} />
+      </button>
       <div className="art-meta">
         <strong title={artwork.fileName}>{artwork.fileName}</strong>
         <small title={detail}>{detail}</small>

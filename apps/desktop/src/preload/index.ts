@@ -63,6 +63,8 @@ export interface ExploreState {
   remoteReviewCacheHits: number;
   remoteReviewCacheMisses: number;
   error: string;
+  protectionStatus: "starting" | "ready" | "failed" | "stopped" | "bypassed";
+  protectionError: string;
   maximized: boolean;
   pageKind: PixivPageKind;
   artworkId: string;
@@ -77,7 +79,19 @@ export type ExploreCommand =
   | "back"
   | "forward"
   | "reload"
-  | "maximize";
+  | "maximize"
+  | "retry-vision"
+  | "browse-unprotected"
+  | "resume-protection";
+
+export interface ApplicationStatus {
+  visionEngine: string;
+  visionProvider: string;
+  visionReady: boolean;
+  visionState: "starting" | "ready" | "failed" | "stopped";
+  visionError: string;
+  modelBacked: boolean;
+}
 
 export interface SanctuaryApi {
   listArtworks(): Promise<ArtworkRecord[]>;
@@ -151,12 +165,8 @@ export interface SanctuaryApi {
   saveTypographyPreferences(preferences: TypographyPreferencesV1): Promise<TypographyPreferencesV1>;
   onExploreState(listener: (state: ExploreState) => void): () => void;
   onExploreOpenInspector(listener: (data: { artworkId?: string; url?: string; pageIndex?: number }) => void): () => void;
-  status(): Promise<{
-    visionEngine: string;
-    visionProvider: string;
-    visionReady: boolean;
-    modelBacked: boolean;
-  }>;
+  onAppStatus(listener: (status: ApplicationStatus) => void): () => void;
+  status(): Promise<ApplicationStatus>;
 }
 
 const api: SanctuaryApi = {
@@ -310,6 +320,11 @@ const api: SanctuaryApi = {
     const wrapped = (_event: Electron.IpcRendererEvent, state: ExploreState) => listener(state);
     ipcRenderer.on("explore:state-changed", wrapped);
     return () => ipcRenderer.removeListener("explore:state-changed", wrapped);
+  },
+  onAppStatus: (listener) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, status: ApplicationStatus) => listener(status);
+    ipcRenderer.on("app:status-changed", wrapped);
+    return () => ipcRenderer.removeListener("app:status-changed", wrapped);
   },
   onExploreOpenInspector: (listener) => {
     const wrapped = (_event: Electron.IpcRendererEvent, data: { artworkId?: string; url?: string }) => listener(data);

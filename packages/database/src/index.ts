@@ -1439,6 +1439,7 @@ export class LibraryDatabase {
     if (!tags.length) return [];
     const normalizedTags = tags.map((t) => t.trim().toLowerCase().replaceAll(" ", "_"));
     const workIds = scope ? this.#workIdsForAnalysisScope(scope) : null;
+    if (scope && workIds?.length === 0) return [];
 
     const whereWorkIds = workIds && workIds.length > 0
       ? `AND a.work_id IN (${workIds.map(() => "?").join(",")})`

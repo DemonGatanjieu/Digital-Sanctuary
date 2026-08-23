@@ -32,14 +32,10 @@ export function AuthorBrowserCard({ author, onOpen }: { author: AuthorGalleryGro
     <button className="author-browser-card" onClick={onOpen} title={`进入画师 ${author.name} 的专属工坊展厅`}>
       <span className={`author-cover-grid covers-${Math.min(3, covers.length)}`}>
         {covers.map((artwork) => {
-          const action = artwork.decision?.action ?? "blur";
-          return action === "hide" ? (
-            <span className="author-cover-shield" key={artwork.id}>◇</span>
-          ) : (
+          return (
             <LazyArtworkImage
               key={artwork.id}
               src={artworkImageUrl(artwork)}
-              className={action === "blur" ? "blurred" : ""}
             />
           );
         })}

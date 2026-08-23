@@ -23,6 +23,8 @@ describe("Pixiv DOM adapter", () => {
     expect(script).toContain("sanctuary-pixiv-download");
     expect(script).toContain("sanctuary-pixiv-inspect");
     expect(script).toContain("isArtworkUrl");
+    expect(script).toContain('el.currentSrc || el.getAttribute("src")');
+    expect(script).toContain('candidateImg.currentSrc || candidateImg.getAttribute("src")');
     expect(script).not.toContain("isPromotionImage");
     expect(script).not.toContain("promotionImages");
     expect(script).not.toContain("booth.pm");

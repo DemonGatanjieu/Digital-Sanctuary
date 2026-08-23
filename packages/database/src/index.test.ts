@@ -783,10 +783,16 @@ describe("LibraryDatabase", () => {
       const triageMatches = database.queryWorksByTags(["chibi"], 0.5);
       expect(triageMatches.length).toBeGreaterThanOrEqual(1);
       expect(triageMatches[0]?.matchedTags).toContainEqual({ tag: "chibi", confidence: 0.85 });
+
+      const emptyCollection = database.createCollection("Empty triage scope");
+      expect(database.queryWorksByTags(
+        ["chibi"],
+        0.5,
+        { type: "collection", collectionId: emptyCollection.id }
+      )).toEqual([]);
     } finally {
       database.close();
       rmSync(directory, { recursive: true, force: true });
     }
   });
 });
-

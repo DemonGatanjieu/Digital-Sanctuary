@@ -45,6 +45,27 @@ export interface ComputeTechnicalProfileResponse {
   payload: TechnicalProfilePayload;
 }
 
+export interface VisionHealthRequest {
+  version: typeof VISION_PROTOCOL_VERSION;
+  id: string;
+  type: "health-check";
+  payload: Record<string, never>;
+}
+
+export interface VisionHealthPayload {
+  status: "ready";
+  engine: string;
+  engineVersion: string;
+  executionProvider?: string;
+}
+
+export interface VisionHealthResponse {
+  version: typeof VISION_PROTOCOL_VERSION;
+  id: string;
+  type: "health-check-result";
+  payload: VisionHealthPayload;
+}
+
 export interface VisionErrorResponse {
   version: typeof VISION_PROTOCOL_VERSION;
   id: string;
@@ -57,18 +78,22 @@ export interface VisionErrorResponse {
 
 export type VisionRequest =
   | ClassifyImageRequest
-  | ComputeTechnicalProfileRequest;
+  | ComputeTechnicalProfileRequest
+  | VisionHealthRequest;
 
 export type VisionResponse =
   | ClassifyImageResponse
   | ComputeTechnicalProfileResponse
+  | VisionHealthResponse
   | VisionErrorResponse;
 
 export function isVisionRequest(value: unknown): value is VisionRequest {
   if (!isRecord(value) || value.version !== VISION_PROTOCOL_VERSION) return false;
   if (typeof value.id !== "string") return false;
+  if (!isRecord(value.payload)) return false;
+  if (value.type === "health-check") return true;
   if (value.type !== "classify-image" && value.type !== "compute-technical-profile") return false;
-  return isRecord(value.payload) && typeof value.payload.imagePath === "string";
+  return typeof value.payload.imagePath === "string";
 }
 
 export function isVisionResponse(value: unknown): value is VisionResponse {
@@ -77,6 +102,7 @@ export function isVisionResponse(value: unknown): value is VisionResponse {
   return (
     value.type === "classify-image-result" ||
     value.type === "compute-technical-profile-result" ||
+    value.type === "health-check-result" ||
     value.type === "error"
   );
 }

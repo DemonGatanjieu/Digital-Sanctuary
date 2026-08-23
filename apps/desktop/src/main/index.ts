@@ -25,7 +25,6 @@ import {
   buildElementFilterRules,
   decideFilter,
   DEFAULT_LIBRARY_PREFERENCES,
-  ELEMENT_BLACKLIST_GROUPS,
   isCustomElementGroup,
   isElementFilterSetting,
   isLibraryPreferences,
@@ -45,9 +44,24 @@ import {
 import { VisionClient } from "./vision-client.js";
 import type { VisionProcessOptions } from "./vision-client.js";
 import {
+  applyFeedbackChanges,
+  createFalsePositiveFeedback,
+  normalizeFeedbackHistory,
+  normalizePageExceptions,
+  normalizeThresholdOverrides,
+  pixivArtworkPageKey,
+  undoFeedbackChanges,
+  type AdaptivePreferenceFeedback
+} from "./explore-preference-calibration.js";
+import {
   ExploreReviewQueue,
   type ExploreReviewPriority
 } from "./explore-review-queue.js";
+import {
+  describeInspectorFailure,
+  inspectorImageCandidates
+} from "./inspector-image-candidates.js";
+import { fetchPixivReviewImage } from "./pixiv-review-fetch.js";
 import {
   PIXIV_HOME_URL,
   PIXIV_LOGIN_URL,
@@ -139,9 +153,9 @@ let activeArtistAvatarRepair: Promise<ArtistAvatarRepairResult> | undefined;
 let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
 const analysisJobScheduler = new AnalysisJobScheduler();
 interface RemoteReviewOutcome {
-  allowed: boolean;
+  state: "allowed" | "blocked" | "unavailable";
   reasons: string[];
-  source: "memory" | "persistent" | "fresh" | "error";
+  source: "memory" | "persistent" | "fresh" | "preference" | "error";
 }
 
 const remoteReviewCache = new Map<string, RemoteReviewOutcome>();
@@ -154,12 +168,15 @@ let remoteVisionQueue: Promise<void> = Promise.resolve();
 let exploreActiveReview: { normalizedUrl: string; generation: number } | undefined;
 let exploreReviewGeneration = 0;
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
-const MAX_REMOTE_IMAGE_BYTES = 12 * 1024 * 1024;
 const MAX_ORIGINAL_IMAGE_BYTES = 128 * 1024 * 1024;
 const MAX_MEMORY_REVIEW_CACHE_ENTRIES = 500;
 const PIXIV_BOOKMARK_PAGE_SIZE = 48;
 const PIXIV_DOWNLOAD_CONCURRENCY = 4;
-const ENABLE_VIEWPORT_REVIEW = false;
+const ENABLE_VIEWPORT_REVIEW = true;
+const THRESHOLD_OVERRIDES_PREFERENCE_PREFIX = "filters.threshold-overrides.v1";
+const PAGE_EXCEPTIONS_PREFERENCE = "filters.explore-page-exceptions.v1";
+const ADAPTIVE_FEEDBACK_PREFERENCE = "filters.adaptive-feedback.v1";
+let exploreProtectionBypassed = false;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const pixivDownloadNetworkGate = new AsyncTaskGate(PIXIV_DOWNLOAD_CONCURRENCY);
 
@@ -177,6 +194,8 @@ interface ExploreState {
   remoteReviewCacheHits: number;
   remoteReviewCacheMisses: number;
   error: string;
+  protectionStatus: "starting" | "ready" | "failed" | "stopped" | "bypassed";
+  protectionError: string;
   maximized: boolean;
   pageKind: "artwork" | "bookmarks" | "other";
   artworkId: string;
@@ -194,14 +213,35 @@ if (!hasSingleInstanceLock) {
     mainWindow.focus();
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     const userDataPath = app.getPath("userData");
     database = new LibraryDatabase(join(userDataPath, "library.db"));
     database.recoverInterruptedAnalysisJobs();
     if (process.env.SANCTUARY_BENCHMARK_LIBRARY === "1") {
       database.seedBenchmarkWorks(Number(process.env.SANCTUARY_BENCHMARK_WORKS ?? 10_000));
     }
-    vision = new VisionClient(resolveVisionProcess());
+    const startupProbeImage = join(userDataPath, ".vision-startup-probe.png");
+    try {
+      await writeFile(
+        startupProbeImage,
+        Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+          "base64"
+        )
+      );
+    } catch (error) {
+      console.error("[vision] unable to prepare startup self-test image", error);
+    }
+    vision = new VisionClient({ ...resolveVisionProcess(), startupProbeImage });
+    vision.onStateChange((snapshot) => {
+      console.info(`[vision] runtime state=${snapshot.state} provider=${snapshot.executionProvider}`);
+      syncExploreProtectionVisibility();
+      scheduleExploreState();
+      mainWindow?.webContents.send("app:status-changed", currentApplicationStatus());
+    });
+    void vision.initialize().catch((error: unknown) => {
+      console.error("[vision] startup failed", error);
+    });
     themeManager = new ThemeManagerService({
       bundledThemesPath: app.isPackaged
         ? join(process.resourcesPath, "themes")
@@ -362,6 +402,39 @@ function customElementGroups(): CustomElementGroup[] {
   return Array.isArray(stored) ? stored.filter(isCustomElementGroup) : [];
 }
 
+function thresholdOverridesPreferenceKey(
+  engine = vision?.engine ?? "unavailable",
+  engineVersion = vision?.engineVersion ?? "0"
+): string {
+  return `${THRESHOLD_OVERRIDES_PREFERENCE_PREFIX}:${engine}:${engineVersion}`;
+}
+
+function adaptiveThresholdOverrides(
+  engine = vision?.engine ?? "unavailable",
+  engineVersion = vision?.engineVersion ?? "0"
+): Record<string, number> {
+  return normalizeThresholdOverrides(
+    database?.getPreference<unknown>(thresholdOverridesPreferenceKey(engine, engineVersion))
+  );
+}
+
+function explorePageExceptions(): string[] {
+  return normalizePageExceptions(
+    database?.getPreference<unknown>(PAGE_EXCEPTIONS_PREFERENCE)
+  );
+}
+
+function adaptiveFeedbackHistory(): AdaptivePreferenceFeedback[] {
+  return normalizeFeedbackHistory(
+    database?.getPreference<unknown>(ADAPTIVE_FEEDBACK_PREFERENCE)
+  );
+}
+
+function isExplorePageException(imageUrl: string): boolean {
+  const pageKey = pixivArtworkPageKey(imageUrl);
+  return Boolean(pageKey && explorePageExceptions().includes(pageKey));
+}
+
 async function deleteConfirmedWorks(workIds: readonly string[]): Promise<WorkDeletionResult> {
   const target = database;
   if (!target) throw new Error("Application is not ready");
@@ -417,6 +490,10 @@ function registerImageProtocol(): void {
     }
     return net.fetch(pathToFileURL(imagePath).toString());
   });
+}
+
+function localImageUrl(imagePath: string): string {
+  return imagePath ? `sanctuary-image://local/${encodeURIComponent(imagePath)}` : "";
 }
 
 function registerIpc(): void {
@@ -501,12 +578,9 @@ function registerIpc(): void {
     });
     if (selected.canceled) return database.listArtworks();
 
-    const rules = buildElementFilterRules(database.listElementFilterSettings(), customElementGroups());
     for (const imagePath of selected.filePaths) {
       const artwork = database.importArtwork(imagePath);
-      const assessment = await classifyFailClosed(vision, imagePath);
-      const decision = decideFilter(assessment, rules);
-      database.saveAssessment(artwork.id, assessment, decision);
+      database.trustArtwork(artwork.id);
     }
     return database.listArtworks();
   });
@@ -568,7 +642,7 @@ function registerIpc(): void {
     return nextGroups;
   });
   ipcMain.handle("vision:inspect-artwork", async (_event, value: unknown): Promise<InspectArtworkResponse | null> => {
-    if (!database || !vision) throw new Error("Vision service is not ready");
+    if (!database || !vision?.available) throw new Error("本地视觉模型尚未就绪，画廊图片仍可正常浏览");
     if (!value || typeof value !== "object") throw new Error("Invalid inspect payload");
     const { workId, artworkId, url, pageIndex } = value as {
       workId?: unknown;
@@ -587,23 +661,31 @@ function registerIpc(): void {
       if (work) {
         const pages: InspectArtworkPage[] = work.assets.map((a, i) => ({
           pageIndex: i,
-          thumbUrl: a.path,
-          regularUrl: a.path
+          thumbUrl: localImageUrl(a.path),
+          regularUrl: localImageUrl(a.path)
         }));
         const activeIdx = requestedPageIndex !== undefined && requestedPageIndex < pages.length ? requestedPageIndex : 0;
         const activeAsset = work.assets[activeIdx] || work.assets[0];
         let assessment: VisionAssessment | null = null;
         if (activeAsset?.path && existsSync(activeAsset.path)) {
-          assessment = await classifyFailClosed(vision, activeAsset.path, 30_000);
+          assessment = database.getCachedAssetAnalysis(
+            activeAsset.id,
+            activeAsset.updatedAt,
+            vision.engine
+          ) ?? await classifyFailClosed(vision, activeAsset.path, 30_000);
         }
         return {
           assessment,
           artworkId: work.id,
           title: work.title,
-          url: activeAsset?.path || "",
+          url: localImageUrl(activeAsset?.path || ""),
           pageCount: Math.max(1, pages.length),
           activePageIndex: activeIdx,
-          pages: pages.length > 0 ? pages : [{ pageIndex: 0, thumbUrl: activeAsset?.path || "", regularUrl: activeAsset?.path || "" }]
+          pages: pages.length > 0 ? pages : [{
+            pageIndex: 0,
+            thumbUrl: localImageUrl(activeAsset?.path || ""),
+            regularUrl: localImageUrl(activeAsset?.path || "")
+          }]
         };
       }
     }
@@ -682,83 +764,102 @@ function registerIpc(): void {
     if (requestedPageIndex !== undefined && pages.length > 0 && requestedPageIndex < pages.length) {
       activePageIndex = requestedPageIndex;
     } else if (typeof url === "string" && url.trim()) {
-      const pageMatch = url.match(/_p(\d+)_/);
+      const pageMatch = url.match(/_p(\d+)(?:_|\.)/);
       if (pageMatch && pageMatch[1]) {
         const parsed = parseInt(pageMatch[1], 10);
         if (pages.length === 0 || parsed < pages.length) activePageIndex = parsed;
       }
     }
 
-    const targetImageUrl = pages[activePageIndex]?.regularUrl || (typeof url === "string" ? url : "") || (pages[0]?.regularUrl || "");
-    if (!targetImageUrl && trimmedArtworkId) {
+    const targetImageUrls = inspectorImageCandidates(url, pages, activePageIndex);
+    if (targetImageUrls.length === 0 && trimmedArtworkId) {
       const works = database.queryWorks({ search: trimmedArtworkId, limit: 1 });
       const localMatch = works.items.find((w) => w.sourceWorkId === trimmedArtworkId || w.id === trimmedArtworkId);
       const localAsset = localMatch?.coverAsset;
       if (localAsset?.path && existsSync(localAsset.path)) {
-        const assessment = await classifyFailClosed(vision, localAsset.path, 30_000);
+        const assessment = database.getCachedAssetAnalysis(
+          localAsset.id,
+          localAsset.updatedAt,
+          vision.engine
+        ) ?? await classifyFailClosed(vision, localAsset.path, 30_000);
         return {
           assessment,
           artworkId: trimmedArtworkId,
           title: localMatch?.title || "",
-          url: localAsset.path,
+          url: localImageUrl(localAsset.path),
           pageCount: 1,
           activePageIndex: 0,
-          pages: [{ pageIndex: 0, thumbUrl: localAsset.path, regularUrl: localAsset.path }]
+          pages: [{
+            pageIndex: 0,
+            thumbUrl: localImageUrl(localAsset.path),
+            regularUrl: localImageUrl(localAsset.path)
+          }]
         };
       }
     }
 
-    if (!targetImageUrl) return null;
+    if (targetImageUrls.length === 0) {
+      throw new Error(`本地 WD Tagger 已就绪（${vision.executionProvider}），但页面没有提供可供分析的 Pixiv 图片。`);
+    }
 
-    const normalizedUrl = normalizePixivArtworkImageUrl(targetImageUrl) || targetImageUrl;
-
-    const persisted = database.getRemoteImageReview({
-      normalizedUrl,
-      engine: vision.engine,
-      engineVersion: vision.engineVersion,
-      rulesFingerprint: fingerprint
+    const responseFor = (assessment: VisionAssessment, targetImageUrl: string): InspectArtworkResponse => ({
+      assessment,
+      artworkId: trimmedArtworkId || undefined,
+      title: illustTitle || undefined,
+      url: targetImageUrl,
+      pageCount: Math.max(1, pages.length || totalPageCount || 1),
+      activePageIndex,
+      pages: pages.length > 0 ? pages : [{ pageIndex: activePageIndex, thumbUrl: targetImageUrl, regularUrl: targetImageUrl }]
     });
-    if (persisted?.assessment && persisted.assessment.status === "complete") {
-      return {
-        assessment: persisted.assessment,
-        artworkId: trimmedArtworkId || undefined,
-        title: illustTitle || undefined,
-        url: targetImageUrl,
-        pageCount: Math.max(1, pages.length || totalPageCount || 1),
-        activePageIndex,
-        pages: pages.length > 0 ? pages : [{ pageIndex: 0, thumbUrl: targetImageUrl, regularUrl: targetImageUrl }]
-      };
+
+    for (const targetImageUrl of targetImageUrls) {
+      const persisted = database.getRemoteImageReview({
+        normalizedUrl: targetImageUrl,
+        engine: vision.engine,
+        engineVersion: vision.engineVersion,
+        rulesFingerprint: fingerprint
+      });
+      const reusable = persisted ?? database.getLatestRemoteImageReview(targetImageUrl);
+      if (
+        reusable?.assessment.status === "complete" &&
+        reusable.engine === vision.engine &&
+        reusable.engineVersion === vision.engineVersion
+      ) {
+        return responseFor(reusable.assessment, targetImageUrl);
+      }
     }
 
-    try {
-      const outcome = await performRemoteArtworkReview(
-        normalizedUrl,
-        trimmedArtworkId ? `https://www.pixiv.net/artworks/${trimmedArtworkId}` : PIXIV_HOME_URL,
-        reviewSession,
-        {
-          normalizedUrl,
-          engine: vision.engine,
-          engineVersion: vision.engineVersion,
-          rulesFingerprint: fingerprint
-        },
-        database.listElementFilterSettings()
-      );
-      return {
-        assessment: outcome.assessment,
-        artworkId: trimmedArtworkId || undefined,
-        title: illustTitle || undefined,
-        url: targetImageUrl,
-        pageCount: Math.max(1, pages.length || totalPageCount || 1),
-        activePageIndex,
-        pages: pages.length > 0 ? pages : [{ pageIndex: 0, thumbUrl: targetImageUrl, regularUrl: targetImageUrl }]
-      };
-    } catch (err) {
-      console.warn("[vision-inspect] failed to perform remote review:", err);
-      return null;
+    let lastFailure: unknown = new Error("Pixiv image is unavailable");
+    for (const targetImageUrl of targetImageUrls) {
+      try {
+        const outcome = await performRemoteArtworkReview(
+          targetImageUrl,
+          trimmedArtworkId ? `https://www.pixiv.net/artworks/${trimmedArtworkId}` : PIXIV_HOME_URL,
+          {
+            normalizedUrl: targetImageUrl,
+            engine: vision.engine,
+            engineVersion: vision.engineVersion,
+            rulesFingerprint: fingerprint
+          },
+          database.listElementFilterSettings()
+        );
+        database.saveRemoteImageReview(outcome);
+        return responseFor(outcome.assessment, targetImageUrl);
+      } catch (error) {
+        lastFailure = error;
+        console.warn(`[vision-inspect] candidate failed ${targetImageUrl}`, error);
+      }
     }
+
+    throw new Error(describeInspectorFailure(lastFailure, {
+      available: vision.available,
+      engine: vision.engine,
+      executionProvider: vision.executionProvider,
+      error: vision.error
+    }));
   });
   ipcMain.handle("filters:test-image", async (): Promise<RuleSandboxResult | null> => {
-    if (!database || !vision || !mainWindow) throw new Error("Application is not ready");
+    if (!database || !vision?.available || !mainWindow) throw new Error("本地视觉模型尚未就绪");
     const selected = await dialog.showOpenDialog(mainWindow, {
       title: "选择规则测试图片",
       properties: ["openFile"],
@@ -778,11 +879,8 @@ function registerIpc(): void {
     const parsedBounds = parseExploreBounds(bounds);
     if (!parsedBounds) throw new Error("Invalid exploration bounds");
     exploreBounds = parsedBounds;
-    const view = ensureExploreView();
-    view.setBounds(parsedBounds);
-    view.setVisible(true);
     exploreVisible = true;
-    if (!view.webContents.getURL()) void view.webContents.loadURL(PIXIV_HOME_URL);
+    syncExploreProtectionVisibility();
     scheduleExploreState();
     return currentExploreState();
   });
@@ -798,6 +896,43 @@ function registerIpc(): void {
     exploreView?.setVisible(false);
   });
   ipcMain.handle("explore:command", async (_event, command: unknown) => {
+    if (command === "retry-vision") {
+      exploreProtectionBypassed = false;
+      exploreView?.setVisible(false);
+      resetExploreReviewQueue();
+      if (!vision) throw new Error("Vision runtime is unavailable");
+      void vision.restart().catch((error: unknown) => {
+        console.error("[vision] restart failed", error);
+      });
+      scheduleExploreState();
+      return currentExploreState();
+    }
+    if (command === "browse-unprotected") {
+      exploreProtectionBypassed = true;
+      resetExploreReviewQueue();
+      syncExploreProtectionVisibility();
+      sendExploreProtectionMode();
+      scheduleExploreState();
+      return currentExploreState();
+    }
+    if (command === "resume-protection") {
+      exploreProtectionBypassed = false;
+      resetExploreReviewQueue();
+      syncExploreProtectionVisibility();
+      sendExploreProtectionMode();
+      if (vision?.available) exploreView?.webContents.reload();
+      scheduleExploreState();
+      return currentExploreState();
+    }
+    if (command === "maximize" && mainWindow) {
+      if (mainWindow.isMaximized()) mainWindow.unmaximize();
+      else mainWindow.maximize();
+      scheduleExploreState();
+      return currentExploreState();
+    }
+    if (!vision?.available && !exploreProtectionBypassed) {
+      throw new Error("本地保护模型尚未就绪");
+    }
     const view = ensureExploreView();
     const history = view.webContents.navigationHistory;
     if (command === "home") {
@@ -812,10 +947,6 @@ function registerIpc(): void {
     else if (command === "back" && history.canGoBack()) history.goBack();
     else if (command === "forward" && history.canGoForward()) history.goForward();
     else if (command === "reload") view.webContents.reload();
-    else if (command === "maximize" && mainWindow) {
-      if (mainWindow.isMaximized()) mainWindow.unmaximize();
-      else mainWindow.maximize();
-    }
     else if (!['home', 'login', 'open-password-setup', 'back', 'forward', 'reload', 'maximize'].includes(String(command))) {
       throw new Error("Invalid exploration command");
     }
@@ -948,7 +1079,7 @@ function registerIpc(): void {
       reasons: []
     });
   });
-  ipcMain.handle("explore:calibrate-rule-threshold", async (event, value: unknown) => {
+  ipcMain.handle("explore:mark-false-positive", async (event, value: unknown) => {
     const contents = exploreView?.webContents;
     if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) return { success: false };
     if (!database) throw new Error("Database is not ready");
@@ -956,59 +1087,40 @@ function registerIpc(): void {
     const rawUrl = (value as { normalizedUrl?: string }).normalizedUrl;
     if (typeof rawUrl !== "string") throw new Error("Missing normalizedUrl");
     const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl) || rawUrl;
+    const pageKey = pixivArtworkPageKey(normalizedUrl);
+    if (!pageKey) throw new Error("Unable to identify the Pixiv artwork page");
 
-    let reviewRecord: RemoteImageReviewRecord | undefined = undefined;
-    const dbReview = database.getLatestRemoteImageReview(normalizedUrl);
-    if (dbReview) {
-      reviewRecord = dbReview;
-    } else {
-      const artworkIdMatch = normalizedUrl.match(/\/(\d+)_(?:p\d+|_|\.)/);
-      if (artworkIdMatch && artworkIdMatch[1]) {
-        reviewRecord = database.findRemoteImageReviewByArtworkId(artworkIdMatch[1]) ?? undefined;
-      }
+    const exceptions = explorePageExceptions();
+    if (!exceptions.includes(pageKey)) {
+      database.setPreference(PAGE_EXCEPTIONS_PREFERENCE, [...exceptions, pageKey].slice(-2_000));
     }
 
-    const calibratedList: Array<{ groupName: string; oldThreshold: number; newThreshold: number }> = [];
-    const currentSettings = database.listElementFilterSettings();
-    const settingsMap = new Map(currentSettings.map((s) => [s.groupId, s]));
+    const reviewRecord = database.getLatestRemoteImageReview(normalizedUrl);
+    const currentOverrides = adaptiveThresholdOverrides();
+    const feedback = reviewRecord && vision &&
+      reviewRecord.engine === vision.engine && reviewRecord.engineVersion === vision.engineVersion
+      ? createFalsePositiveFeedback({
+          id: randomUUID(),
+          normalizedUrl,
+          assessment: reviewRecord.assessment,
+          reasons: reviewRecord.decision.reasons,
+          thresholdOverrides: currentOverrides
+        })
+      : null;
 
-    if (reviewRecord?.assessment?.labels && reviewRecord?.decision?.reasons?.length) {
-      for (const reason of reviewRecord.decision.reasons) {
-        const label = reason.label;
-        const conf = reviewRecord.assessment.labels[label] ?? reason.confidence;
-
-        const builtInGroup = ELEMENT_BLACKLIST_GROUPS.find((g) => g.tags.includes(label));
-        const customGroups = customElementGroups();
-        const customGroup = customGroups.find((g) => g.tags.includes(label) || (g.aliases && g.aliases.includes(label)));
-        const targetGroup = builtInGroup || customGroup;
-
-        if (targetGroup) {
-          const existingSetting = settingsMap.get(targetGroup.id);
-          const oldThreshold = existingSetting ? existingSetting.minimumConfidence : targetGroup.defaultThreshold;
-          const newThreshold = Math.min(0.99, Math.max(oldThreshold, Math.ceil(conf * 100 + 1) / 100));
-
-          database.saveElementFilterSetting({
-            groupId: targetGroup.id,
-            enabled: true,
-            minimumConfidence: newThreshold
-          });
-          settingsMap.set(targetGroup.id, {
-            groupId: targetGroup.id,
-            enabled: true,
-            minimumConfidence: newThreshold
-          });
-          calibratedList.push({
-            groupName: targetGroup.name,
-            oldThreshold: Math.round(oldThreshold * 100),
-            newThreshold: Math.round(newThreshold * 100)
-          });
-        }
-      }
+    if (feedback) {
+      database.setPreference(
+        thresholdOverridesPreferenceKey(feedback.engine, feedback.engineVersion),
+        applyFeedbackChanges(currentOverrides, feedback)
+      );
+      database.setPreference(
+        ADAPTIVE_FEEDBACK_PREFERENCE,
+        [...adaptiveFeedbackHistory(), feedback].slice(-500)
+      );
     }
 
-    database.clearRemoteImageReviews();
-    recalculateStoredDecisions(database);
     remoteReviewCache.clear();
+    remoteOneShotAllows.add(normalizedUrl);
 
     contents.send("explore:review-result", {
       normalizedUrl,
@@ -1018,8 +1130,48 @@ function registerIpc(): void {
 
     return {
       success: true,
-      calibratedList
+      feedbackId: feedback?.id ?? null,
+      pageKey,
+      changes: feedback?.changes.map((change) => ({
+        label: change.label,
+        confidence: Math.round(change.confidence * 100),
+        oldThreshold: Math.round(change.oldThreshold * 100),
+        newThreshold: Math.round(change.newThreshold * 100)
+      })) ?? []
     };
+  });
+  ipcMain.handle("explore:undo-preference-feedback", async (event, value: unknown) => {
+    const contents = exploreView?.webContents;
+    if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) return { success: false };
+    if (!database) throw new Error("Database is not ready");
+    const feedbackId = value && typeof value === "object"
+      ? (value as { feedbackId?: unknown }).feedbackId
+      : undefined;
+    if (typeof feedbackId !== "string") throw new Error("Missing feedbackId");
+
+    const history = adaptiveFeedbackHistory();
+    const feedback = history.at(-1);
+    if (!feedback || feedback.id !== feedbackId) {
+      throw new Error("只能撤销最近一次偏好调整");
+    }
+    const remainingHistory = history.slice(0, -1);
+    database.setPreference(
+      thresholdOverridesPreferenceKey(feedback.engine, feedback.engineVersion),
+      undoFeedbackChanges(
+        adaptiveThresholdOverrides(feedback.engine, feedback.engineVersion),
+        feedback
+      )
+    );
+    database.setPreference(ADAPTIVE_FEEDBACK_PREFERENCE, remainingHistory);
+    if (!remainingHistory.some((entry) => entry.pageKey === feedback.pageKey)) {
+      database.setPreference(
+        PAGE_EXCEPTIONS_PREFERENCE,
+        explorePageExceptions().filter((pageKey) => pageKey !== feedback.pageKey)
+      );
+    }
+    remoteReviewCache.clear();
+    database.clearRemoteImageReviews();
+    return { success: true };
   });
   ipcMain.on("explore:inspect-url", (event, value: unknown) => {
     const contents = exploreView?.webContents;
@@ -1030,7 +1182,7 @@ function registerIpc(): void {
       const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl) || rawUrl;
       const artworkIdMatch = normalizedUrl.match(/\/(\d+)_(?:p\d+|_|\.)/);
       const artworkId = artworkIdMatch && artworkIdMatch[1] ? artworkIdMatch[1] : undefined;
-      const pageMatch = normalizedUrl.match(/_p(\d+)_/);
+      const pageMatch = normalizedUrl.match(/_p(\d+)(?:_|\.)/);
       const pageIndex = pageMatch && pageMatch[1] ? parseInt(pageMatch[1], 10) : undefined;
       mainWindow?.webContents.send("explore:open-inspector", {
         artworkId,
@@ -1152,12 +1304,18 @@ function registerIpc(): void {
     return next;
   });
 
-  ipcMain.handle("app:status", () => ({
+  ipcMain.handle("app:status", () => currentApplicationStatus());
+}
+
+function currentApplicationStatus() {
+  return {
     visionEngine: vision?.engine ?? "unavailable",
     visionProvider: vision?.executionProvider ?? "unknown",
     visionReady: vision?.available ?? false,
+    visionState: vision?.state ?? "failed",
+    visionError: vision?.error ?? "Vision runtime is unavailable",
     modelBacked: vision?.engine === "wd-swinv2-tagger-v3"
-  }));
+  } as const;
 }
 
 async function encodeLocalThumbnail(sourcePath: string, targetPath: string): Promise<void> {
@@ -1183,6 +1341,31 @@ async function encodeLocalThumbnail(sourcePath: string, targetPath: string): Pro
   } finally {
     await unlink(temporaryPath).catch(() => undefined);
   }
+}
+
+function canShowExploreContent(): boolean {
+  return exploreProtectionBypassed || Boolean(vision?.available);
+}
+
+function syncExploreProtectionVisibility(): void {
+  if (!exploreVisible || !canShowExploreContent()) {
+    exploreView?.setVisible(false);
+    return;
+  }
+  if (!mainWindow || mainWindow.isDestroyed() || !exploreBounds) return;
+  const view = ensureExploreView();
+  view.setBounds(exploreBounds);
+  view.setVisible(true);
+  sendExploreProtectionMode();
+  if (!view.webContents.getURL()) void view.webContents.loadURL(PIXIV_HOME_URL);
+}
+
+function sendExploreProtectionMode(): void {
+  const contents = exploreView?.webContents;
+  if (!contents || contents.isDestroyed()) return;
+  contents.send("explore:protection-mode", {
+    enabled: !exploreProtectionBypassed && Boolean(vision?.available)
+  });
 }
 
 function ensureExploreView(): WebContentsView {
@@ -1232,6 +1415,10 @@ function ensureExploreView(): WebContentsView {
     { urls: ["*://*/*"] },
     (details, callback) => {
       if (details.resourceType === "image" && isPixivArtworkImageUrl(details.url)) {
+        if (exploreProtectionBypassed) {
+          callback({ cancel: false });
+          return;
+        }
         const normalizedUrl = normalizePixivArtworkImageUrl(details.url);
         if (remoteOneShotAllows.delete(details.url) || (normalizedUrl && remoteOneShotAllows.delete(normalizedUrl))) {
           callback({ cancel: false });
@@ -1242,9 +1429,9 @@ function ensureExploreView(): WebContentsView {
           return;
         }
         if (!ENABLE_VIEWPORT_REVIEW) {
-          void reviewRemoteArtwork(details.url, details.referrer, exploreSession)
+          void reviewRemoteArtwork(details.url, details.referrer)
             .then(async (outcome) => {
-              if (!outcome.allowed) {
+              if (outcome.state === "blocked") {
                 await contents.executeJavaScript(
                   buildPixivBlockedReviewScript(normalizedUrl, outcome.reasons),
                   true
@@ -1252,13 +1439,13 @@ function ensureExploreView(): WebContentsView {
                   console.error("[pixiv-placeholder] failed to install", error);
                 });
               }
-              callback({ cancel: !outcome.allowed });
+              callback({ cancel: outcome.state !== "allowed" });
             })
             .catch(() => callback({ cancel: true }));
           return;
         }
         const cached = findCachedRemoteReview(normalizedUrl);
-        callback({ cancel: cached ? !cached.allowed : false });
+        callback({ cancel: cached ? cached.state === "blocked" : false });
         if (cached) void publishRemoteReviewOutcome(contents, normalizedUrl, cached);
         return;
       }
@@ -1387,6 +1574,7 @@ function ensureExploreView(): WebContentsView {
     scheduleExploreState();
   });
   contents.on("dom-ready", () => {
+    sendExploreProtectionMode();
     void installPixivDomAdapter(contents);
   });
   contents.on("did-stop-loading", () => {
@@ -1419,6 +1607,8 @@ function ensureExploreView(): WebContentsView {
 function currentExploreState(): ExploreState {
   const contents = exploreView?.webContents;
   const pageContext = parsePixivPageContext(contents?.getURL() ?? PIXIV_HOME_URL);
+  const protectionStatus = exploreProtectionBypassed ? "bypassed" : (vision?.state ?? "failed");
+  const protectionError = exploreProtectionBypassed ? "" : (vision?.error ?? "视觉模型不可用");
   if (!contents || contents.isDestroyed()) {
     return {
       url: PIXIV_HOME_URL,
@@ -1434,6 +1624,8 @@ function currentExploreState(): ExploreState {
       remoteReviewCacheHits: exploreRemoteReviewCacheHits,
       remoteReviewCacheMisses: exploreRemoteReviewCacheMisses,
       error: exploreError,
+      protectionStatus,
+      protectionError,
       maximized: mainWindow?.isMaximized() ?? false,
       pageKind: pageContext.kind,
       artworkId: pageContext.artworkId,
@@ -1455,6 +1647,8 @@ function currentExploreState(): ExploreState {
     remoteReviewCacheHits: exploreRemoteReviewCacheHits,
     remoteReviewCacheMisses: exploreRemoteReviewCacheMisses,
     error: exploreError,
+    protectionStatus,
+    protectionError,
     maximized: mainWindow?.isMaximized() ?? false,
     pageKind: pageContext.kind,
     artworkId: pageContext.artworkId,
@@ -2112,11 +2306,11 @@ function pumpExploreReviewQueue(contents: Electron.WebContents): void {
   const startedAt = Date.now();
   const queueWaitMs = Math.max(0, startedAt - candidate.enqueuedAt);
 
-  void reviewRemoteArtwork(candidate.normalizedUrl, candidate.referrer, contents.session)
+  void reviewRemoteArtwork(candidate.normalizedUrl, candidate.referrer)
     .then(async (outcome) => {
       const reviewMs = Date.now() - startedAt;
       console.info(
-        `[explore-queue] ${outcome.allowed ? "allow" : "block"} ` +
+        `[explore-queue] ${outcome.state} ` +
         `${candidate.normalizedUrl} priority=${candidate.priority} source=${outcome.source} ` +
         `queueWaitMs=${queueWaitMs} reviewMs=${reviewMs}`
       );
@@ -2152,7 +2346,7 @@ async function publishRemoteReviewOutcome(
   if (contents.isDestroyed()) return;
   contents.send("explore:review-result", {
     normalizedUrl,
-    state: outcome.allowed ? "allowed" : "blocked",
+    state: outcome.state,
     reasons: outcome.reasons
   });
 }
@@ -2192,12 +2386,19 @@ function createRemoteReviewContext(imageUrl: string): RemoteReviewContext | null
     normalizedUrl,
     engine: vision.engine,
     engineVersion: vision.engineVersion,
-    rulesFingerprint: rulesFingerprint(settings, customElementGroups())
+    rulesFingerprint: rulesFingerprint(
+      settings,
+      customElementGroups(),
+      adaptiveThresholdOverrides()
+    )
   };
   return { settings, cacheKey, memoryKey: JSON.stringify(cacheKey) };
 }
 
 function findCachedRemoteReview(imageUrl: string): RemoteReviewOutcome | null {
+  if (isExplorePageException(imageUrl)) {
+    return { state: "allowed", reasons: [], source: "preference" };
+  }
   const context = createRemoteReviewContext(imageUrl);
   return context ? findCachedRemoteReviewForContext(context) : null;
 }
@@ -2217,7 +2418,7 @@ function findCachedRemoteReviewForContext(
   const persisted = database?.getRemoteImageReview(context.cacheKey);
   if (!persisted) return null;
   const outcome: RemoteReviewOutcome = {
-    allowed: persisted.decision.action === "allow",
+    state: persisted.decision.action === "allow" ? "allowed" : "blocked",
     reasons: persisted.decision.reasons.map((reason) => reason.label),
     source: "persistent"
   };
@@ -2239,19 +2440,21 @@ function rememberRemoteReview(memoryKey: string, outcome: RemoteReviewOutcome): 
 
 function reviewRemoteArtwork(
   imageUrl: string,
-  referrer: string,
-  exploreSession: Session
+  referrer: string
 ): Promise<RemoteReviewOutcome> {
-  if (!vision || !database) {
+  if (isExplorePageException(imageUrl)) {
+    return Promise.resolve({ state: "allowed", reasons: [], source: "preference" });
+  }
+  if (!vision?.available || !database) {
     return Promise.resolve({
-      allowed: false,
+      state: "unavailable",
       reasons: ["视觉引擎不可用"],
       source: "error"
     });
   }
   const context = createRemoteReviewContext(imageUrl);
   if (!context) {
-    return Promise.resolve({ allowed: false, reasons: ["无效图片地址"], source: "error" });
+    return Promise.resolve({ state: "unavailable", reasons: ["无法检查这张图片"], source: "error" });
   }
   const cached = findCachedRemoteReviewForContext(context);
   if (cached) return Promise.resolve(cached);
@@ -2267,31 +2470,33 @@ function reviewRemoteArtwork(
   const review = performRemoteArtworkReview(
     imageUrl,
     referrer,
-    exploreSession,
     context.cacheKey,
     context.settings
   )
     .catch((error: unknown) => {
       console.error(`[explore-review] ${imageUrl}`, error);
-      exploreError = `图片审查失败，已保持遮挡：${
-        error instanceof Error ? error.message : "未知错误"
-      }`;
+      if (!vision?.available) {
+        exploreError = `本地保护模型已停止：${
+          error instanceof Error ? error.message : "未知错误"
+        }`;
+        syncExploreProtectionVisibility();
+      }
       return {
-        allowed: false,
-        reasons: ["审查失败，默认保持遮挡"],
+        state: "unavailable" as const,
+        reasons: ["本次检查未完成"],
         source: "error" as const
       };
     })
     .then((reviewResult) => {
-      if ("allowed" in reviewResult) return reviewResult;
+      if ("state" in reviewResult) return reviewResult;
       const outcome: RemoteReviewOutcome = {
-        allowed: reviewResult.decision.action === "allow",
+        state: reviewResult.decision.action === "allow" ? "allowed" : "blocked",
         reasons: reviewResult.decision.reasons.map((reason) => reason.label),
         source: "fresh"
       };
       rememberRemoteReview(context.memoryKey, outcome);
       database?.saveRemoteImageReview(reviewResult);
-      if (outcome.allowed) exploreApprovedResources += 1;
+      if (outcome.state === "allowed") exploreApprovedResources += 1;
       else exploreBlockedResources += 1;
       return outcome;
     })
@@ -2308,7 +2513,6 @@ function reviewRemoteArtwork(
 async function performRemoteArtworkReview(
   imageUrl: string,
   referrer: string,
-  exploreSession: Session,
   cacheKey: {
     normalizedUrl: string;
     engine: string;
@@ -2319,35 +2523,10 @@ async function performRemoteArtworkReview(
 ): Promise<RemoteImageReviewRecord> {
   if (!vision?.available || !database) throw new Error("Vision engine is unavailable");
 
-  const safeReferrer = isAllowedPixivNavigation(referrer) ? referrer : PIXIV_HOME_URL;
   const userAgent = exploreView?.webContents.getUserAgent() || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
-  const normalized = normalizePixivArtworkImageUrl(imageUrl) || imageUrl;
-  remoteOneShotAllows.add(imageUrl);
-  if (normalized) remoteOneShotAllows.add(normalized);
-  const response = await exploreSession.fetch(imageUrl, {
-    referrer: safeReferrer,
-    headers: {
-      Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-      Referer: safeReferrer,
-      "User-Agent": userAgent
-    },
-    bypassCustomProtocolHandlers: true
-  });
-  if (!response.ok) throw new Error(`Thumbnail download failed: HTTP ${response.status}`);
-
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().startsWith("image/")) {
-    throw new Error(`Unexpected thumbnail content type: ${contentType || "unknown"}`);
-  }
-  const declaredSize = Number(response.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declaredSize) && declaredSize > MAX_REMOTE_IMAGE_BYTES) {
-    throw new Error("Thumbnail exceeds the review size limit");
-  }
-
-  const imageBytes = Buffer.from(await response.arrayBuffer());
-  if (imageBytes.length === 0 || imageBytes.length > MAX_REMOTE_IMAGE_BYTES) {
-    throw new Error("Thumbnail is empty or exceeds the review size limit");
-  }
+  // Never fetch AI-review bytes through the Explore Session: its webRequest
+  // handler intentionally filters page images and can race with internal work.
+  const imageBytes = await fetchPixivReviewImage(imageUrl, referrer, userAgent);
 
   const reviewDirectory = join(app.getPath("temp"), "digital-sanctuary-remote-review");
   await mkdir(reviewDirectory, { recursive: true });
@@ -2368,7 +2547,11 @@ async function performRemoteArtworkReview(
       ) {
         throw new Error("Vision engine version changed during review");
       }
-      const rules = buildElementFilterRules(settings, customElementGroups());
+      const rules = buildElementFilterRules(
+        settings,
+        customElementGroups(),
+        adaptiveThresholdOverrides()
+      );
       const decision = decideFilter(assessment, rules);
       if (decision.action !== "allow") {
         console.warn(

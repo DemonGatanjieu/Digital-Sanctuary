@@ -23,9 +23,21 @@ def main() -> None:
             validate_request(request)
             request_id = request["id"]
             req_type = request["type"]
-            image_path = request["payload"]["imagePath"]
 
-            if req_type == "classify-image":
+            if req_type == "health-check":
+                if wd_engine is None:
+                    from engine import WdTaggerVisionEngine
+                    wd_engine = WdTaggerVisionEngine()
+                write_response(
+                    {
+                        "version": PROTOCOL_VERSION,
+                        "id": request_id,
+                        "type": "health-check-result",
+                        "payload": wd_engine.health(),
+                    }
+                )
+            elif req_type == "classify-image":
+                image_path = request["payload"]["imagePath"]
                 if wd_engine is None:
                     from engine import WdTaggerVisionEngine
                     wd_engine = WdTaggerVisionEngine()
@@ -39,6 +51,7 @@ def main() -> None:
                     }
                 )
             elif req_type == "compute-technical-profile":
+                image_path = request["payload"]["imagePath"]
                 result = compute_technical_profile(image_path)
                 write_response(
                     {
@@ -70,12 +83,14 @@ def validate_request(request: Any) -> None:
     if request.get("version") != PROTOCOL_VERSION:
         raise ValueError("Unsupported vision protocol version")
     req_type = request.get("type")
-    if req_type not in ("classify-image", "compute-technical-profile"):
+    if req_type not in ("health-check", "classify-image", "compute-technical-profile"):
         raise ValueError(f"Unsupported vision request type: {req_type}")
     if not isinstance(request.get("id"), str):
         raise ValueError("Vision request id is required")
     payload = request.get("payload")
-    if not isinstance(payload, dict) or not isinstance(payload.get("imagePath"), str):
+    if not isinstance(payload, dict):
+        raise ValueError("Vision payload is required")
+    if req_type != "health-check" and not isinstance(payload.get("imagePath"), str):
         raise ValueError("Vision imagePath is required")
 
 

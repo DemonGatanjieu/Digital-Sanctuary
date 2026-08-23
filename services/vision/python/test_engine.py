@@ -38,11 +38,15 @@ class WdTaggerPreprocessingTests(unittest.TestCase):
 )
 class WdTaggerRuntimeTests(unittest.TestCase):
     def test_model_runs_on_a_plain_rgb_image(self) -> None:
+        engine = WdTaggerVisionEngine()
+        health = engine.health()
         with tempfile.TemporaryDirectory() as directory:
             image_path = Path(directory) / "plain.png"
             Image.new("RGB", (64, 64), color=(24, 28, 40)).save(image_path)
-            result = WdTaggerVisionEngine().classify(str(image_path))
+            result = engine.classify(str(image_path))
 
+        self.assertEqual(health["status"], "ready")
+        self.assertEqual(health["engine"], MODEL_NAME)
         self.assertEqual(result["status"], "complete")
         self.assertEqual(result["engine"], MODEL_NAME)
         self.assertIn(

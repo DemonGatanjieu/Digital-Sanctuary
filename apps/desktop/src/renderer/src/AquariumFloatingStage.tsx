@@ -82,7 +82,6 @@ export function AquariumFloatingStage({
         {items.map((artwork, idx) => {
           const isCover = coverArtworkId ? artwork.id === coverArtworkId : idx === 0;
           const isBursting = burstingId === artwork.id;
-          const action = artwork.decision?.action ?? "allow";
 
           // Categorize bubble size hierarchy
           let sizeCategory: "hero" | "large" | "medium" | "small" = "medium";
@@ -123,17 +122,13 @@ export function AquariumFloatingStage({
               <div className="bubble-sphere-shell">
                 {/* Artwork Inside Water Lens */}
                 <div className="bubble-lens-content">
-                  {action === "hide" ? (
-                    <div className="bubble-shield-box">◇</div>
-                  ) : (
-                    <img
-                      src={artworkImageUrl(artwork)}
-                      alt={artwork.fileName}
-                      className={`bubble-artwork-img ${action === "blur" ? "blurred" : ""}`}
-                      loading="eager"
-                      decoding="sync"
-                    />
-                  )}
+                  <img
+                    src={artworkImageUrl(artwork)}
+                    alt={artwork.fileName}
+                    className="bubble-artwork-img"
+                    loading="eager"
+                    decoding="sync"
+                  />
                 </div>
 
                 {/* Thin-Film Iridescence Rim (Prismatic Refraction) */}

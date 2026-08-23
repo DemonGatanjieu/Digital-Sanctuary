@@ -95,6 +95,10 @@ export function App() {
   }, [galleryMode, workQuery]);
 
   useEffect(() => {
+    return window.sanctuary.onAppStatus(setStatus);
+  }, []);
+
+  useEffect(() => {
     // 动态主题热注入
     window.sanctuary.getActiveTheme()
       .then((active) => applyThemeCss(active.cssContent))
@@ -556,4 +560,3 @@ function waitForRendererIdle(): Promise<void> {
     globalThis.setTimeout(resolveTask, 80);
   });
 }
-

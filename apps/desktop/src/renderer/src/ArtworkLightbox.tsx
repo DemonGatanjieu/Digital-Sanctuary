@@ -298,24 +298,26 @@ export function ArtworkLightbox({
         )}
         {!imageFailed && (
           <img
-            ref={(el) => {
-              imageRef.current = el;
-              if (el && el.complete && el.naturalWidth > 0 && !imageLoaded) {
-                setImageLoaded(true);
-              }
-            }}
-            key={artwork.id}
+            ref={imageRef}
+            key={`${artwork.id}:${artwork.path}`}
             src={artworkImageUrl(artwork)}
             alt={artwork.source?.title ?? artwork.fileName}
-            className={`cinema-image-entity ${artwork.decision?.action === "blur" ? "blurred " : ""}${imageLoaded ? "loaded" : "loading"}`}
+            className="cinema-image-entity"
+            aria-busy={!imageLoaded}
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "zoom-in"
             }}
             decoding="async"
             draggable={false}
-            onLoad={() => setImageLoaded(true)}
-            onError={() => setImageFailed(true)}
+            onLoad={() => {
+              setImageLoaded(true);
+              setImageFailed(false);
+            }}
+            onError={() => {
+              setImageLoaded(false);
+              setImageFailed(true);
+            }}
           />
         )}
       </div>

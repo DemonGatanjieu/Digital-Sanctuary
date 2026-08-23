@@ -98,6 +98,18 @@ describe("decideFilter", () => {
     expect(isCustomElementGroup(customGroup)).toBe(true);
   });
 
+  it("supports per-label preference thresholds without weakening sibling labels", () => {
+    const settings = DEFAULT_ELEMENT_FILTER_SETTINGS.map((setting) =>
+      setting.groupId === "blood" ? { ...setting, minimumConfidence: 0.5 } : setting
+    );
+    const rules = buildElementFilterRules(settings, [], { blood: 0.82 });
+
+    expect(decideFilter(assessment({ blood: 0.7 }), rules).action).toBe("allow");
+    expect(decideFilter(assessment({ blood_on_clothes: 0.7 }), rules).action).toBe("hide");
+    expect(rulesFingerprint(settings, [], { blood: 0.82 }))
+      .not.toBe(rulesFingerprint(settings, [], { blood: 0.83 }));
+  });
+
   it("validates persistent library preferences", () => {
     expect(isLibraryPreferences({
       defaultView: "author-work",
@@ -128,9 +140,17 @@ describe("decideFilter", () => {
     expect(after2).toHaveLength(1);
     expect(after2[0]?.tags).toEqual(["chibi"]);
 
+    const after2Adjusted = addTagToCustomGroups(after2, "chibi", { action: "blur", threshold: 0.65 });
+    expect(after2Adjusted[0]?.action).toBe("blur");
+    expect(after2Adjusted[0]?.defaultThreshold).toBe(0.65);
+
     // Adding another tag appends to existing group with same name
-    const after3 = addTagToCustomGroups(after2, "ai_generated");
+    const after3 = addTagToCustomGroups(after2Adjusted, "ai_generated");
     expect(after3).toHaveLength(1);
     expect(after3[0]?.tags).toEqual(["chibi", "ai_generated"]);
+
+    const after4 = addTagToCustomGroups(after3, "watermark", { action: "blur", threshold: 0.7 });
+    expect(after4[0]?.action).toBe("blur");
+    expect(after4[0]?.defaultThreshold).toBe(0.7);
   });
 });

@@ -7,6 +7,8 @@ export interface AppStatus {
   visionEngine: string;
   visionProvider: string;
   visionReady: boolean;
+  visionState: "starting" | "ready" | "failed" | "stopped";
+  visionError: string;
   modelBacked: boolean;
 }
 

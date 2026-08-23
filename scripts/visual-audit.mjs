@@ -557,7 +557,13 @@ try {
       const clientWidth = Math.min(html.clientWidth, body.clientWidth);
       const hasHOverflow = scrollWidth > clientWidth + 2;
 
-      const brokenImages = Array.from(document.querySelectorAll('img')).filter(img => img.naturalWidth === 0 && !img.src.startsWith('data:')).map(img => img.src);
+      const brokenImages = Array.from(document.querySelectorAll('img')).flatMap((img) => {
+        const source = img.currentSrc || img.getAttribute('src') || '';
+        const waitingForViewport = img.dataset.lazyState === 'waiting';
+        return source && !source.startsWith('data:') && !waitingForViewport && img.complete && img.naturalWidth === 0
+          ? [source]
+          : [];
+      });
       const activeElement = document.activeElement ? { tag: document.activeElement.tagName, className: document.activeElement.className } : null;
 
       return {

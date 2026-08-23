@@ -345,6 +345,8 @@ export interface ElementFilterSetting {
   minimumConfidence: number;
 }
 
+export type ElementThresholdOverrides = Readonly<Record<string, number>>;
+
 export interface CustomElementGroup extends ElementBlacklistGroup {
   aliases: string[];
   action: Exclude<FilterAction, "allow">;
@@ -463,7 +465,8 @@ export const DEFAULT_ELEMENT_FILTER_SETTINGS: ElementFilterSetting[] =
 
 export function buildElementFilterRules(
   settings: readonly ElementFilterSetting[] = DEFAULT_ELEMENT_FILTER_SETTINGS,
-  customGroups: readonly CustomElementGroup[] = []
+  customGroups: readonly CustomElementGroup[] = [],
+  thresholdOverrides: ElementThresholdOverrides = {}
 ): FilterRule[] {
   const settingsByGroup = new Map(settings.map((setting) => [setting.groupId, setting]));
   const groups: Array<ElementBlacklistGroup & {
@@ -485,7 +488,7 @@ export function buildElementFilterRules(
       name: `${group.name}：${tag}`,
       enabled: setting?.enabled ?? true,
       label: tag,
-      minimumConfidence,
+      minimumConfidence: normalizeConfidence(thresholdOverrides[tag], minimumConfidence),
       action: group.action,
       priority: 1_000 - groupIndex
     }));
@@ -498,9 +501,10 @@ export function buildElementFilterRules(
  */
 export function rulesFingerprint(
   settings: readonly ElementFilterSetting[] = DEFAULT_ELEMENT_FILTER_SETTINGS,
-  customGroups: readonly CustomElementGroup[] = []
+  customGroups: readonly CustomElementGroup[] = [],
+  thresholdOverrides: ElementThresholdOverrides = {}
 ): string {
-  const canonical = buildElementFilterRules(settings, customGroups)
+  const canonical = buildElementFilterRules(settings, customGroups, thresholdOverrides)
     .sort((left, right) => left.id.localeCompare(right.id))
     .map((rule) => [
       rule.id,
@@ -581,16 +585,22 @@ export function addTagToCustomGroups(
   if (existingGroupIndex >= 0) {
     const existing = groups[existingGroupIndex];
     if (existing && (existing.tags.includes(normalizedTag) || existing.aliases.includes(normalizedTag))) {
-      return [...groups];
+      if (options?.threshold === undefined && options?.action === undefined) return [...groups];
+      const updated: CustomElementGroup = {
+        ...existing,
+        defaultThreshold: options?.threshold === undefined ? existing.defaultThreshold : targetThreshold,
+        action: options?.action ?? existing.action
+      };
+      return groups.map((group, index) => index === existingGroupIndex ? updated : group);
     }
     if (existing) {
       const updated: CustomElementGroup = {
         id: existing.id,
         name: existing.name,
         description: existing.description,
-        defaultThreshold: existing.defaultThreshold,
+        defaultThreshold: options?.threshold === undefined ? existing.defaultThreshold : targetThreshold,
         aliases: existing.aliases ?? [],
-        action: existing.action,
+        action: options?.action ?? existing.action,
         tags: [...existing.tags, normalizedTag]
       };
       return groups.map((g, idx) => (idx === existingGroupIndex ? updated : g));
@@ -670,4 +680,3 @@ export function decideFilter(
 
 export * from "./vision-suites.js";
 export * from "./typography.js";
-

@@ -16,9 +16,13 @@ const imagePath = join(directory, "pixel.png");
 await writeFile(imagePath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
 
 try {
-  const response = await classify(executable, modelDirectory, imagePath);
+  const { health, response } = await verifyRuntime(executable, modelDirectory, imagePath);
   const payload = response?.payload;
   const failures = [];
+  if (health?.type !== "health-check-result" || health?.payload?.status !== "ready") {
+    failures.push("vision readiness handshake failed");
+  }
+  if (health?.payload?.engine !== "wd-swinv2-tagger-v3") failures.push("wrong health-check engine");
   if (response?.type !== "classify-image-result") failures.push("vision protocol response failed");
   if (payload?.engine !== "wd-swinv2-tagger-v3") failures.push("wrong packaged engine");
   if (payload?.status !== "complete") failures.push("packaged inference did not complete");
@@ -28,7 +32,7 @@ try {
   await rm(directory, { recursive: true, force: true });
 }
 
-function classify(command, model, image) {
+function verifyRuntime(command, model, image) {
   return new Promise((resolveTask, reject) => {
     const child = spawn(command, [], { windowsHide: true, env: { ...process.env, WD_TAGGER_MODEL_DIR: model } });
     let stdout = "";
@@ -40,9 +44,15 @@ function classify(command, model, image) {
     child.once("exit", (code) => {
       clearTimeout(timer);
       if (code !== 0) { reject(new Error(stderr || `Vision runtime exited with ${code}`)); return; }
-      try { resolveTask(JSON.parse(stdout.trim().split(/\r?\n/).at(-1))); }
+      try {
+        const responses = stdout.trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line));
+        resolveTask({ health: responses[0], response: responses[1] });
+      }
       catch { reject(new Error(`Invalid vision output: ${stdout || stderr}`)); }
     });
-    child.stdin.end(`${JSON.stringify({ version: 1, id: "bundle-smoke", type: "classify-image", payload: { imagePath: image } })}\n`);
+    child.stdin.end([
+      JSON.stringify({ version: 1, id: "bundle-health", type: "health-check", payload: {} }),
+      JSON.stringify({ version: 1, id: "bundle-smoke", type: "classify-image", payload: { imagePath: image } })
+    ].join("\n") + "\n");
   });
 }

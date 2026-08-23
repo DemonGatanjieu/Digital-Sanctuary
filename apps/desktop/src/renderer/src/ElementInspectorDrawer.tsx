@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CustomElementGroup, InspectArtworkPage, VisionAssessment } from "@sanctuary/domain";
+import type { ApplicationStatus } from "../../preload/index";
 import { Button } from "./Button";
 import { AppNotice } from "./AppNotice";
 
@@ -34,6 +35,7 @@ export function ElementInspectorDrawer({
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [minConfidenceFilter, setMinConfidenceFilter] = useState<number>(0.2);
+  const [runtimeStatus, setRuntimeStatus] = useState<ApplicationStatus | null>(null);
 
   const loadAnalysis = useCallback((overridePageIndex?: number) => {
     if (!target) return;
@@ -54,7 +56,7 @@ export function ElementInspectorDrawer({
       .inspectArtwork(inspectParams)
       .then((res) => {
         if (!res || !res.assessment) {
-          setError("未能获取该画作的视觉标签分析。可能该作品为多图/动图、需要会员/登录权限，或网络请求超时。");
+          setError("没有收到可显示的标签结果。请查看上方模型状态后重试。");
           setAssessment(null);
         } else {
           setAssessment(res.assessment);
@@ -67,13 +69,30 @@ export function ElementInspectorDrawer({
         }
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : "分析失败");
+        const rawMessage = err instanceof Error ? err.message : "分析失败";
+        setError(rawMessage.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, ""));
         setAssessment(null);
       })
       .finally(() => {
         setLoading(false);
       });
   }, [target]);
+
+  useEffect(() => {
+    let active = true;
+    void window.sanctuary.status()
+      .then((nextStatus) => {
+        if (active) setRuntimeStatus(nextStatus);
+      })
+      .catch(() => undefined);
+    const unsubscribe = window.sanctuary.onAppStatus((nextStatus) => {
+      if (active) setRuntimeStatus(nextStatus);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   const targetKey = target ? `${target.workId ?? ""}:${target.artworkId ?? ""}:${target.url ?? ""}:${target.pageIndex ?? ""}` : "";
 
@@ -210,6 +229,24 @@ export function ElementInspectorDrawer({
             </button>
           </div>
         </header>
+
+        <div className={`inspector-runtime-status ${runtimeStatus?.visionReady ? "ready" : runtimeStatus?.visionState ?? "starting"}`}>
+          <span className="inspector-runtime-dot" aria-hidden="true" />
+          <div>
+            <strong>
+              {runtimeStatus?.visionReady
+                ? "本地 WD Tagger 已就绪"
+                : !runtimeStatus || runtimeStatus.visionState === "starting"
+                  ? "正在确认本地模型状态"
+                  : "本地模型暂未就绪"}
+            </strong>
+            <small>
+              {runtimeStatus?.visionReady
+                ? `${runtimeStatus.visionProvider} · 图片只在本机分析`
+                : runtimeStatus?.visionError || "正在读取视觉引擎状态"}
+            </small>
+          </div>
+        </div>
 
         {notice && <AppNotice tone="success" onDismiss={() => setNotice("")}>{notice}</AppNotice>}
         {error && <AppNotice tone="error">{error}</AppNotice>}

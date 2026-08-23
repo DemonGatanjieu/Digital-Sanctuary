@@ -244,8 +244,15 @@ export function SettingsView({
 
       <SectionHeading eyebrow="RULE SANDBOX" title="规则测试与模型能力" description="只分析选中的单张图片，不入库、不改变作品信任状态。" />
       <section className="model-capability-card">
-        <div><strong>{status?.visionEngine ?? "检测中"}</strong><small>{status?.visionProvider ?? "unknown"} · {status?.modelBacked ? "已验证元素标签模型" : "开发探针"}</small></div>
-        <Button busy={sandboxBusy} busyLabel="分析中…" onClick={() => void testImage()}>选择测试图片</Button>
+        <div>
+          <strong>{status?.visionEngine ?? "检测中"}</strong>
+          <small>{status?.visionReady
+            ? `${status.visionProvider} · ${status.modelBacked ? "模型已就绪" : "开发探针已就绪"}`
+            : status?.visionState === "starting"
+              ? "正在装载模型"
+              : `模型未就绪${status?.visionError ? ` · ${status.visionError}` : ""}`}</small>
+        </div>
+        <Button disabled={!status?.visionReady} busy={sandboxBusy} busyLabel="分析中…" onClick={() => void testImage()}>选择测试图片</Button>
         {sandboxResult && (
           <div className="sandbox-result">
             <strong>{sandboxResult.fileName} · {sandboxResult.decision.action}</strong>

@@ -127,7 +127,7 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
             (u.includes("/" + selectedArtworkId + "_") || u.includes("/" + selectedArtworkId + "."))
           );
           const imgs = Array.from(document.querySelectorAll("main figure img, main [role='presentation'] img, img[src*='pximg.net']"));
-          const artworkImgs = imgs.filter((el) => isArtworkUrlForId(el.getAttribute("src") || el.currentSrc || el.src || ""));
+          const artworkImgs = imgs.filter((el) => isArtworkUrlForId(el.currentSrc || el.getAttribute("src") || el.src || ""));
 
           let candidateImg = null;
           if (artworkImgs.length > 0) {
@@ -144,7 +144,7 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
             }
           }
 
-          const imgSrc = candidateImg ? (candidateImg.getAttribute("src") || candidateImg.currentSrc || candidateImg.src || "") : "";
+          const imgSrc = candidateImg ? (candidateImg.currentSrc || candidateImg.getAttribute("src") || candidateImg.src || "") : "";
           if (imgSrc && isArtworkUrlForId(imgSrc)) {
             console.info("sanctuary-inspect:" + revealToken + ":" + selectedArtworkId + ":" + encodeURIComponent(imgSrc));
           } else {
@@ -167,7 +167,7 @@ export function buildPixivDomAdapterScript(revealToken = ""): string {
 
     const decorateImage = (image, url, reasons) => {
       if (!(image instanceof HTMLImageElement) || state.revealedUrls.has(url)) return;
-      const currentUrl = normalizeArtworkUrl(image.getAttribute("src") || image.currentSrc || image.src);
+      const currentUrl = normalizeArtworkUrl(image.currentSrc || image.getAttribute("src") || image.src);
       if (currentUrl !== url) return;
       if (!image.dataset.sanctuaryReviewOriginalSrc) {
         image.dataset.sanctuaryReviewOriginalSrc = image.getAttribute("src") || image.src;

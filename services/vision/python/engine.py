@@ -36,6 +36,14 @@ class WdTaggerVisionEngine:
         self._input_name = model_input.name
         self._output_name = self._session.get_outputs()[0].name
 
+    def health(self) -> dict[str, Any]:
+        return {
+            "status": "ready",
+            "engine": MODEL_NAME,
+            "engineVersion": f"v3/{MODEL_SHA256[:12]}/ort-{onnxruntime.__version__}",
+            "executionProvider": self.execution_provider,
+        }
+
     def classify(self, image_path: str) -> dict[str, Any]:
         started_at = perf_counter()
         path = Path(image_path)
