@@ -45,13 +45,21 @@ import { VisionClient } from "./vision-client.js";
 import type { VisionProcessOptions } from "./vision-client.js";
 import {
   applyFeedbackChanges,
+  applyPersonalPreferenceChanges,
+  createDislikeFeedback,
   createFalsePositiveFeedback,
+  decidePersonalPreference,
   normalizeFeedbackHistory,
   normalizePageExceptions,
+  normalizePersonalTagPreferences,
   normalizeThresholdOverrides,
+  personalPreferenceFingerprint,
   pixivArtworkPageKey,
+  selectDislikeTagCandidates,
+  undoPersonalPreferenceChanges,
   undoFeedbackChanges,
-  type AdaptivePreferenceFeedback
+  type AdaptivePreferenceFeedback,
+  type PersonalTagPreferenceProfile
 } from "./explore-preference-calibration.js";
 import {
   ExploreReviewQueue,
@@ -175,6 +183,8 @@ const PIXIV_DOWNLOAD_CONCURRENCY = 4;
 const ENABLE_VIEWPORT_REVIEW = true;
 const THRESHOLD_OVERRIDES_PREFERENCE_PREFIX = "filters.threshold-overrides.v1";
 const PAGE_EXCEPTIONS_PREFERENCE = "filters.explore-page-exceptions.v1";
+const DISLIKE_PAGE_EXCEPTIONS_PREFERENCE = "filters.explore-dislike-page-exceptions.v1";
+const PERSONAL_TAG_PREFERENCES_PREFIX = "filters.personal-tag-preferences.v1";
 const ADAPTIVE_FEEDBACK_PREFERENCE = "filters.adaptive-feedback.v1";
 let exploreProtectionBypassed = false;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -418,9 +428,31 @@ function adaptiveThresholdOverrides(
   );
 }
 
+function personalTagPreferencesKey(
+  engine = vision?.engine ?? "unavailable",
+  engineVersion = vision?.engineVersion ?? "0"
+): string {
+  return `${PERSONAL_TAG_PREFERENCES_PREFIX}:${engine}:${engineVersion}`;
+}
+
+function personalTagPreferences(
+  engine = vision?.engine ?? "unavailable",
+  engineVersion = vision?.engineVersion ?? "0"
+): PersonalTagPreferenceProfile {
+  return normalizePersonalTagPreferences(
+    database?.getPreference<unknown>(personalTagPreferencesKey(engine, engineVersion))
+  );
+}
+
 function explorePageExceptions(): string[] {
   return normalizePageExceptions(
     database?.getPreference<unknown>(PAGE_EXCEPTIONS_PREFERENCE)
+  );
+}
+
+function exploreDislikePageExceptions(): string[] {
+  return normalizePageExceptions(
+    database?.getPreference<unknown>(DISLIKE_PAGE_EXCEPTIONS_PREFERENCE)
   );
 }
 
@@ -433,6 +465,20 @@ function adaptiveFeedbackHistory(): AdaptivePreferenceFeedback[] {
 function isExplorePageException(imageUrl: string): boolean {
   const pageKey = pixivArtworkPageKey(imageUrl);
   return Boolean(pageKey && explorePageExceptions().includes(pageKey));
+}
+
+function isExploreDislikePageException(imageUrl: string): boolean {
+  const pageKey = pixivArtworkPageKey(imageUrl);
+  return Boolean(pageKey && exploreDislikePageExceptions().includes(pageKey));
+}
+
+function activeExploreRulesFingerprint(
+  settings: ReturnType<LibraryDatabase["listElementFilterSettings"]>,
+  preferences = personalTagPreferences()
+): string {
+  const base = rulesFingerprint(settings, customElementGroups(), adaptiveThresholdOverrides());
+  const personal = personalPreferenceFingerprint(preferences);
+  return personal ? `${base}|${personal}` : base;
 }
 
 async function deleteConfirmedWorks(workIds: readonly string[]): Promise<WorkDeletionResult> {
@@ -587,6 +633,48 @@ function registerIpc(): void {
 
   ipcMain.handle("filters:list", () => database?.listElementFilterSettings() ?? []);
   ipcMain.handle("filters:custom-list", () => customElementGroups());
+  ipcMain.handle("filters:personal-preferences-list", () => ({
+    engine: vision?.engine ?? "unavailable",
+    engineVersion: vision?.engineVersion ?? "0",
+    available: Boolean(vision?.available),
+    entries: Object.values(personalTagPreferences())
+      .sort((left, right) => right.evidenceCount - left.evidenceCount || right.weight - left.weight)
+  }));
+  ipcMain.handle("filters:personal-preference-toggle", (_event, value: unknown) => {
+    if (!database || !vision) throw new Error("本地视觉模型尚未就绪");
+    if (!value || typeof value !== "object") throw new Error("Invalid personal preference payload");
+    const { label, enabled } = value as { label?: unknown; enabled?: unknown };
+    if (typeof label !== "string" || typeof enabled !== "boolean") {
+      throw new Error("Invalid personal preference payload");
+    }
+    const current = personalTagPreferences();
+    const preference = current[label];
+    if (!preference) throw new Error("Personal preference was not found");
+    const next = {
+      ...current,
+      [label]: { ...preference, enabled, updatedAt: new Date().toISOString() }
+    };
+    database.setPreference(personalTagPreferencesKey(), next);
+    remoteReviewCache.clear();
+    return {
+      engine: vision.engine,
+      engineVersion: vision.engineVersion,
+      available: vision.available,
+      entries: Object.values(next)
+        .sort((left, right) => right.evidenceCount - left.evidenceCount || right.weight - left.weight)
+    };
+  });
+  ipcMain.handle("filters:personal-preferences-reset", () => {
+    if (!database || !vision) throw new Error("本地视觉模型尚未就绪");
+    database.setPreference(personalTagPreferencesKey(), {});
+    remoteReviewCache.clear();
+    return {
+      engine: vision.engine,
+      engineVersion: vision.engineVersion,
+      available: vision.available,
+      entries: []
+    };
+  });
   ipcMain.handle("filters:update", (_event, setting: unknown) => {
     if (!database || !isElementFilterSetting(setting)) {
       throw new Error("Invalid element filter setting");
@@ -651,7 +739,11 @@ function registerIpc(): void {
       pageIndex?: unknown;
     };
 
-    const fingerprint = rulesFingerprint(database.listElementFilterSettings(), customElementGroups());
+    const inspectPreferences = personalTagPreferences();
+    const fingerprint = activeExploreRulesFingerprint(
+      database.listElementFilterSettings(),
+      inspectPreferences
+    );
     const reviewSession = exploreView?.webContents.session ?? session.defaultSession;
     const requestedPageIndex = typeof pageIndex === "number" && pageIndex >= 0 ? pageIndex : undefined;
 
@@ -841,7 +933,8 @@ function registerIpc(): void {
             engineVersion: vision.engineVersion,
             rulesFingerprint: fingerprint
           },
-          database.listElementFilterSettings()
+          database.listElementFilterSettings(),
+          inspectPreferences
         );
         database.saveRemoteImageReview(outcome);
         return responseFor(outcome.assessment, targetImageUrl);
@@ -1079,6 +1172,120 @@ function registerIpc(): void {
       reasons: []
     });
   });
+  ipcMain.handle("explore:get-dislike-candidates", async (event, value: unknown) => {
+    const contents = exploreView?.webContents;
+    if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) {
+      return { success: false, candidates: [] };
+    }
+    if (!database || !vision?.available) throw new Error("本地视觉模型尚未就绪");
+    if (!value || typeof value !== "object") throw new Error("Invalid payload");
+    const rawUrl = (value as { normalizedUrl?: unknown }).normalizedUrl;
+    if (typeof rawUrl !== "string") throw new Error("Missing normalizedUrl");
+    const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl);
+    if (!normalizedUrl) throw new Error("无法识别这张 Pixiv 图片");
+    const reviewRecord = database.getLatestRemoteImageReview(normalizedUrl);
+    if (
+      !reviewRecord || reviewRecord.assessment.status !== "complete" ||
+      reviewRecord.engine !== vision.engine || reviewRecord.engineVersion !== vision.engineVersion
+    ) {
+      throw new Error("这张图片尚未完成本地分析，请稍后再试");
+    }
+    return {
+      success: true,
+      pageKey: pixivArtworkPageKey(normalizedUrl),
+      candidates: selectDislikeTagCandidates({
+        assessment: reviewRecord.assessment,
+        preferences: personalTagPreferences()
+      })
+    };
+  });
+  ipcMain.handle("explore:record-dislike", async (event, value: unknown) => {
+    const contents = exploreView?.webContents;
+    if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) return { success: false };
+    if (!database || !vision?.available) throw new Error("本地视觉模型尚未就绪");
+    if (!value || typeof value !== "object") throw new Error("Invalid payload");
+    const { normalizedUrl: rawUrl, selectedLabels: rawSelectedLabels } = value as {
+      normalizedUrl?: unknown;
+      selectedLabels?: unknown;
+    };
+    if (typeof rawUrl !== "string" || !Array.isArray(rawSelectedLabels) || rawSelectedLabels.length > 5) {
+      throw new Error("Invalid dislike payload");
+    }
+    if (!rawSelectedLabels.every((label) => typeof label === "string")) {
+      throw new Error("Invalid dislike labels");
+    }
+    const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl);
+    if (!normalizedUrl) throw new Error("无法识别这张 Pixiv 图片");
+    const pageKey = pixivArtworkPageKey(normalizedUrl);
+    if (!pageKey) throw new Error("无法识别作品页");
+    const reviewRecord = database.getLatestRemoteImageReview(normalizedUrl);
+    if (
+      !reviewRecord || reviewRecord.assessment.status !== "complete" ||
+      reviewRecord.engine !== vision.engine || reviewRecord.engineVersion !== vision.engineVersion
+    ) {
+      throw new Error("这张图片尚未完成本地分析，请稍后再试");
+    }
+
+    const currentPreferences = personalTagPreferences();
+    const candidates = selectDislikeTagCandidates({
+      assessment: reviewRecord.assessment,
+      preferences: currentPreferences
+    });
+    const allowedLabels = new Set(candidates.map((candidate) => candidate.label));
+    const selectedLabels = [...new Set(rawSelectedLabels)];
+    if (!selectedLabels.every((label) => allowedLabels.has(label))) {
+      throw new Error("选择中包含未经本地模型确认的标签");
+    }
+    const allowExceptions = explorePageExceptions();
+    const feedback = createDislikeFeedback({
+      id: randomUUID(),
+      normalizedUrl,
+      assessment: reviewRecord.assessment,
+      selectedLabels,
+      personalPreferences: currentPreferences,
+      hadAllowException: allowExceptions.includes(pageKey)
+    });
+    if (!feedback) throw new Error("无法记录这次偏好");
+
+    database.setPreference(
+      personalTagPreferencesKey(),
+      applyPersonalPreferenceChanges(currentPreferences, feedback.personalChanges)
+    );
+    database.setPreference(
+      DISLIKE_PAGE_EXCEPTIONS_PREFERENCE,
+      [...new Set([...exploreDislikePageExceptions(), pageKey])].slice(-2_000)
+    );
+    database.setPreference(
+      PAGE_EXCEPTIONS_PREFERENCE,
+      allowExceptions.filter((entry) => entry !== pageKey)
+    );
+    database.setPreference(
+      ADAPTIVE_FEEDBACK_PREFERENCE,
+      [...adaptiveFeedbackHistory(), feedback].slice(-500)
+    );
+    remoteReviewCache.clear();
+    contents.send("explore:review-result", {
+      normalizedUrl,
+      state: "blocked",
+      reasons: [selectedLabels.length > 0 ? "个人偏好：少看类似元素" : "个人偏好：仅隐藏这张"]
+    });
+    return {
+      success: true,
+      feedbackId: feedback.id,
+      pageKey,
+      selectedTags: feedback.selectedTags.map((tag) => ({
+        label: tag.label,
+        confidence: Math.round(tag.confidence * 100)
+      })),
+      changes: feedback.personalChanges.map((change) => ({
+        label: change.label,
+        oldWeight: Math.round((change.oldPreference?.weight ?? 0) * 100),
+        newWeight: Math.round((change.newPreference?.weight ?? 0) * 100),
+        oldEvidence: change.oldPreference?.evidenceCount ?? 0,
+        newEvidence: change.newPreference?.evidenceCount ?? 0
+      }))
+    };
+  });
   ipcMain.handle("explore:mark-false-positive", async (event, value: unknown) => {
     const contents = exploreView?.webContents;
     if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) return { success: false };
@@ -1086,17 +1293,26 @@ function registerIpc(): void {
     if (!value || typeof value !== "object") throw new Error("Invalid payload");
     const rawUrl = (value as { normalizedUrl?: string }).normalizedUrl;
     if (typeof rawUrl !== "string") throw new Error("Missing normalizedUrl");
-    const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl) || rawUrl;
+    const normalizedUrl = normalizePixivArtworkImageUrl(rawUrl);
+    if (!normalizedUrl) throw new Error("无法识别这张 Pixiv 图片");
     const pageKey = pixivArtworkPageKey(normalizedUrl);
     if (!pageKey) throw new Error("Unable to identify the Pixiv artwork page");
 
     const exceptions = explorePageExceptions();
+    const dislikeExceptions = exploreDislikePageExceptions();
     if (!exceptions.includes(pageKey)) {
       database.setPreference(PAGE_EXCEPTIONS_PREFERENCE, [...exceptions, pageKey].slice(-2_000));
+    }
+    if (dislikeExceptions.includes(pageKey)) {
+      database.setPreference(
+        DISLIKE_PAGE_EXCEPTIONS_PREFERENCE,
+        dislikeExceptions.filter((entry) => entry !== pageKey)
+      );
     }
 
     const reviewRecord = database.getLatestRemoteImageReview(normalizedUrl);
     const currentOverrides = adaptiveThresholdOverrides();
+    const currentPersonalPreferences = personalTagPreferences();
     const feedback = reviewRecord && vision &&
       reviewRecord.engine === vision.engine && reviewRecord.engineVersion === vision.engineVersion
       ? createFalsePositiveFeedback({
@@ -1104,15 +1320,26 @@ function registerIpc(): void {
           normalizedUrl,
           assessment: reviewRecord.assessment,
           reasons: reviewRecord.decision.reasons,
-          thresholdOverrides: currentOverrides
+          thresholdOverrides: currentOverrides,
+          personalPreferences: currentPersonalPreferences,
+          hadAllowException: exceptions.includes(pageKey),
+          hadDislikeException: dislikeExceptions.includes(pageKey)
         })
       : null;
 
     if (feedback) {
-      database.setPreference(
-        thresholdOverridesPreferenceKey(feedback.engine, feedback.engineVersion),
-        applyFeedbackChanges(currentOverrides, feedback)
-      );
+      if (feedback.changes.length > 0) {
+        database.setPreference(
+          thresholdOverridesPreferenceKey(feedback.engine, feedback.engineVersion),
+          applyFeedbackChanges(currentOverrides, feedback)
+        );
+      }
+      if (feedback.personalChanges.length > 0) {
+        database.setPreference(
+          personalTagPreferencesKey(feedback.engine, feedback.engineVersion),
+          applyPersonalPreferenceChanges(currentPersonalPreferences, feedback.personalChanges)
+        );
+      }
       database.setPreference(
         ADAPTIVE_FEEDBACK_PREFERENCE,
         [...adaptiveFeedbackHistory(), feedback].slice(-500)
@@ -1137,6 +1364,13 @@ function registerIpc(): void {
         confidence: Math.round(change.confidence * 100),
         oldThreshold: Math.round(change.oldThreshold * 100),
         newThreshold: Math.round(change.newThreshold * 100)
+      })) ?? [],
+      personalChanges: feedback?.personalChanges.map((change) => ({
+        label: change.label,
+        oldWeight: Math.round((change.oldPreference?.weight ?? 0) * 100),
+        newWeight: Math.round((change.newPreference?.weight ?? 0) * 100),
+        oldEvidence: change.oldPreference?.evidenceCount ?? 0,
+        newEvidence: change.newPreference?.evidenceCount ?? 0
       })) ?? []
     };
   });
@@ -1155,18 +1389,54 @@ function registerIpc(): void {
       throw new Error("只能撤销最近一次偏好调整");
     }
     const remainingHistory = history.slice(0, -1);
-    database.setPreference(
-      thresholdOverridesPreferenceKey(feedback.engine, feedback.engineVersion),
-      undoFeedbackChanges(
-        adaptiveThresholdOverrides(feedback.engine, feedback.engineVersion),
-        feedback
-      )
-    );
+    if (feedback.kind === "false-positive") {
+      database.setPreference(
+        thresholdOverridesPreferenceKey(feedback.engine, feedback.engineVersion),
+        undoFeedbackChanges(
+          adaptiveThresholdOverrides(feedback.engine, feedback.engineVersion),
+          feedback
+        )
+      );
+      database.setPreference(
+        personalTagPreferencesKey(feedback.engine, feedback.engineVersion),
+        undoPersonalPreferenceChanges(
+          personalTagPreferences(feedback.engine, feedback.engineVersion),
+          feedback.personalChanges
+        )
+      );
+    } else {
+      database.setPreference(
+        personalTagPreferencesKey(feedback.engine, feedback.engineVersion),
+        undoPersonalPreferenceChanges(
+          personalTagPreferences(feedback.engine, feedback.engineVersion),
+          feedback.personalChanges
+        )
+      );
+    }
     database.setPreference(ADAPTIVE_FEEDBACK_PREFERENCE, remainingHistory);
-    if (!remainingHistory.some((entry) => entry.pageKey === feedback.pageKey)) {
+    if (feedback.kind === "false-positive") {
       database.setPreference(
         PAGE_EXCEPTIONS_PREFERENCE,
-        explorePageExceptions().filter((pageKey) => pageKey !== feedback.pageKey)
+        feedback.hadAllowException
+          ? [...new Set([...explorePageExceptions(), feedback.pageKey])]
+          : explorePageExceptions().filter((pageKey) => pageKey !== feedback.pageKey)
+      );
+      database.setPreference(
+        DISLIKE_PAGE_EXCEPTIONS_PREFERENCE,
+        feedback.hadDislikeException
+          ? [...new Set([...exploreDislikePageExceptions(), feedback.pageKey])]
+          : exploreDislikePageExceptions().filter((pageKey) => pageKey !== feedback.pageKey)
+      );
+    } else {
+      database.setPreference(
+        DISLIKE_PAGE_EXCEPTIONS_PREFERENCE,
+        exploreDislikePageExceptions().filter((pageKey) => pageKey !== feedback.pageKey)
+      );
+      database.setPreference(
+        PAGE_EXCEPTIONS_PREFERENCE,
+        feedback.hadAllowException
+          ? [...new Set([...explorePageExceptions(), feedback.pageKey])]
+          : explorePageExceptions().filter((pageKey) => pageKey !== feedback.pageKey)
       );
     }
     remoteReviewCache.clear();
@@ -2368,6 +2638,7 @@ function scheduleExploreState(): void {
 
 interface RemoteReviewContext {
   settings: ReturnType<LibraryDatabase["listElementFilterSettings"]>;
+  personalPreferences: PersonalTagPreferenceProfile;
   cacheKey: {
     normalizedUrl: string;
     engine: string;
@@ -2382,22 +2653,22 @@ function createRemoteReviewContext(imageUrl: string): RemoteReviewContext | null
   const normalizedUrl = normalizePixivArtworkImageUrl(imageUrl);
   if (!normalizedUrl) return null;
   const settings = database.listElementFilterSettings();
+  const preferences = personalTagPreferences();
   const cacheKey = {
     normalizedUrl,
     engine: vision.engine,
     engineVersion: vision.engineVersion,
-    rulesFingerprint: rulesFingerprint(
-      settings,
-      customElementGroups(),
-      adaptiveThresholdOverrides()
-    )
+    rulesFingerprint: activeExploreRulesFingerprint(settings, preferences)
   };
-  return { settings, cacheKey, memoryKey: JSON.stringify(cacheKey) };
+  return { settings, personalPreferences: preferences, cacheKey, memoryKey: JSON.stringify(cacheKey) };
 }
 
 function findCachedRemoteReview(imageUrl: string): RemoteReviewOutcome | null {
   if (isExplorePageException(imageUrl)) {
     return { state: "allowed", reasons: [], source: "preference" };
+  }
+  if (isExploreDislikePageException(imageUrl)) {
+    return { state: "blocked", reasons: ["个人偏好：仅隐藏这张"], source: "preference" };
   }
   const context = createRemoteReviewContext(imageUrl);
   return context ? findCachedRemoteReviewForContext(context) : null;
@@ -2419,7 +2690,7 @@ function findCachedRemoteReviewForContext(
   if (!persisted) return null;
   const outcome: RemoteReviewOutcome = {
     state: persisted.decision.action === "allow" ? "allowed" : "blocked",
-    reasons: persisted.decision.reasons.map((reason) => reason.label),
+    reasons: persisted.decision.reasons.map(describeRemoteReviewReason),
     source: "persistent"
   };
   rememberRemoteReview(context.memoryKey, outcome);
@@ -2444,6 +2715,13 @@ function reviewRemoteArtwork(
 ): Promise<RemoteReviewOutcome> {
   if (isExplorePageException(imageUrl)) {
     return Promise.resolve({ state: "allowed", reasons: [], source: "preference" });
+  }
+  if (isExploreDislikePageException(imageUrl)) {
+    return Promise.resolve({
+      state: "blocked",
+      reasons: ["个人偏好：仅隐藏这张"],
+      source: "preference"
+    });
   }
   if (!vision?.available || !database) {
     return Promise.resolve({
@@ -2471,7 +2749,8 @@ function reviewRemoteArtwork(
     imageUrl,
     referrer,
     context.cacheKey,
-    context.settings
+    context.settings,
+    context.personalPreferences
   )
     .catch((error: unknown) => {
       console.error(`[explore-review] ${imageUrl}`, error);
@@ -2491,7 +2770,7 @@ function reviewRemoteArtwork(
       if ("state" in reviewResult) return reviewResult;
       const outcome: RemoteReviewOutcome = {
         state: reviewResult.decision.action === "allow" ? "allowed" : "blocked",
-        reasons: reviewResult.decision.reasons.map((reason) => reason.label),
+        reasons: reviewResult.decision.reasons.map(describeRemoteReviewReason),
         source: "fresh"
       };
       rememberRemoteReview(context.memoryKey, outcome);
@@ -2519,7 +2798,8 @@ async function performRemoteArtworkReview(
     engineVersion: string;
     rulesFingerprint: string;
   },
-  settings: ReturnType<LibraryDatabase["listElementFilterSettings"]>
+  settings: ReturnType<LibraryDatabase["listElementFilterSettings"]>,
+  preferences: PersonalTagPreferenceProfile
 ): Promise<RemoteImageReviewRecord> {
   if (!vision?.available || !database) throw new Error("Vision engine is unavailable");
 
@@ -2552,7 +2832,10 @@ async function performRemoteArtworkReview(
         customElementGroups(),
         adaptiveThresholdOverrides()
       );
-      const decision = decideFilter(assessment, rules);
+      const hardDecision = decideFilter(assessment, rules);
+      const decision = hardDecision.action === "allow"
+        ? decidePersonalPreference(assessment, preferences)
+        : hardDecision;
       if (decision.action !== "allow") {
         console.warn(
           `[explore-review] blocked ${imageUrl}: ${decision.reasons
@@ -2572,6 +2855,10 @@ async function performRemoteArtworkReview(
   } finally {
     await unlink(imagePath).catch(() => undefined);
   }
+}
+
+function describeRemoteReviewReason(reason: { ruleId: string; ruleName: string; label: string }): string {
+  return reason.ruleId.startsWith("personal-preference:") ? reason.ruleName : reason.label;
 }
 
 function enqueueRemoteVisionTask<T>(task: () => Promise<T>): Promise<T> {

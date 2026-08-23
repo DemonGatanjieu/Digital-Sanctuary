@@ -2,11 +2,18 @@ import { describe, expect, it } from "vitest";
 import type { FilterReason, VisionAssessment } from "@sanctuary/domain";
 import {
   applyFeedbackChanges,
+  applyPersonalPreferenceChanges,
+  createDislikeFeedback,
   createFalsePositiveFeedback,
+  decidePersonalPreference,
   normalizeFeedbackHistory,
   normalizePageExceptions,
+  normalizePersonalTagPreferences,
   normalizeThresholdOverrides,
+  personalPreferenceFingerprint,
   pixivArtworkPageKey,
+  selectDislikeTagCandidates,
+  undoPersonalPreferenceChanges,
   undoFeedbackChanges
 } from "./explore-preference-calibration.js";
 
@@ -67,5 +74,104 @@ describe("explore preference calibration", () => {
       .toEqual({ blood: 0.95, guro: 0.61 });
     expect(normalizePageExceptions(["123_p0", "123_p0", "bad"])).toEqual(["123_p0"]);
     expect(normalizeFeedbackHistory([{ nope: true }])).toEqual([]);
+  });
+
+  it("recommends distinctive labels without preselecting common composition tags", () => {
+    const candidates = selectDislikeTagCandidates({
+      assessment: {
+        ...assessment,
+        labels: { "1girl": 0.99, solo: 0.97, blood: 0.63, guro: 0.41 }
+      },
+      preferences: {}
+    });
+
+    expect(candidates.find((candidate) => candidate.label === "blood")?.recommended).toBe(true);
+    expect(candidates.find((candidate) => candidate.label === "1girl")?.recommended).toBe(false);
+    expect(candidates.find((candidate) => candidate.label === "solo")?.recommended).toBe(false);
+  });
+
+  it("learns gradually and requires repeated, combined evidence before hiding", () => {
+    const first = createDislikeFeedback({
+      id: "dislike-1",
+      normalizedUrl: "https://i.pximg.net/img-master/a/12345_p0_master1200.jpg",
+      assessment,
+      selectedLabels: ["blood", "guro"],
+      personalPreferences: {},
+      now: new Date("2026-08-24T00:00:00.000Z")
+    });
+    expect(first).not.toBeNull();
+    const once = applyPersonalPreferenceChanges({}, first!.personalChanges);
+    expect(once.blood).toMatchObject({ weight: 0.18, evidenceCount: 1 });
+    expect(decidePersonalPreference(assessment, once).action).toBe("allow");
+
+    const second = createDislikeFeedback({
+      id: "dislike-2",
+      normalizedUrl: "https://i.pximg.net/img-master/a/67890_p0_master1200.jpg",
+      assessment,
+      selectedLabels: ["blood", "guro"],
+      personalPreferences: once,
+      now: new Date("2026-08-24T01:00:00.000Z")
+    });
+    const twice = applyPersonalPreferenceChanges(once, second!.personalChanges);
+    expect(twice.blood).toMatchObject({ weight: 0.328, evidenceCount: 2 });
+    expect(decidePersonalPreference(assessment, twice).action).toBe("hide");
+    expect(undoPersonalPreferenceChanges(twice, second!.personalChanges)).toEqual(once);
+  });
+
+  it("keeps personal profiles model-safe, deterministic and reversible", () => {
+    const profile = normalizePersonalTagPreferences({
+      blood: {
+        label: "blood",
+        weight: 4,
+        evidenceCount: 2,
+        enabled: true,
+        explicit: true,
+        updatedAt: "2026-08-24T00:00:00.000Z"
+      },
+      malformed: { label: "different" }
+    });
+    expect(profile).toEqual({
+      blood: expect.objectContaining({ label: "blood", weight: 0.95, evidenceCount: 2 })
+    });
+    expect(personalPreferenceFingerprint({})).toBeNull();
+    expect(personalPreferenceFingerprint(profile)).toBe(personalPreferenceFingerprint(profile));
+  });
+
+  it("turns a personal false positive back down without changing hard thresholds", () => {
+    const preferences = normalizePersonalTagPreferences({
+      blood: {
+        label: "blood",
+        weight: 0.52,
+        evidenceCount: 4,
+        enabled: true,
+        explicit: true,
+        updatedAt: "2026-08-24T00:00:00.000Z"
+      }
+    });
+    const feedback = createFalsePositiveFeedback({
+      id: "personal-false-positive",
+      normalizedUrl: "https://i.pximg.net/img-master/a/24680_p0_master1200.jpg",
+      assessment,
+      reasons: [{
+        ruleId: "personal-preference:blood",
+        ruleName: "个人偏好：blood",
+        label: "blood",
+        confidence: 0.91,
+        threshold: 0.15
+      }],
+      thresholdOverrides: { safe: 0.8 },
+      personalPreferences: preferences
+    });
+
+    expect(feedback?.changes).toEqual([]);
+    expect(feedback?.personalChanges[0]?.newPreference).toMatchObject({
+      weight: 0.39,
+      evidenceCount: 3
+    });
+    expect(applyFeedbackChanges({ safe: 0.8 }, feedback!)).toEqual({ safe: 0.8 });
+    expect(undoPersonalPreferenceChanges(
+      applyPersonalPreferenceChanges(preferences, feedback!.personalChanges),
+      feedback!.personalChanges
+    )).toEqual(preferences);
   });
 });

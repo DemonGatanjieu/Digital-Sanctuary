@@ -261,6 +261,115 @@
   line-height: 1.6;
 }
 
+.personal-preference-card {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 22px 24px;
+  border: 1px solid var(--ds-primary-border);
+  border-radius: var(--ds-radius-xl);
+  background:
+    radial-gradient(circle at 92% 0%, var(--ds-primary-subtle), transparent 36%),
+    #ffffff;
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.personal-preference-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.personal-preference-card > header > div {
+  display: grid;
+  gap: 4px;
+}
+
+.personal-preference-card > header strong,
+.personal-preference-empty strong {
+  color: var(--ds-text-heading);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.personal-preference-card > header small,
+.personal-preference-card > footer,
+.personal-preference-empty span {
+  color: var(--ds-text-muted);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.personal-preference-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 10px;
+}
+
+.personal-preference-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 74px 44px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-lg);
+  background: rgba(255, 255, 255, 0.76);
+  transition: opacity var(--ds-transition-fast), border-color var(--ds-transition-fast);
+}
+
+.personal-preference-list article.disabled {
+  opacity: 0.55;
+}
+
+.personal-preference-name {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.personal-preference-name code {
+  overflow: hidden;
+  color: var(--ds-text-heading);
+  font: 650 11.5px/1.4 var(--ds-font-mono, ui-monospace, monospace);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.personal-preference-name small {
+  color: var(--ds-text-muted);
+  font-size: 9.5px;
+}
+
+.personal-preference-meter {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ds-border-subtle);
+}
+
+.personal-preference-meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ds-primary), #60a5fa);
+}
+
+.personal-preference-empty {
+  display: grid;
+  gap: 5px;
+  padding: 18px;
+  border: 1px dashed var(--ds-border-light);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-bg-card-subtle);
+}
+
+.personal-preference-card > footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-border-subtle);
+}
+
 /* Rule Cards */
 .rules-grid {
   display: grid;

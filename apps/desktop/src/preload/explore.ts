@@ -19,6 +19,41 @@ interface PreferenceCalibrationResult {
     oldThreshold: number;
     newThreshold: number;
   }>;
+  personalChanges: Array<{
+    label: string;
+    oldWeight: number;
+    newWeight: number;
+    oldEvidence: number;
+    newEvidence: number;
+  }>;
+}
+
+interface DislikeTagCandidate {
+  label: string;
+  confidence: number;
+  recommended: boolean;
+  existingWeight: number;
+  evidenceCount: number;
+}
+
+interface DislikeCandidatesResult {
+  success: boolean;
+  pageKey: string | null;
+  candidates: DislikeTagCandidate[];
+}
+
+interface DislikeFeedbackResult {
+  success: boolean;
+  feedbackId: string;
+  pageKey: string;
+  selectedTags: Array<{ label: string; confidence: number }>;
+  changes: Array<{
+    label: string;
+    oldWeight: number;
+    newWeight: number;
+    oldEvidence: number;
+    newEvidence: number;
+  }>;
 }
 
 const REVIEW_STATE_ATTRIBUTE = "data-sanctuary-review-state";
@@ -31,6 +66,8 @@ const nearImages = new Map<string, Set<HTMLImageElement>>();
 const visibleImages = new Map<string, Set<HTMLImageElement>>();
 const submittedPriorities = new Map<string, ReviewPriority>();
 let protectionEnabled = true;
+let activeDislikePopoverUrl: string | null = null;
+let activeDislikePopoverCleanup: (() => void) | null = null;
 document.documentElement.setAttribute("data-sanctuary-protection-mode", "on");
 
 const protectionCss = `
@@ -57,6 +94,9 @@ const protectionCss = `
     transition: filter 180ms ease, opacity 180ms ease !important;
   }
   html[data-sanctuary-protection-mode="off"] .sanctuary-review-overlay {
+    display: none !important;
+  }
+  html[data-sanctuary-protection-mode="off"] .sanctuary-dislike-control {
     display: none !important;
   }
   .sanctuary-review-overlay {
@@ -198,6 +238,126 @@ const protectionCss = `
     font: inherit;
     font-weight: 700;
   }
+  .sanctuary-dislike-control {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 2147483638;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 7px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 999px;
+    color: #374151;
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.13);
+    font: 600 11px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    opacity: 0;
+    transform: translateY(-3px);
+    transition: opacity 150ms ease, transform 150ms ease, background 150ms ease;
+    cursor: pointer;
+    backdrop-filter: blur(14px);
+  }
+  *:hover > .sanctuary-dislike-control,
+  *:focus-within > .sanctuary-dislike-control,
+  .sanctuary-dislike-control:focus-visible,
+  .sanctuary-dislike-control[aria-expanded="true"] {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .sanctuary-dislike-control:hover {
+    color: #111827;
+    background: rgba(255, 255, 255, 0.98);
+  }
+  .sanctuary-dislike-control:focus-visible {
+    outline: 2px solid rgba(0, 150, 250, 0.62);
+    outline-offset: 2px;
+  }
+  .sanctuary-dislike-popover {
+    position: fixed;
+    z-index: 2147483647;
+    width: min(390px, calc(100vw - 28px));
+    padding: 18px;
+    box-sizing: border-box;
+    border: 1px solid rgba(209, 213, 219, 0.86);
+    border-radius: 18px;
+    color: #1f2937;
+    background: rgba(255, 255, 255, 0.975);
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.22);
+    font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    backdrop-filter: blur(22px);
+  }
+  .sanctuary-dislike-popover h3 {
+    margin: 0;
+    color: #111827;
+    font-size: 16px;
+    line-height: 1.35;
+  }
+  .sanctuary-dislike-popover p {
+    margin: 6px 0 14px;
+    color: #6b7280;
+  }
+  .sanctuary-dislike-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    max-height: 190px;
+    overflow: auto;
+    padding: 1px;
+  }
+  .sanctuary-dislike-tag {
+    padding: 7px 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 999px;
+    color: #4b5563;
+    background: #f9fafb;
+    font: inherit;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  }
+  .sanctuary-dislike-tag[aria-pressed="true"] {
+    border-color: rgba(0, 150, 250, 0.52);
+    color: #075985;
+    background: #f0f9ff;
+  }
+  .sanctuary-dislike-tag small {
+    margin-left: 4px;
+    color: #9ca3af;
+  }
+  .sanctuary-dislike-empty {
+    padding: 12px;
+    border-radius: 12px;
+    color: #6b7280;
+    background: #f9fafb;
+  }
+  .sanctuary-dislike-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .sanctuary-dislike-footer button {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    color: #4b5563;
+    background: #fff;
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+  }
+  .sanctuary-dislike-footer button.primary {
+    border-color: #0096fa;
+    color: #fff;
+    background: linear-gradient(135deg, #00a8ff, #0088e8);
+    box-shadow: 0 8px 22px rgba(0, 150, 250, 0.24);
+  }
+  .sanctuary-dislike-footer button:disabled {
+    opacity: 0.55;
+    cursor: wait;
+  }
 `;
 
 webFrame.insertCSS(protectionCss, { cssOrigin: "user" });
@@ -314,6 +474,214 @@ function removeReviewOverlay(image: HTMLImageElement, url: string): void {
       el.remove();
     }
   }
+}
+
+function removeAllowedControl(image: HTMLImageElement, url: string): void {
+  const container = findImageCardContainer(image);
+  for (const control of container.querySelectorAll<HTMLElement>("[data-sanctuary-dislike-control]")) {
+    if (control.getAttribute("data-sanctuary-dislike-control") === url) control.remove();
+  }
+  if (activeDislikePopoverUrl === url) closeDislikePopover();
+}
+
+function closeDislikePopover(): void {
+  activeDislikePopoverCleanup?.();
+  activeDislikePopoverCleanup = null;
+  document.querySelector(".sanctuary-dislike-popover")?.remove();
+  for (const control of document.querySelectorAll<HTMLElement>(".sanctuary-dislike-control")) {
+    control.setAttribute("aria-expanded", "false");
+  }
+  activeDislikePopoverUrl = null;
+}
+
+function renderAllowedControl(image: HTMLImageElement, normalizedUrl: string): void {
+  const container = findImageCardContainer(image);
+  if (!container || !container.isConnected || container === image) return;
+  const existing = [...container.querySelectorAll<HTMLElement>("[data-sanctuary-dislike-control]")]
+    .find((control) => control.getAttribute("data-sanctuary-dislike-control") === normalizedUrl);
+  if (existing) return;
+
+  const control = document.createElement("button");
+  control.type = "button";
+  control.className = "sanctuary-dislike-control";
+  control.setAttribute("data-sanctuary-dislike-control", normalizedUrl);
+  control.setAttribute("aria-expanded", "false");
+  control.textContent = "−  少看类似";
+  control.title = "不喜欢这张？选择希望以后少见的画面元素";
+  control.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (activeDislikePopoverUrl === normalizedUrl) {
+      closeDislikePopover();
+      return;
+    }
+    closeDislikePopover();
+    control.disabled = true;
+    const originalText = control.textContent;
+    control.textContent = "读取标签…";
+    try {
+      const result = await ipcRenderer.invoke(
+        "explore:get-dislike-candidates",
+        { normalizedUrl }
+      ) as DislikeCandidatesResult;
+      if (!result.success) throw new Error("无法读取本地分析结果");
+      openDislikePopover(control, normalizedUrl, result.candidates);
+    } catch (error) {
+      console.warn("[explore] failed to load dislike candidates", error);
+      showSimplePreferenceToast(error instanceof Error ? error.message : "标签读取失败，请稍后重试", "error");
+    } finally {
+      control.disabled = false;
+      control.textContent = originalText;
+    }
+  });
+
+  if (getComputedStyle(container).position === "static") {
+    container.style.setProperty("position", "relative", "important");
+  }
+  container.appendChild(control);
+}
+
+function openDislikePopover(
+  trigger: HTMLButtonElement,
+  normalizedUrl: string,
+  candidates: readonly DislikeTagCandidate[]
+): void {
+  closeDislikePopover();
+  activeDislikePopoverUrl = normalizedUrl;
+  trigger.setAttribute("aria-expanded", "true");
+  const popover = document.createElement("section");
+  popover.className = "sanctuary-dislike-popover";
+  popover.setAttribute("role", "dialog");
+  popover.setAttribute("aria-label", "少看类似元素");
+  popover.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+
+  const title = document.createElement("h3");
+  title.textContent = "这张图里，哪些元素不合口味？";
+  const description = document.createElement("p");
+  description.textContent = "只使用本地 WD Tagger 已识别的标签。推荐项已勾选，你可以再调整。";
+  const tags = document.createElement("div");
+  tags.className = "sanctuary-dislike-tags";
+  const selected = new Set(
+    candidates.filter((candidate) => candidate.recommended).slice(0, 4).map((candidate) => candidate.label)
+  );
+  const tagButtons = new Map<string, HTMLButtonElement>();
+
+  if (candidates.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "sanctuary-dislike-empty";
+    empty.textContent = "这张图片没有足够明确的候选标签。你仍可以只隐藏当前作品。";
+    tags.appendChild(empty);
+  } else {
+    for (const candidate of candidates) {
+      const tag = document.createElement("button");
+      tag.type = "button";
+      tag.className = "sanctuary-dislike-tag";
+      tag.setAttribute("aria-pressed", selected.has(candidate.label) ? "true" : "false");
+      tag.append(document.createTextNode(candidate.label));
+      const confidence = document.createElement("small");
+      confidence.textContent = `${Math.round(candidate.confidence * 100)}%`;
+      tag.appendChild(confidence);
+      tag.title = candidate.evidenceCount > 0
+        ? `已有 ${candidate.evidenceCount} 次证据 · 当前偏好权重 ${Math.round(candidate.existingWeight * 100)}%`
+        : "尚未学习这个标签";
+      tag.addEventListener("click", () => {
+        if (selected.has(candidate.label)) selected.delete(candidate.label);
+        else if (selected.size < 5) selected.add(candidate.label);
+        tag.setAttribute("aria-pressed", selected.has(candidate.label) ? "true" : "false");
+        updatePrimaryLabel();
+      });
+      tagButtons.set(candidate.label, tag);
+      tags.appendChild(tag);
+    }
+  }
+
+  const footer = document.createElement("div");
+  footer.className = "sanctuary-dislike-footer";
+  const exactOnly = document.createElement("button");
+  exactOnly.type = "button";
+  exactOnly.textContent = "仅隐藏这张";
+  const learn = document.createElement("button");
+  learn.type = "button";
+  learn.className = "primary";
+  const updatePrimaryLabel = (): void => {
+    learn.textContent = selected.size > 0 ? `少看类似（${selected.size}）` : "选择元素后学习";
+    learn.disabled = selected.size === 0;
+  };
+  updatePrimaryLabel();
+
+  const submit = async (selectedLabels: string[]): Promise<void> => {
+    exactOnly.disabled = true;
+    learn.disabled = true;
+    for (const button of tagButtons.values()) button.disabled = true;
+    try {
+      const result = await ipcRenderer.invoke("explore:record-dislike", {
+        normalizedUrl,
+        selectedLabels
+      }) as DislikeFeedbackResult;
+      if (!result.success) throw new Error("偏好没有保存成功");
+      closeDislikePopover();
+      showDislikePreferenceToast(result);
+      const nextOutcome: ReviewResultMessage = {
+        normalizedUrl,
+        state: "blocked",
+        reasons: [selectedLabels.length > 0 ? "个人偏好：少看类似元素" : "个人偏好：仅隐藏这张"]
+      };
+      outcomes.set(normalizedUrl, nextOutcome);
+      const outcomeKey = extractArtworkFileKey(normalizedUrl);
+      for (const [trackedImage, url] of trackedImages) {
+        if (url === normalizedUrl || (outcomeKey && extractArtworkFileKey(url) === outcomeKey)) {
+          applyOutcome(trackedImage, nextOutcome);
+        }
+      }
+    } catch (error) {
+      console.warn("[explore] failed to record dislike", error);
+      showSimplePreferenceToast(error instanceof Error ? error.message : "偏好保存失败，请重试", "error");
+      exactOnly.disabled = false;
+      for (const button of tagButtons.values()) button.disabled = false;
+      updatePrimaryLabel();
+    }
+  };
+  exactOnly.addEventListener("click", () => void submit([]));
+  learn.addEventListener("click", () => void submit([...selected]));
+  footer.append(exactOnly, learn);
+  popover.append(title, description, tags, footer);
+  document.documentElement.appendChild(popover);
+
+  const triggerRect = trigger.getBoundingClientRect();
+  const popoverRect = popover.getBoundingClientRect();
+  const left = Math.min(
+    window.innerWidth - popoverRect.width - 14,
+    Math.max(14, triggerRect.left)
+  );
+  const below = triggerRect.bottom + 10;
+  const top = below + popoverRect.height <= window.innerHeight - 14
+    ? below
+    : Math.max(14, triggerRect.top - popoverRect.height - 10);
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+
+  const closeOnPointer = (event: PointerEvent): void => {
+    if (popover.contains(event.target as Node) || trigger.contains(event.target as Node)) return;
+    closeDislikePopover();
+  };
+  const closeOnEscape = (event: KeyboardEvent): void => {
+    if (event.key !== "Escape") return;
+    closeDislikePopover();
+    trigger.focus();
+  };
+  const cleanup = (): void => {
+    document.removeEventListener("pointerdown", closeOnPointer, true);
+    document.removeEventListener("keydown", closeOnEscape, true);
+  };
+  activeDislikePopoverCleanup = cleanup;
+  queueMicrotask(() => {
+    if (activeDislikePopoverCleanup !== cleanup) return;
+    document.addEventListener("pointerdown", closeOnPointer, true);
+    document.addEventListener("keydown", closeOnEscape, true);
+  });
 }
 
 function renderBlockedOverlay(image: HTMLImageElement, outcome: ReviewResultMessage): void {
@@ -474,25 +842,63 @@ function renderUnavailableOverlay(image: HTMLImageElement, outcome: ReviewResult
 }
 
 function showPreferenceToast(result: PreferenceCalibrationResult): void {
+  const thresholdChanges = result.changes ?? [];
+  const personalChanges = result.personalChanges ?? [];
+  const details = [
+    ...thresholdChanges.map((change) =>
+      `${change.label} 阈值 ${change.oldThreshold}%→${change.newThreshold}%`
+    ),
+    ...personalChanges.map((change) =>
+      `${change.label} 偏好 ${change.oldWeight}%→${change.newWeight}%`
+    )
+  ];
+  showSimplePreferenceToast(
+    details.length > 0
+      ? `已永久放行本图；${details.join("，")}`
+      : "已永久放行这张图片；本次没有修改其他规则。",
+    "success",
+    result.feedbackId
+  );
+}
+
+function showDislikePreferenceToast(result: DislikeFeedbackResult): void {
+  const details = result.changes.map((change) =>
+    `${change.label} ${change.oldWeight}%→${change.newWeight}%（证据 ${change.oldEvidence}→${change.newEvidence}）`
+  );
+  showSimplePreferenceToast(
+    details.length > 0
+      ? `已隐藏本图；逐步学习：${details.join("，")}`
+      : "已只隐藏当前作品，没有修改相似图片规则。",
+    "success",
+    result.feedbackId
+  );
+}
+
+function showSimplePreferenceToast(
+  text: string,
+  tone: "success" | "error" = "success",
+  feedbackId: string | null = null
+): void {
   document.querySelector(".sanctuary-preference-toast")?.remove();
   const toast = document.createElement("div");
   toast.className = "sanctuary-preference-toast";
+  if (tone === "error") {
+    toast.style.setProperty("border-color", "rgba(244, 63, 94, 0.3)");
+    toast.style.setProperty("color", "#9f1239");
+    toast.style.setProperty("background", "rgba(255, 241, 242, 0.98)");
+  }
   const message = document.createElement("span");
-  message.textContent = result.changes.length
-    ? `已永久放行本图；${result.changes.map((change) => `${change.label} ${change.oldThreshold}%→${change.newThreshold}%`).join("，")}`
-    : "已永久放行这张图片；本次没有修改其他规则。";
+  message.textContent = text;
   toast.appendChild(message);
 
-  if (result.feedbackId) {
+  if (feedbackId) {
     const undo = document.createElement("button");
     undo.type = "button";
     undo.textContent = "撤销";
     undo.addEventListener("click", async () => {
       undo.disabled = true;
       try {
-        await ipcRenderer.invoke("explore:undo-preference-feedback", {
-          feedbackId: result.feedbackId
-        });
+        await ipcRenderer.invoke("explore:undo-preference-feedback", { feedbackId });
         location.reload();
       } catch (error) {
         console.warn("[explore] failed to undo preference feedback", error);
@@ -515,9 +921,12 @@ function applyOutcome(image: HTMLImageElement, outcome: ReviewResultMessage): vo
     image.style.opacity = "1";
     image.style.filter = "none";
     reloadFailedImage(image, outcome.normalizedUrl);
+    renderAllowedControl(image, outcome.normalizedUrl);
   } else if (outcome.state === "blocked") {
+    removeAllowedControl(image, outcome.normalizedUrl);
     renderBlockedOverlay(image, outcome);
   } else {
+    removeAllowedControl(image, outcome.normalizedUrl);
     renderUnavailableOverlay(image, outcome);
   }
 }
@@ -545,6 +954,8 @@ function trackImage(image: HTMLImageElement): void {
   if (previousUrl && previousUrl !== nextUrl) {
     intersectionObserver.unobserve(image);
     removeImageMembership(image, previousUrl);
+    removeAllowedControl(image, previousUrl);
+    removeReviewOverlay(image, previousUrl);
     trackedImages.delete(image);
     image.removeAttribute(REVIEW_STATE_ATTRIBUTE);
     image.removeAttribute(REVIEW_RELOAD_ATTRIBUTE);
@@ -554,6 +965,7 @@ function trackImage(image: HTMLImageElement): void {
   if (!protectionEnabled) {
     intersectionObserver.unobserve(image);
     removeReviewOverlay(image, nextUrl);
+    removeAllowedControl(image, nextUrl);
     image.setAttribute(REVIEW_STATE_ATTRIBUTE, "allowed");
     image.style.visibility = "visible";
     image.style.opacity = "1";
@@ -607,6 +1019,8 @@ function untrackImage(image: HTMLImageElement): void {
   const normalizedUrl = trackedImages.get(image);
   if (!normalizedUrl) return;
   intersectionObserver.unobserve(image);
+  removeAllowedControl(image, normalizedUrl);
+  removeReviewOverlay(image, normalizedUrl);
   trackedImages.delete(image);
   removeImageMembership(image, normalizedUrl);
 }
@@ -641,6 +1055,7 @@ function startObserver(): void {
   document.addEventListener("load", handleImageLifecycle, true);
   document.addEventListener("error", handleImageLifecycle, true);
   window.addEventListener("pagehide", () => {
+    closeDislikePopover();
     mutationObserver.disconnect();
     intersectionObserver.disconnect();
     document.removeEventListener("load", handleImageLifecycle, true);
@@ -662,6 +1077,7 @@ function setProtectionEnabled(enabled: boolean): void {
   for (const [image, url] of trackedImages) {
     intersectionObserver.unobserve(image);
     removeReviewOverlay(image, url);
+    removeAllowedControl(image, url);
     image.removeAttribute(REVIEW_RELOAD_ATTRIBUTE);
     if (enabled) {
       image.removeAttribute(REVIEW_STATE_ATTRIBUTE);

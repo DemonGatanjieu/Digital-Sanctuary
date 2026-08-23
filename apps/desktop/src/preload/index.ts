@@ -93,6 +93,22 @@ export interface ApplicationStatus {
   modelBacked: boolean;
 }
 
+export interface PersonalTagPreferenceView {
+  label: string;
+  weight: number;
+  evidenceCount: number;
+  enabled: boolean;
+  explicit: boolean;
+  updatedAt: string;
+}
+
+export interface PersonalPreferenceProfileView {
+  engine: string;
+  engineVersion: string;
+  available: boolean;
+  entries: PersonalTagPreferenceView[];
+}
+
 export interface SanctuaryApi {
   listArtworks(): Promise<ArtworkRecord[]>;
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
@@ -123,6 +139,9 @@ export interface SanctuaryApi {
   updateFilterSetting(setting: ElementFilterSetting): Promise<ElementFilterSetting[]>;
   listCustomElementGroups(): Promise<CustomElementGroup[]>;
   updateCustomElementGroups(groups: CustomElementGroup[]): Promise<CustomElementGroup[]>;
+  listPersonalTagPreferences(): Promise<PersonalPreferenceProfileView>;
+  togglePersonalTagPreference(label: string, enabled: boolean): Promise<PersonalPreferenceProfileView>;
+  resetPersonalTagPreferences(): Promise<PersonalPreferenceProfileView>;
   getLibraryPreferences(): Promise<LibraryPreferences>;
   updateLibraryPreferences(preferences: LibraryPreferences): Promise<LibraryPreferences>;
   chooseDownloadDirectory(): Promise<LibraryPreferences>;
@@ -242,6 +261,12 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("filters:custom-list") as Promise<CustomElementGroup[]>,
   updateCustomElementGroups: (groups) =>
     ipcRenderer.invoke("filters:custom-update", groups) as Promise<CustomElementGroup[]>,
+  listPersonalTagPreferences: () =>
+    ipcRenderer.invoke("filters:personal-preferences-list") as Promise<PersonalPreferenceProfileView>,
+  togglePersonalTagPreference: (label, enabled) =>
+    ipcRenderer.invoke("filters:personal-preference-toggle", { label, enabled }) as Promise<PersonalPreferenceProfileView>,
+  resetPersonalTagPreferences: () =>
+    ipcRenderer.invoke("filters:personal-preferences-reset") as Promise<PersonalPreferenceProfileView>,
   getLibraryPreferences: () =>
     ipcRenderer.invoke("preferences:library:get") as Promise<LibraryPreferences>,
   updateLibraryPreferences: (preferences) =>
