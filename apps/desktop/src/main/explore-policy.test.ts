@@ -4,6 +4,7 @@ import {
   isPixivArtworkImageUrl,
   normalizePixivArtworkImageUrl,
   parseExploreBounds,
+  pixivArtistUrl,
   PIXIV_LOGIN_URL,
   PIXIV_PASSWORD_SETUP_URL,
   shouldAllowPixivLoginPermission,
@@ -20,6 +21,13 @@ describe("Pixiv exploration policy", () => {
     expect(isAllowedPixivNavigation("http://www.pixiv.net/")).toBe(false);
     expect(isAllowedPixivNavigation("https://pixiv.net.example.com/")).toBe(false);
     expect(isAllowedPixivNavigation("https://example.com/")).toBe(false);
+  });
+
+  it("builds artist navigation only from a bounded numeric Pixiv id", () => {
+    expect(pixivArtistUrl(" 76840940 ")).toBe("https://www.pixiv.net/users/76840940");
+    expect(pixivArtistUrl("../../login")).toBeNull();
+    expect(pixivArtistUrl("1?redirect=https://evil.test")).toBeNull();
+    expect(pixivArtistUrl("1".repeat(21))).toBeNull();
   });
 
   it("recognizes only Pixiv artwork image URLs for AI review", () => {

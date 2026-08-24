@@ -80,7 +80,7 @@ flowchart LR
 - `apps/desktop/src/main/vision-client.ts`：版本化 JSON Lines 客户端、启动就绪握手、模型身份校验、真实小图推理、超时和子进程错误状态机。
 - `apps/desktop/src/main/prompt-bridge-ipc.ts`：Prompt Bridge v2 可复用设置的模型版本隔离持久化与系统剪贴板窄 IPC；读取旧 v1 时只迁移格式、负向词库和预设，丢弃旧的跨作品标签取向。
 - `apps/desktop/src/main/comfyui/`：本机回环 URL 校验、API 工作流结构/危险路径校验、受限 HTTP 客户端、串行持久任务、输出回收和 IPC。模板可用 `{{positive_prompt}}` / `{{negative_prompt}}` / `{{source_image}}` 显式绑定，也会窄范围识别标准 `CLIPTextEncode` 与 `LoadImage` 节点。
-- Pixiv 使用 `persist:pixiv` 独立持久化 session；本地 React 渲染器不能访问其 DOM 或 Cookie。单实例锁避免多个进程造成“登录一次却看似丢失会话”的错觉。
+- Pixiv 使用 `persist:pixiv` 独立持久化 session；本地 React 渲染器不能访问其 DOM 或 Cookie。画师馆藏的 Pixiv 深链接只提交受限数字画师 ID，由主进程拼出官方用户页并在应用内探索视图加载；单实例锁避免多个进程造成“登录一次却看似丢失会话”的错觉。
 
 ### 2.3 视觉与领域层
 

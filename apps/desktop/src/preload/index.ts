@@ -192,6 +192,7 @@ export interface SanctuaryApi {
   setExploreBounds(bounds: ExploreBounds): Promise<boolean>;
   hideExplore(): Promise<void>;
   exploreCommand(command: ExploreCommand): Promise<ExploreState>;
+  openPixivArtist(artistId: string): Promise<ExploreState>;
   getExploreState(): Promise<ExploreState>;
   downloadCurrentArtwork(): Promise<ExploreDownloadResult>;
   previewBookmarkDownload(): Promise<BookmarkDownloadPreview>;
@@ -373,6 +374,8 @@ const api: SanctuaryApi = {
   hideExplore: () => ipcRenderer.invoke("explore:hide") as Promise<void>,
   exploreCommand: (command) =>
     ipcRenderer.invoke("explore:command", command) as Promise<ExploreState>,
+  openPixivArtist: (artistId) =>
+    ipcRenderer.invoke("explore:open-artist", artistId) as Promise<ExploreState>,
   getExploreState: () => ipcRenderer.invoke("explore:state") as Promise<ExploreState>,
   downloadCurrentArtwork: () =>
     ipcRenderer.invoke("explore:download-current") as Promise<ExploreDownloadResult>,

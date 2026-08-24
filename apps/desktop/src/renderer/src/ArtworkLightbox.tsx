@@ -4,6 +4,7 @@ import type { ArtworkRecord, VisionEvaluationResult } from "@sanctuary/domain";
 import { artworkImageUrl } from "./ArtworkCard";
 import { VisionRadarChart } from "./VisionRadarChart";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
+import { artworkLibraryWorkId, artworkPageIndex } from "./gallery-model";
 
 export function ArtworkLightbox({
   artwork,
@@ -19,6 +20,8 @@ export function ArtworkLightbox({
   const currentIndex = Math.max(0, pages.findIndex((page) => page.id === artwork.id));
   const previous = pages[currentIndex - 1];
   const next = pages[currentIndex + 1];
+  const libraryWorkId = artworkLibraryWorkId(artwork);
+  const sourcePageIndex = artworkPageIndex(artwork);
 
   // Zoom & Pan state
   const [zoom, setZoom] = useState<number>(1);
@@ -50,9 +53,9 @@ export function ArtworkLightbox({
     }
     setHudVisible(true);
     if (window.sanctuary?.listVisionEvaluationsForWork) {
-      window.sanctuary.listVisionEvaluationsForWork(artwork.id).then(setEvaluations).catch(() => setEvaluations([]));
+      window.sanctuary.listVisionEvaluationsForWork(libraryWorkId).then(setEvaluations).catch(() => setEvaluations([]));
     }
-  }, [artwork.id]);
+  }, [artwork.id, libraryWorkId]);
 
   // Lock body scroll
   useEffect(() => {
@@ -243,8 +246,9 @@ export function ArtworkLightbox({
       {showInspector && (
         <ElementInspectorDrawer
           target={{
-            workId: artwork.id,
-            title: artwork.source?.title ?? artwork.fileName
+            workId: libraryWorkId,
+            title: artwork.source?.title ?? artwork.fileName,
+            pageIndex: sourcePageIndex
           }}
           onClose={() => setShowInspector(false)}
         />

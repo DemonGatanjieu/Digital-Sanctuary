@@ -50,6 +50,7 @@ export function GalleryView({
   onLoadMoreWorks,
   onWorkLibraryChanged,
   onAnalyzeWorks,
+  onOpenPixivArtist,
   onError
 }: {
   artworks: ArtworkRecord[];
@@ -79,6 +80,7 @@ export function GalleryView({
   onLoadMoreWorks: () => void;
   onWorkLibraryChanged: () => Promise<void>;
   onAnalyzeWorks: (workIds: string[]) => void;
+  onOpenPixivArtist: (artistId: string) => void;
   onError: (error: unknown) => void;
 }) {
   const authorGroups = useMemo(() => buildAuthorGroups(artworks, artists), [artworks, artists]);
@@ -319,6 +321,7 @@ export function GalleryView({
               onBack={() => setSelectedAuthorKey("")}
               onAssign={onAssignCollection}
               onOpenArtwork={setSelectedArtworkId}
+              onOpenPixivArtist={onOpenPixivArtist}
               lightboxOpen={Boolean(selectedArtwork)}
             />
           )}

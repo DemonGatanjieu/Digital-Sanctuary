@@ -58,6 +58,7 @@ export function AuthorDetailPage({
   onBack,
   onAssign,
   onOpenArtwork,
+  onOpenPixivArtist,
   lightboxOpen = false
 }: {
   author: AuthorGalleryGroup;
@@ -65,6 +66,7 @@ export function AuthorDetailPage({
   onBack: () => void;
   onAssign: (artworkId: string, collectionId: string) => void;
   onOpenArtwork: (artworkId: string) => void;
+  onOpenPixivArtist: (artistId: string) => void;
   lightboxOpen?: boolean | undefined;
 }) {
   const [viewMode, setViewMode] = useState<"works" | "artbook" | "aquarium" | "catalog">("works");
@@ -153,17 +155,16 @@ export function AuthorDetailPage({
                 <span className="pill-label">页图稿</span>
               </span>
               {author.id && (
-                <a
-                  href={`https://www.pixiv.net/users/${author.id}`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  type="button"
                   className="author-pixiv-pill"
-                  title="在 Pixiv 查看原画师主页"
+                  title="在纯净领域的探索页打开这个画师"
+                  onClick={() => onOpenPixivArtist(author.id)}
                 >
                   <span className="pixiv-dot">●</span>
                   <code>pixiv/{author.id}</code>
                   <span className="pixiv-arrow">↗</span>
-                </a>
+                </button>
               )}
             </div>
           </div>

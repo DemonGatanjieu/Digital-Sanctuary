@@ -65,6 +65,11 @@ export function artworkPageIndex(artwork: ArtworkRecord): number {
   return artwork.source?.pageIndex ?? inferPixivWorkFromFileName(artwork.fileName)?.pageIndex ?? 0;
 }
 
+export function artworkLibraryWorkId(artwork: ArtworkRecord): string {
+  const sourceWorkId = artwork.source?.workId ?? inferPixivWorkFromFileName(artwork.fileName)?.workId;
+  return sourceWorkId ? `pixiv:${sourceWorkId}` : `local:${artwork.id}`;
+}
+
 export function artworkWorkPages(
   artworks: readonly ArtworkRecord[],
   selected: ArtworkRecord

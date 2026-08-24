@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ArtworkRecord } from "@sanctuary/domain";
 import {
+  artworkLibraryWorkId,
   artworkWorkPages,
   buildAuthorGroups,
   inferPixivWorkFromFileName
@@ -36,5 +37,19 @@ describe("gallery model", () => {
       artwork("first", "7788_p0.jpg")
     ];
     expect(artworkWorkPages(pages, pages[1]!).map((page) => page.id)).toEqual(["first", "second"]);
+  });
+
+  it("maps compatibility artwork pages back to their canonical library work", () => {
+    const pixivPage = artwork("legacy-page", "7788_p2.jpg", {
+      platform: "pixiv",
+      workId: "7788",
+      pageIndex: 2,
+      authorId: "42",
+      authorName: "Luna",
+      title: "Night"
+    });
+    expect(artworkLibraryWorkId(pixivPage)).toBe("pixiv:7788");
+    expect(artworkLibraryWorkId(artwork("local-page", "drawing.png"))).toBe("local:local-page");
+    expect(artworkLibraryWorkId(artwork("legacy", "9900_p1.jpg"))).toBe("pixiv:9900");
   });
 });

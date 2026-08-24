@@ -469,6 +469,15 @@ export function App() {
               setAnalysisWorkIds(workIds);
               setActiveView("organize");
             }}
+            onOpenPixivArtist={(artistId) => {
+              setActiveView("explore");
+              void window.sanctuary.openPixivArtist(artistId)
+                .then(setExploreState)
+                .catch((caught) => {
+                  setActiveView("gallery");
+                  showError(caught);
+                });
+            }}
             onError={showError}
           />
         ) : activeView === "organize" ? (

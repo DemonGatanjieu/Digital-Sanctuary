@@ -4,6 +4,14 @@ export const PIXIV_LOGIN_URL =
 export const PIXIV_PASSWORD_SETUP_URL = "https://accounts.pixiv.net/password/change";
 export const PIXIV_SESSION_PARTITION = "persist:pixiv";
 
+export function pixivArtistUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const artistId = value.trim();
+  return /^\d{1,20}$/.test(artistId)
+    ? `https://www.pixiv.net/users/${artistId}`
+    : null;
+}
+
 export interface ExploreBounds {
   x: number;
   y: number;

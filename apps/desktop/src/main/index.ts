@@ -74,6 +74,7 @@ import {
   PIXIV_HOME_URL,
   PIXIV_LOGIN_URL,
   PIXIV_PASSWORD_SETUP_URL,
+  pixivArtistUrl,
   PIXIV_SESSION_PARTITION,
   isAllowedPixivNavigation,
   isPixivArtworkImageUrl,
@@ -1059,6 +1060,17 @@ function registerIpc(): void {
     else if (!['home', 'login', 'open-password-setup', 'back', 'forward', 'reload', 'maximize'].includes(String(command))) {
       throw new Error("Invalid exploration command");
     }
+    scheduleExploreState();
+    return currentExploreState();
+  });
+  ipcMain.handle("explore:open-artist", async (_event, artistId: unknown) => {
+    const targetUrl = pixivArtistUrl(artistId);
+    if (!targetUrl) throw new Error("无效的 Pixiv 画师 ID");
+    if (!vision?.available && !exploreProtectionBypassed) {
+      throw new Error("本地保护模型尚未就绪，暂不能打开远程画师主页");
+    }
+    const view = ensureExploreView();
+    await view.webContents.loadURL(targetUrl);
     scheduleExploreState();
     return currentExploreState();
   });
