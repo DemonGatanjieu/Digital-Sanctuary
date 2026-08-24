@@ -1,5 +1,5 @@
 import { ipcRenderer, webFrame } from "electron";
-import { applyProtectionModeAttribute } from "./explore-dom.js";
+import { applyProtectionModeAttribute, hasUsableImageContainerBox } from "./explore-dom.js";
 
 type ReviewPriority = "visible" | "near";
 type ReviewState = "allowed" | "blocked" | "unavailable";
@@ -465,13 +465,12 @@ function reloadFailedImage(image: HTMLImageElement, normalizedUrl: string): void
 
 function findImageCardContainer(image: HTMLImageElement): HTMLElement {
   const card = image.closest('figure, [role="presentation"], div[class*="gtm-"], a[href*="/artworks/"]');
-  if (card instanceof HTMLElement && card.isConnected) {
+  if (card instanceof HTMLElement && hasUsableImageContainerBox(card)) {
     return card;
   }
   let current: HTMLElement | null = image.parentElement;
   while (current && current !== document.body) {
-    const rect = current.getBoundingClientRect();
-    if (rect.height > 60 && rect.width > 60) return current;
+    if (hasUsableImageContainerBox(current)) return current;
     current = current.parentElement;
   }
   return image.parentElement || image;
