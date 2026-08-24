@@ -125,6 +125,9 @@ import { ExternalVisionService } from "./vision/external-vision-service.js";
 import { FontService } from "./typography/font-service.js";
 import { registerFontProtocol } from "./typography/font-protocol.js";
 import { registerTypographyIpc } from "./typography/typography-ipc.js";
+import { registerPromptBridgeIpc } from "./prompt-bridge-ipc.js";
+import { ComfyUiService } from "./comfyui/service.js";
+import { registerComfyUiIpc } from "./comfyui/ipc.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -143,6 +146,7 @@ let themeManager: ThemeManagerService | undefined;
 let themeStore: ThemeStoreService | undefined;
 let externalVisionService: ExternalVisionService | undefined;
 let fontService: FontService | undefined;
+let comfyUiService: ComfyUiService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let exploreView: WebContentsView | undefined;
 let exploreBounds: ExploreBounds | undefined;
@@ -227,6 +231,11 @@ if (!hasSingleInstanceLock) {
     const userDataPath = app.getPath("userData");
     database = new LibraryDatabase(join(userDataPath, "library.db"));
     database.recoverInterruptedAnalysisJobs();
+    database.recoverInterruptedComfyUiJobs();
+    comfyUiService = new ComfyUiService(
+      database,
+      join(app.getPath("pictures"), "Digital Sanctuary", "Generated", "ComfyUI")
+    );
     if (process.env.SANCTUARY_BENCHMARK_LIBRARY === "1") {
       database.seedBenchmarkWorks(Number(process.env.SANCTUARY_BENCHMARK_WORKS ?? 10_000));
     }
@@ -543,8 +552,15 @@ function localImageUrl(imagePath: string): string {
 }
 
 function registerIpc(): void {
-  if (!database || !vision || !themeManager || !themeStore) throw new Error("Application services are unavailable");
+  if (!database || !vision || !themeManager || !themeStore || !comfyUiService) throw new Error("Application services are unavailable");
   registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService);
+  registerPromptBridgeIpc(ipcMain, database);
+  registerComfyUiIpc({
+    ipc: ipcMain,
+    dialog,
+    service: comfyUiService,
+    getWindow: () => mainWindow
+  });
   registerSavedCollectionViewIpc(ipcMain, database);
   registerThemeIpc({
     ipc: ipcMain,

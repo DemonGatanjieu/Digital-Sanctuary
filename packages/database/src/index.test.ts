@@ -7,18 +7,73 @@ import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
-  it("records schema version 4 and creates a portable SQLite backup", () => {
+  it("records schema version 5 and creates a portable SQLite backup", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-backup-"));
     const databasePath = join(directory, "library.db");
     const backupPath = join(directory, "library-backup.db");
     const database = new LibraryDatabase(databasePath);
     try {
-      expect(database.schemaVersion()).toBe(4);
+      expect(database.schemaVersion()).toBe(5);
       database.createCollection("Backup fixture");
       expect(database.backupTo(backupPath)).toBe(backupPath);
       const backup = new DatabaseSync(backupPath, { readOnly: true });
       expect((backup.prepare("SELECT COUNT(*) AS count FROM collections").get() as { count: number }).count).toBe(1);
       backup.close();
+    } finally {
+      database.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("persists ComfyUI jobs and imported-result provenance", () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-comfyui-"));
+    const sourcePath = join(directory, "source.png");
+    const outputPath = join(directory, "output.png");
+    writeFileSync(sourcePath, "source");
+    writeFileSync(outputPath, "output");
+    const database = new LibraryDatabase(":memory:");
+    try {
+      database.importArtwork(sourcePath);
+      database.importArtwork(outputPath);
+      const sourceWork = database.listWorks().find((work) => work.assets.some((asset) => asset.path === sourcePath))!;
+      const outputWork = database.listWorks().find((work) => work.assets.some((asset) => asset.path === outputPath))!;
+      const sourceAsset = sourceWork.assets[0]!;
+      const job = database.createComfyUiJob({
+        sourceWorkId: sourceWork.id,
+        sourceAssetId: sourceAsset.id,
+        templateId: "template-1",
+        templateName: "基础图生图",
+        positivePrompt: "cat ears",
+        negativePrompt: "blood",
+        workflowSummary: { nodeCount: 4 },
+        parameters: { endpoint: "loopback" }
+      });
+      expect(job.status).toBe("queued");
+      expect(database.startComfyUiJob(job.id)).toBe(true);
+      database.setComfyUiRemotePrompt(job.id, "prompt-1");
+      database.finishComfyUiJob(job.id, "completed", outputWork.id, null);
+      expect(database.getComfyUiJob(job.id)).toMatchObject({
+        status: "completed",
+        remotePromptId: "prompt-1",
+        outputWorkId: outputWork.id
+      });
+
+      database.saveGenerationProvenance({
+        outputWorkId: outputWork.id,
+        sourceWorkId: sourceWork.id,
+        sourceAssetId: sourceAsset.id,
+        provider: "comfyui",
+        templateName: "基础图生图",
+        positivePrompt: "cat ears",
+        negativePrompt: "blood",
+        workflowSummary: { nodeCount: 4 },
+        parameters: { seed: 42 },
+        createdAt: "2026-08-24T00:00:00.000Z"
+      });
+      expect(database.getGenerationProvenance(outputWork.id)).toMatchObject({
+        sourceWorkId: sourceWork.id,
+        parameters: { seed: 42 }
+      });
     } finally {
       database.close();
       rmSync(directory, { recursive: true, force: true });

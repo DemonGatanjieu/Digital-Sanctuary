@@ -31,7 +31,13 @@ import type {
   TriageQueryResultItem,
   VisionAssessment,
   InspectArtworkPage,
-  InspectArtworkResponse
+  InspectArtworkResponse,
+  PromptWorkspacePreferences,
+  ComfyUiConfig,
+  ComfyUiJob,
+  ComfyUiSendRequest,
+  ComfyWorkflowTemplateSummary,
+  GenerationProvenance
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -113,6 +119,7 @@ export interface SanctuaryApi {
   listArtworks(): Promise<ArtworkRecord[]>;
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
   getWork(workId: string): Promise<WorkRecord | null>;
+  getGenerationProvenance(workId: string): Promise<GenerationProvenance | null>;
   generateThumbnails(): Promise<ThumbnailBatchResult>;
   createLibraryBackup(): Promise<string | null>;
   previewWorkDeletion(workIds: string[]): Promise<WorkDeletionPreview>;
@@ -166,6 +173,18 @@ export interface SanctuaryApi {
   deleteExternalVisionApiKey(providerId: string): Promise<void>;
   testExternalVisionConnection(providerId: string): Promise<{ success: boolean; latencyMs: number; error?: string }>;
   listVisionEvaluationsForWork(workId: string): Promise<VisionEvaluationResult[]>;
+  getPromptWorkspace(engine: string, engineVersion: string): Promise<PromptWorkspacePreferences>;
+  savePromptWorkspace(engine: string, engineVersion: string, preferences: PromptWorkspacePreferences): Promise<PromptWorkspacePreferences>;
+  copyPromptText(text: string): Promise<boolean>;
+  getComfyUiConfig(): Promise<ComfyUiConfig>;
+  saveComfyUiConfig(config: ComfyUiConfig): Promise<ComfyUiConfig>;
+  testComfyUiConnection(): Promise<{ success: boolean; latencyMs: number; deviceName?: string; error?: string }>;
+  listComfyUiTemplates(): Promise<ComfyWorkflowTemplateSummary[]>;
+  importComfyUiTemplate(): Promise<ComfyWorkflowTemplateSummary | null>;
+  deleteComfyUiTemplate(templateId: string): Promise<boolean>;
+  listComfyUiJobs(): Promise<ComfyUiJob[]>;
+  startComfyUiJob(request: ComfyUiSendRequest): Promise<ComfyUiJob>;
+  cancelComfyUiJob(jobId: string): Promise<ComfyUiJob>;
   inspectArtwork(params: { workId?: string; artworkId?: string; url?: string; pageIndex?: number }): Promise<InspectArtworkResponse | null>;
   addCustomBlacklistTag(payload: { tag: string; threshold?: number; action?: "blur" | "hide"; groupName?: string }): Promise<CustomElementGroup[]>;
   queryTriageWorks(params: { tags: string[]; minConfidence?: number; scope?: AnalysisScope }): Promise<TriageQueryResultItem[]>;
@@ -194,6 +213,8 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:query-works", query) as Promise<WorkQueryResult>,
   getWork: (workId) =>
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
+  getGenerationProvenance: (workId) =>
+    ipcRenderer.invoke("library:get-generation-provenance", workId) as Promise<GenerationProvenance | null>,
   inspectArtwork: (params) =>
     ipcRenderer.invoke("vision:inspect-artwork", params) as Promise<InspectArtworkResponse | null>,
   addCustomBlacklistTag: (payload) =>
@@ -321,6 +342,30 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("vision:test-connection", providerId) as Promise<{ success: boolean; latencyMs: number; error?: string }>,
   listVisionEvaluationsForWork: (workId) =>
     ipcRenderer.invoke("vision:list-evaluations", workId) as Promise<VisionEvaluationResult[]>,
+  getPromptWorkspace: (engine, engineVersion) =>
+    ipcRenderer.invoke("prompt-bridge:get-workspace", engine, engineVersion) as Promise<PromptWorkspacePreferences>,
+  savePromptWorkspace: (engine, engineVersion, preferences) =>
+    ipcRenderer.invoke("prompt-bridge:save-workspace", engine, engineVersion, preferences) as Promise<PromptWorkspacePreferences>,
+  copyPromptText: (text) =>
+    ipcRenderer.invoke("prompt-bridge:copy", text) as Promise<boolean>,
+  getComfyUiConfig: () =>
+    ipcRenderer.invoke("comfyui:get-config") as Promise<ComfyUiConfig>,
+  saveComfyUiConfig: (config) =>
+    ipcRenderer.invoke("comfyui:save-config", config) as Promise<ComfyUiConfig>,
+  testComfyUiConnection: () =>
+    ipcRenderer.invoke("comfyui:test-connection") as Promise<{ success: boolean; latencyMs: number; deviceName?: string; error?: string }>,
+  listComfyUiTemplates: () =>
+    ipcRenderer.invoke("comfyui:list-templates") as Promise<ComfyWorkflowTemplateSummary[]>,
+  importComfyUiTemplate: () =>
+    ipcRenderer.invoke("comfyui:import-template") as Promise<ComfyWorkflowTemplateSummary | null>,
+  deleteComfyUiTemplate: (templateId) =>
+    ipcRenderer.invoke("comfyui:delete-template", templateId) as Promise<boolean>,
+  listComfyUiJobs: () =>
+    ipcRenderer.invoke("comfyui:list-jobs") as Promise<ComfyUiJob[]>,
+  startComfyUiJob: (request) =>
+    ipcRenderer.invoke("comfyui:start-job", request) as Promise<ComfyUiJob>,
+  cancelComfyUiJob: (jobId) =>
+    ipcRenderer.invoke("comfyui:cancel-job", jobId) as Promise<ComfyUiJob>,
   showExplore: (bounds) =>
     ipcRenderer.invoke("explore:show", bounds) as Promise<ExploreState>,
   setExploreBounds: (bounds) =>

@@ -1,5 +1,8 @@
 export type FilterAction = "allow" | "blur" | "hide";
 
+export * from "./prompt-bridge.js";
+export * from "./comfyui.js";
+
 export interface VisionAssessment {
   status: "complete" | "error";
   engine: string;

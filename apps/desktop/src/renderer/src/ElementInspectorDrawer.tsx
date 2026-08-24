@@ -3,6 +3,7 @@ import type { CustomElementGroup, InspectArtworkPage, VisionAssessment } from "@
 import type { ApplicationStatus } from "../../preload/index";
 import { Button } from "./Button";
 import { AppNotice } from "./AppNotice";
+import { PromptWorkbenchPanel } from "./PromptWorkbenchPanel";
 
 export interface ElementInspectorTarget {
   workId?: string;
@@ -15,11 +16,13 @@ export interface ElementInspectorTarget {
 export function ElementInspectorDrawer({
   target,
   onClose,
-  onBlacklistUpdated
+  onBlacklistUpdated,
+  onGenerated
 }: {
   target: ElementInspectorTarget | null;
   onClose: () => void;
   onBlacklistUpdated?: (groups: CustomElementGroup[]) => void;
+  onGenerated?: () => Promise<void> | void;
 }) {
   const [loading, setLoading] = useState(true);
   const [assessment, setAssessment] = useState<VisionAssessment | null>(null);
@@ -371,6 +374,13 @@ export function ElementInspectorDrawer({
                 })
               )}
             </div>
+
+            <PromptWorkbenchPanel
+              assessment={assessment}
+              workId={target.workId}
+              pageIndex={activePageIndex}
+              onGenerated={onGenerated}
+            />
 
             <div className="inspector-action-footer">
               <div className="inspector-action-header">

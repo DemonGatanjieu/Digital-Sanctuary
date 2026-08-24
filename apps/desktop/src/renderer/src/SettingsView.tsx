@@ -14,6 +14,7 @@ import { Button } from "./Button";
 import { ThemeSettingsSection } from "./ThemeSettingsSection";
 import { TypographySettingsSection } from "./typography/TypographySettingsSection";
 import { VisionSettingsSection } from "./VisionSettingsSection";
+import { ComfyUiSettingsSection } from "./ComfyUiSettingsSection";
 import type { PersonalPreferenceProfileView } from "../../preload/index";
 
 interface SettingsViewProps {
@@ -101,6 +102,7 @@ export function SettingsView({
       <ThemeSettingsSection />
       <TypographySettingsSection />
       <VisionSettingsSection />
+      <ComfyUiSettingsSection />
 
       <section className="user-profile-card">
         <header>

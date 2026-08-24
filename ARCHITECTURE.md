@@ -2,7 +2,7 @@
 
 - 文档状态：当前架构基线 + 后续演进计划
 - 基线日期：2026-08-24
-- 最近同步：探索已形成“这张不该隐藏 / 少看类似”的双向显式校准；模型版本隔离的个人标签画像、精确页例外、撤销与设置管理已完成代码实现
+- 最近同步：探索双向显式校准与实机验收已完成；本地元素透视现已扩展为模型版本隔离的标签调音台，并通过显式启用的本机 ComfyUI 桥接实现生成任务、结果回收和来源追溯
 - 面向读者：接手实现的开发者或代码模型
 
 ## 1. 产品边界
@@ -35,6 +35,10 @@ flowchart LR
   REVIEW -->|"allow / cancel + 占位层"| VIEW
   DOWNLOAD -->|"严格校验 JSON 与原图 URL"| PIXIV["Pixiv AJAX / 原图 CDN"]
   DOWNLOAD -->|"临时文件 + 原子改名"| STORE["Pictures/Digital Sanctuary/Pixiv/作品 ID"]
+  UI -->|"显式标签三态与发送"| PROMPT["Prompt Bridge：模型适配与本地预设"]
+  PROMPT -->|"仅本机回环 HTTP"| COMFY["用户配置的本地 ComfyUI"]
+  COMFY -->|"校验栅格输出 + 原子落盘"| GENERATED["Pictures/Digital Sanctuary/Generated/ComfyUI"]
+  GENERATED -->|"可信导入 + 来源摘要"| DB
   STORE -->|"受限 sanctuary-image 协议"| UI
   DOWNLOAD -->|"可信决策 + 作者/作品/页码"| DB
   VIEW -->|"广告、跟踪与站外 iframe"| ADBLOCK["网络级广告策略"]
@@ -51,6 +55,8 @@ flowchart LR
 - **字体排印与自定义字体系统（Typography & Custom Fonts Ecosystem）**：定义 4 大语义化字体槽位（界面无衬线、标题典藏衬线、代码等宽、画册手写体）；主进程内建零依赖 SFNT（TrueType/OpenType）二进制安全解析器与 SHA-256 指纹校验，支持字体文件拖拽/选择导入至 `userData/fonts/` 沙箱，通过受限 `sanctuary-font://` 协议与动态 `@font-face` 实现零重启热注入与个性化排版定制。
 - **分类组合与组合视图（Saved Collection Views）**：相册页支持将多个普通相册组合为保存视图；支持多选包含/排除、实时防抖匹配数量与封面预览、拼贴卡片及画廊顶部组合条件摘要栏。
 - **探索防线雷达 HUD**：同时显示模型启动中、保护就绪、模型故障和本次无保护浏览；只有完整模型结果命中用户规则才累计“拦截”。
+- **提示词调音台**：本地画廊大图的“元素透视”入口直接复用当前单页 WD 标签；每个标签支持喜欢 / 中立 / 避免三态，提供 Danbooru、SDXL 插画与 FLUX 自然语言三种确定性转换、原始/正向/负向预览、系统剪贴板复制、个人负向词库和本地预设。偏好按视觉引擎与版本隔离，浏览、收藏和下载均不是隐式训练信号。
+- **ComfyUI 本地桥接**：设置页显式启停、测试回环地址、导入/删除 API Format 工作流；调音台只允许从数据库已索引且存在的本地页显式发起。任务状态持久化，所有返回栅格图经 MIME、体积、文件签名和安全路径校验后原子保存并作为可信资源加入画廊；生成作品的大图可查看来源作品、正负提示词与工作流摘要。
 - **三档性能与显示策略**：持久化精致（Quality）、均衡（Balanced）、省电（Efficient）三档，支持 reduced motion 优雅退化；大图库渐进分页与 `content-visibility` 跳过屏幕外绘制，当前 10,000 作品基准首屏约 564 ms、JS 堆约 22 MB。
 - **动态主题引擎与个性化外观系统（全栈完成）**：前端视觉 tokens 与个性化样式解耦为标准化主题包（`theme.json` + `theme.css`）。主进程支持内置/用户主题扫描、文件夹与受限 ZIP 原子安装、活跃主题持久化、安全 CSS 读取、删除回退，以及带本地缓存和限流熔断的 GitHub Contents API 商店；渲染层实现 `<style id="ds-dynamic-theme">` 零刷新无缝热注入；开箱提供 4 套官方深度定制预设（庇护所标准蔚蓝、绝区零 Hollow Zero 潮酷暗调、樱落梦境 Sakura Dream 二次元粉彩、赛博终端 Cyber Deck 霓虹矩阵）；支持用户在设置中心自定义上传个人头像并同步展示于侧边栏品牌区。
 - **360° 交互式动力学星盘罗盘（Interactive Compass Dial）**：内嵌于画廊顶部 Ambient Hero 氛围横幅中；采用三角函数极坐标（`Math.atan2`）捕获鼠标转圈拖拽手势，驱动多层差速齿轮（Parallax Differential Rings）、发光磁性指针、12点钟基准对齐指示箭头与物理惯性阻尼衰减（Momentum Damping），实现充满游戏生命力的 360° 无级旋转拨盘换肤互动。
@@ -72,14 +78,16 @@ flowchart LR
 - `apps/desktop/src/main/explore-review-queue.ts` 与 `apps/desktop/src/preload/explore.ts`：生产使用的视口优先审查。document-start 保护样式阻止未知图片闪现，只有接近视口的作品进入有界队列；结果分为 `allowed / blocked / unavailable`。
 - `apps/desktop/src/main/explore-preference-calibration.ts`：承载双向显式校准。误拦截会记录具体 Pixiv 页放行例外并小幅上调真实命中标签阈值；“少看类似”会记录具体页隐藏例外，并按用户确认的 WD 标签渐进累积模型版本隔离的个人权重。两种事件都保存旧值、新值与证据次数，支持即时撤销。
 - `apps/desktop/src/main/vision-client.ts`：版本化 JSON Lines 客户端、启动就绪握手、模型身份校验、真实小图推理、超时和子进程错误状态机。
+- `apps/desktop/src/main/prompt-bridge-ipc.ts`：提示词工作区的模型版本隔离持久化与系统剪贴板窄 IPC。
+- `apps/desktop/src/main/comfyui/`：本机回环 URL 校验、API 工作流结构/危险路径校验、受限 HTTP 客户端、串行持久任务、输出回收和 IPC。模板可用 `{{positive_prompt}}` / `{{negative_prompt}}` / `{{source_image}}` 显式绑定，也会窄范围识别标准 `CLIPTextEncode` 与 `LoadImage` 节点。
 - Pixiv 使用 `persist:pixiv` 独立持久化 session；本地 React 渲染器不能访问其 DOM 或 Cookie。单实例锁避免多个进程造成“登录一次却看似丢失会话”的错觉。
 
 ### 2.3 视觉与领域层
 
 - `services/vision/python/`：WD SwinV2 Tagger v3 推理实现。
-- `packages/domain/`：元素组、阈值、标签映射、SavedCollectionView 和 `allow / blur / hide` 决策。
+- `packages/domain/`：元素组、阈值、标签映射、SavedCollectionView、`allow / blur / hide` 决策，以及 Prompt Bridge / ComfyUI 的领域契约与确定性提示词转换。
 - `packages/protocol/`：桌面端与视觉子进程之间的协议。
-- `packages/database/`：本地图库、自定义画廊分类（含封面绑定）、分类组合视图（`saved_collection_views` 表，版本 3 迁移）、独立画师表（含头像快照）、Pixiv 作品来源、元素规则设置和远程审查缓存。组合视图的 schema、CRUD、唯一名称约束和损坏 JSON 降级集中在 `saved-collection-view-store.ts`。
+- `packages/database/`：本地图库、自定义画廊分类（含封面绑定）、分类组合视图、独立画师表（含头像快照）、Pixiv 作品来源、元素规则设置和远程审查缓存；Migration 5 新增 `comfyui_jobs` 与 `generation_provenance`，分别保存生成任务状态和结果来源。组合视图的 schema、CRUD、唯一名称约束和损坏 JSON 降级集中在 `saved-collection-view-store.ts`。
 - 开发环境检测到 `.venv-gpu` 时优先请求 CUDA，初始化失败回退 CPU。RTX 4050 基准中单图中位数约由 463 ms 降至 72 ms；provider 选择不改变模型版本和缓存语义。
 
 ## 3. 当前探索请求流
@@ -126,6 +134,8 @@ flowchart LR
 - 被拦截图片在完成判断前必须保持保护态；一次性查看不能改变持久规则。“这张不该隐藏”是独立的明确学习操作，必须保存具体页例外、显示阈值变化并允许撤销。
 - 视觉进程只有在模型装载握手和启动推理都成功后才可以标记 ready。模型故障必须暂停受保护探索；用户只有显式选择后才能进入当前会话的无保护浏览。
 - 远程 Pixiv 页面不能直接指定下载目标路径；所有作品 ID、原图域名、扩展名、文件上限和落盘目录由主进程重新验证或生成。
+- ComfyUI 只接受 `http://localhost`、`127.0.0.0/8` 或 `[::1]` 回环根地址，禁止账号、远程主机、额外路径、查询和片段；桥接默认关闭，只有用户显式开启后才允许入队。
+- ComfyUI 工作流限制为 2 MiB / 1,000 节点，拒绝本机绝对路径、上级目录跳转、危险键名与无正向提示词绑定；无需参考图的模板不会上传图片。返回 JSON、图片数量、图片体积、MIME 与文件签名都有上限。
 - “用户信任”和“模型分析”是不同概念。未来的图库整理模型只能写标签或建议，未经用户确认不能把主动下载作品改为模糊/隐藏。
 
 ## 5. 广告过滤分层
@@ -215,6 +225,15 @@ CREATE TABLE remote_image_reviews (
 - 标签建议与探索拦截、主动下载信任完全分离；只有用户勾选并确认的建议才创建分类关系。
 - 本地画廊展示层不读取 `allow / blur / hide` 来决定可见性；既有旧决策可以作为分析记录保留，但不能再生成视觉遮罩。
 
+### 8.1 标签语义与本地生成边界
+
+- Prompt Bridge 与探索个人偏好共享“标签语义”，但不共享动作：探索偏好只决定远程遮罩；提示词三态只决定导出的正向/负向文本；任何一方都不能改变本地画廊可信显示。
+- 提示词工作区按 `engine + engineVersion` 保存，避免模型标签表变化后错误复用旧调音结果；所有转换是可测试的确定性规则，不暗中调用在线模型。
+- ComfyUI 任务必须引用现存 `workId + pageIndex + templateId`，主进程重新解析本地资产路径，Renderer 不能提交任意文件路径或任意落盘目录。
+- 生成任务严格串行；异常退出把旧 `running` 任务标为失败，不自动重跑。取消只停止本地等待并明确提示 ComfyUI 端可能仍在执行。
+- 每个返回输出建立独立可信画廊作品和 `generation_provenance`；来源删除时相应来源记录级联清理，但不会让探索规则反向作用于生成资源。
+- 区域级遮罩未接入生产。当前 WD Tagger 没有坐标，准确率、显存与延迟门槛见 `docs/research/REGION_LEVEL_MASKING_GATE_2026-08-24.md`。
+
 ## 9. 近期架构里程碑
 
 1. **已完成**：元素黑名单、远程失败闭合、持久化审查缓存、占位层和一次性查看。
@@ -231,7 +250,8 @@ CREATE TABLE remote_image_reviews (
 12. **已完成**：动态主题生态与 360° 动力学星盘罗盘；支持标准化主题包安装、GitHub 商店与物理惯性拨盘换肤。
 13. **已完成**：字体排印与本地自定义字体系统（Typography）；4 大语义化槽位、SFNT 安全二进制解析器、`userData/fonts/` 沙箱、`sanctuary-font://` 协议与动态热注入。
 14. **已完成**：实体级全景双页对开画册（Double-Spread Photobook）与 3D 动力学原子状态机；4 种装裱风格、浮动毛玻璃目录抽屉、GPU 预解码与零时序穿透 3D 翻页。
-15. **已完成代码实现 / 待实机验收**：画廊可信显示、模型 ready 握手与启动推理、探索全局故障门、视口审查重新启用，以及“这张不该隐藏”的具体页例外、按标签渐进校准和即时撤销。
-16. **已完成代码实现 / 待实机验收**：探索双向个人偏好学习；包含“少看类似”候选标签层、具体页隐藏、重复证据门槛、个人组合分、模型版本隔离画像、透明数值反馈、撤销及设置页启停/重置。本地画廊继续完全不读取该画像。
+15. **已完成并实机验收**：画廊可信显示、模型 ready 握手与启动推理、探索全局故障门、视口审查重新启用，以及“这张不该隐藏”的具体页例外、按标签渐进校准和即时撤销。
+16. **已完成并实机验收**：探索双向个人偏好学习；包含“少看类似”候选标签层、具体页隐藏、重复证据门槛、个人组合分、模型版本隔离画像、透明数值反馈、撤销及设置页启停/重置。本地画廊继续完全不读取该画像。
+17. **已完成并实机验收**：标签调音台与 ComfyUI 本地桥接；包含三态标签、模型适配提示词、复制/负向词库/预设、本机连接与工作流模板、持久生成任务、多输出回收、可信入库和来源查看。区域级遮罩独立评审未过门，保持不实现。
 
 详细任务与止损条件见 `docs/plans/ACTIVE_ROADMAP.md`，验收步骤见 `docs/handoff/02_VERIFICATION_CHECKLIST.md`。

@@ -29,7 +29,10 @@ import type {
   VisionEvaluationStatus,
   VisionEvaluationScope,
   VisionDimensionScore,
-  TriageQueryResultItem
+  TriageQueryResultItem,
+  ComfyUiJob,
+  ComfyUiJobStatus,
+  GenerationProvenance
 } from "@sanctuary/domain";
 import { SavedCollectionViewStore } from "./saved-collection-view-store.js";
 import {
@@ -217,6 +220,39 @@ interface VisionDimensionScoreRow {
   label: string;
   score: number;
   explanation: string | null;
+}
+
+interface ComfyUiJobRow {
+  id: string;
+  status: string;
+  source_work_id: string;
+  source_asset_id: string;
+  template_id: string;
+  template_name: string;
+  positive_prompt: string;
+  negative_prompt: string;
+  remote_prompt_id: string | null;
+  output_work_id: string | null;
+  workflow_summary_json: string;
+  parameters_json: string;
+  error: string | null;
+  cancel_requested: number;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+interface GenerationProvenanceRow {
+  output_work_id: string;
+  source_work_id: string;
+  source_asset_id: string;
+  provider: string;
+  template_name: string;
+  positive_prompt: string;
+  negative_prompt: string;
+  workflow_summary_json: string;
+  parameters_json: string;
+  created_at: string;
 }
 
 
@@ -791,6 +827,137 @@ export class LibraryDatabase {
            updated_at = excluded.updated_at`
       )
       .run(key, JSON.stringify(value), new Date().toISOString());
+  }
+
+  createComfyUiJob(input: {
+    sourceWorkId: string;
+    sourceAssetId: string;
+    templateId: string;
+    templateName: string;
+    positivePrompt: string;
+    negativePrompt: string;
+    workflowSummary: Record<string, unknown>;
+    parameters?: Record<string, unknown>;
+  }): ComfyUiJob {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    this.#database.prepare(
+      `INSERT INTO comfyui_jobs
+         (id, status, source_work_id, source_asset_id, template_id, template_name,
+          positive_prompt, negative_prompt, workflow_summary_json, parameters_json,
+          cancel_requested, created_at)
+       VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`
+    ).run(
+      id,
+      input.sourceWorkId,
+      input.sourceAssetId,
+      input.templateId,
+      input.templateName,
+      input.positivePrompt,
+      input.negativePrompt,
+      JSON.stringify(input.workflowSummary),
+      JSON.stringify(input.parameters ?? {}),
+      now
+    );
+    return this.getComfyUiJob(id)!;
+  }
+
+  getComfyUiJob(jobId: string): ComfyUiJob | null {
+    const row = this.#database.prepare("SELECT * FROM comfyui_jobs WHERE id = ?").get(jobId) as unknown as ComfyUiJobRow | undefined;
+    return row ? mapComfyUiJob(row) : null;
+  }
+
+  listComfyUiJobs(limit = 30): ComfyUiJob[] {
+    const safeLimit = clampInteger(limit, 30, 1, 100);
+    return (this.#database.prepare("SELECT * FROM comfyui_jobs ORDER BY created_at DESC LIMIT ?").all(safeLimit) as unknown as ComfyUiJobRow[])
+      .map(mapComfyUiJob);
+  }
+
+  startComfyUiJob(jobId: string): boolean {
+    const result = this.#database.prepare(
+      "UPDATE comfyui_jobs SET status = 'running', started_at = ? WHERE id = ? AND status = 'queued'"
+    ).run(new Date().toISOString(), jobId);
+    return Number(result.changes) === 1;
+  }
+
+  setComfyUiRemotePrompt(jobId: string, promptId: string): void {
+    this.#database.prepare("UPDATE comfyui_jobs SET remote_prompt_id = ? WHERE id = ? AND status = 'running'").run(promptId, jobId);
+  }
+
+  requestComfyUiJobCancellation(jobId: string): boolean {
+    const now = new Date().toISOString();
+    const queued = this.#database.prepare(
+      "UPDATE comfyui_jobs SET status = 'cancelled', cancel_requested = 1, completed_at = ? WHERE id = ? AND status = 'queued'"
+    ).run(now, jobId);
+    if (Number(queued.changes) === 1) return true;
+    const running = this.#database.prepare(
+      "UPDATE comfyui_jobs SET cancel_requested = 1 WHERE id = ? AND status = 'running'"
+    ).run(jobId);
+    return Number(running.changes) === 1;
+  }
+
+  isComfyUiJobCancellationRequested(jobId: string): boolean {
+    const row = this.#database.prepare("SELECT cancel_requested FROM comfyui_jobs WHERE id = ?").get(jobId) as { cancel_requested: number } | undefined;
+    return row?.cancel_requested === 1;
+  }
+
+  finishComfyUiJob(jobId: string, status: "completed" | "failed" | "cancelled", outputWorkId: string | null, error: string | null): void {
+    this.#database.prepare(
+      "UPDATE comfyui_jobs SET status = ?, output_work_id = ?, error = ?, completed_at = ? WHERE id = ?"
+    ).run(status, outputWorkId, error, new Date().toISOString(), jobId);
+  }
+
+  recoverInterruptedComfyUiJobs(): number {
+    const result = this.#database.prepare(
+      "UPDATE comfyui_jobs SET status = 'failed', error = '应用在任务完成前退出', completed_at = ? WHERE status = 'running'"
+    ).run(new Date().toISOString());
+    return Number(result.changes);
+  }
+
+  saveGenerationProvenance(value: GenerationProvenance): void {
+    this.#database.prepare(
+      `INSERT INTO generation_provenance
+         (output_work_id, source_work_id, source_asset_id, provider, template_name,
+          positive_prompt, negative_prompt, workflow_summary_json, parameters_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(output_work_id) DO UPDATE SET
+         source_work_id = excluded.source_work_id,
+         source_asset_id = excluded.source_asset_id,
+         provider = excluded.provider,
+         template_name = excluded.template_name,
+         positive_prompt = excluded.positive_prompt,
+         negative_prompt = excluded.negative_prompt,
+         workflow_summary_json = excluded.workflow_summary_json,
+         parameters_json = excluded.parameters_json`
+    ).run(
+      value.outputWorkId,
+      value.sourceWorkId,
+      value.sourceAssetId,
+      value.provider,
+      value.templateName,
+      value.positivePrompt,
+      value.negativePrompt,
+      JSON.stringify(value.workflowSummary),
+      JSON.stringify(value.parameters),
+      value.createdAt
+    );
+  }
+
+  getGenerationProvenance(outputWorkId: string): GenerationProvenance | null {
+    const row = this.#database.prepare("SELECT * FROM generation_provenance WHERE output_work_id = ?").get(outputWorkId) as unknown as GenerationProvenanceRow | undefined;
+    if (!row) return null;
+    return {
+      outputWorkId: row.output_work_id,
+      sourceWorkId: row.source_work_id,
+      sourceAssetId: row.source_asset_id,
+      provider: "comfyui",
+      templateName: row.template_name,
+      positivePrompt: row.positive_prompt,
+      negativePrompt: row.negative_prompt,
+      workflowSummary: parseJson<Record<string, unknown>>(row.workflow_summary_json) ?? {},
+      parameters: parseJson<Record<string, unknown>>(row.parameters_json) ?? {},
+      createdAt: row.created_at
+    };
   }
 
   hasArtworkPath(path: string): boolean {
@@ -1733,6 +1900,7 @@ export class LibraryDatabase {
     this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)").run(new Date().toISOString());
     this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (3, ?)").run(new Date().toISOString());
     this.#ensureVisionSchema();
+    this.#ensureComfyUiSchema();
   }
 
   #ensureCollectionColumns(): void {
@@ -1957,6 +2125,48 @@ export class LibraryDatabase {
       CREATE INDEX IF NOT EXISTS idx_vision_dim_query ON vision_dimension_scores(dimension_key, score);
     `);
     this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)").run(new Date().toISOString());
+  }
+
+  #ensureComfyUiSchema(): void {
+    this.#database.exec(`
+      CREATE TABLE IF NOT EXISTS comfyui_jobs (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
+        source_work_id TEXT NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+        source_asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        template_id TEXT NOT NULL,
+        template_name TEXT NOT NULL,
+        positive_prompt TEXT NOT NULL,
+        negative_prompt TEXT NOT NULL,
+        remote_prompt_id TEXT,
+        output_work_id TEXT REFERENCES works(id) ON DELETE SET NULL,
+        workflow_summary_json TEXT NOT NULL,
+        parameters_json TEXT NOT NULL,
+        error TEXT,
+        cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK (cancel_requested IN (0, 1)),
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        completed_at TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS generation_provenance (
+        output_work_id TEXT PRIMARY KEY REFERENCES works(id) ON DELETE CASCADE,
+        source_work_id TEXT NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+        source_asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL CHECK (provider IN ('comfyui')),
+        template_name TEXT NOT NULL,
+        positive_prompt TEXT NOT NULL,
+        negative_prompt TEXT NOT NULL,
+        workflow_summary_json TEXT NOT NULL,
+        parameters_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_comfyui_jobs_created ON comfyui_jobs(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_comfyui_jobs_status ON comfyui_jobs(status, created_at);
+      CREATE INDEX IF NOT EXISTS idx_generation_provenance_source ON generation_provenance(source_work_id, created_at DESC);
+    `);
+    this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (5, ?)").run(new Date().toISOString());
   }
 
 
@@ -2191,6 +2401,30 @@ function mapWorkAsset(row: WorkAssetRow): WorkAssetRecord {
     fileState: asAssetFileState(row.file_state),
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+function mapComfyUiJob(row: ComfyUiJobRow): ComfyUiJob {
+  const statuses: ComfyUiJobStatus[] = ["queued", "running", "completed", "failed", "cancelled"];
+  const status = statuses.includes(row.status as ComfyUiJobStatus) ? row.status as ComfyUiJobStatus : "failed";
+  return {
+    id: row.id,
+    status,
+    sourceWorkId: row.source_work_id,
+    sourceAssetId: row.source_asset_id,
+    templateId: row.template_id,
+    templateName: row.template_name,
+    positivePrompt: row.positive_prompt,
+    negativePrompt: row.negative_prompt,
+    remotePromptId: row.remote_prompt_id,
+    outputWorkId: row.output_work_id,
+    workflowSummary: parseJson<Record<string, unknown>>(row.workflow_summary_json) ?? {},
+    parameters: parseJson<Record<string, unknown>>(row.parameters_json) ?? {},
+    error: row.error,
+    cancelRequested: row.cancel_requested === 1,
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    completedAt: row.completed_at
   };
 }
 

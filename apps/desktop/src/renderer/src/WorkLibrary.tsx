@@ -8,13 +8,15 @@ import type {
   WorkDeletionPreview,
   WorkQuery,
   WorkQueryResult,
-  WorkRecord
+  WorkRecord,
+  GenerationProvenance
 } from "@sanctuary/domain";
 import { DialogOverlay } from "./DialogOverlay";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
 import { InteractiveCompassDial } from "./InteractiveCompassDial";
 import { VisionRadarChart } from "./VisionRadarChart";
+import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 
 
 export function WorkLibrary({
@@ -424,7 +426,7 @@ export function WorkLibrary({
       )}
 
       {selectedWork && (
-        <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} />
+        <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} />
       )}
       {deletionPreview && (
         <DialogOverlay busy={deleting} onClose={() => setDeletionPreview(null)}>
@@ -560,7 +562,7 @@ function LazyWorkImage({ path }: { path: string }) {
   );
 }
 
-function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void }) {
+function WorkLightbox({ work, onClose, onGenerated }: { work: WorkRecord; onClose: () => void; onGenerated: () => Promise<void> | void }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -569,6 +571,9 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
   const [imageLoaded, setImageLoaded] = useState(false);
   const [showRadar, setShowRadar] = useState(false);
   const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
+  const [provenance, setProvenance] = useState<GenerationProvenance | null>(null);
+  const [showProvenance, setShowProvenance] = useState(false);
+  const [showInspector, setShowInspector] = useState(false);
 
   const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const hudTimer = useRef<number | null>(null);
@@ -582,6 +587,7 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
     if (window.sanctuary?.listVisionEvaluationsForWork) {
       window.sanctuary.listVisionEvaluationsForWork(work.id).then(setEvaluations).catch(() => setEvaluations([]));
     }
+    void window.sanctuary.getGenerationProvenance(work.id).then(setProvenance).catch(() => setProvenance(null));
   }, [pageIndex, work.id]);
 
   useEffect(() => {
@@ -607,7 +613,10 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       resetHudTimer();
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        if (showInspector) setShowInspector(false);
+        else onClose();
+      }
       else if (event.key === "ArrowLeft") setPageIndex((value) => Math.max(0, value - 1));
       else if (event.key === "ArrowRight") setPageIndex((value) => Math.min(work.assets.length - 1, value + 1));
       else if (event.key === "0" || event.key === "r" || event.key === "R") {
@@ -624,7 +633,7 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, resetHudTimer, work.assets.length]);
+  }, [onClose, resetHudTimer, showInspector, work.assets.length]);
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -691,10 +700,23 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
             type="button"
             className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
             title="切换 AI 视觉雷达图画像"
-            onClick={() => setShowRadar((v) => !v)}
+            onClick={() => { setShowRadar((v) => !v); setShowProvenance(false); }}
           >
             ✦ 雷达画像
           </button>
+          <button
+            type="button"
+            className={`cinema-btn-fit ${showInspector ? "active" : ""}`}
+            title="查看当前页 WD 标签并打开提示词调音台"
+            onClick={() => { setShowInspector((value) => !value); setShowRadar(false); setShowProvenance(false); }}
+          >
+            ◇ 元素透视
+          </button>
+          {provenance && (
+            <button type="button" className={`cinema-btn-fit ${showProvenance ? "active" : ""}`} title="查看 ComfyUI 生成来源" onClick={() => { setShowProvenance((value) => !value); setShowRadar(false); }}>
+              ✦ 生成来源
+            </button>
+          )}
           <button type="button" className="cinema-btn-close" aria-label="关闭大图" title="关闭大图 (Esc)" onClick={onClose}>✕</button>
         </div>
       </header>
@@ -718,6 +740,30 @@ function WorkLightbox({ work, onClose }: { work: WorkRecord; onClose: () => void
             </div>
           )}
         </aside>
+      )}
+
+      {showProvenance && provenance && (
+        <aside className="cinema-radar-drawer generation-provenance-drawer" role="complementary" aria-label="生成来源与工作流摘要">
+          <div className="radar-drawer-header">
+            <h3>ComfyUI 生成来源</h3>
+            <button type="button" className="radar-drawer-close" onClick={() => setShowProvenance(false)} aria-label="关闭来源信息">✕</button>
+          </div>
+          <div className="generation-provenance-content">
+            <p><strong>工作流</strong><span>{provenance.templateName}</span></p>
+            <p><strong>来源作品</strong><span>{provenance.sourceWorkId}</span></p>
+            <p><strong>正向提示词</strong><code>{provenance.positivePrompt || "（空）"}</code></p>
+            <p><strong>负向提示词</strong><code>{provenance.negativePrompt || "（空）"}</code></p>
+            <p><strong>工作流摘要</strong><code>{JSON.stringify(provenance.workflowSummary, null, 2)}</code></p>
+          </div>
+        </aside>
+      )}
+
+      {showInspector && (
+        <ElementInspectorDrawer
+          target={{ workId: work.id, title: work.title, pageIndex }}
+          onClose={() => setShowInspector(false)}
+          onGenerated={onGenerated}
+        />
       )}
 
       <div

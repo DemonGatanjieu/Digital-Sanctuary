@@ -520,6 +520,7 @@ export function App() {
           target={inspectorTarget}
           onClose={() => setInspectorTarget(null)}
           onBlacklistUpdated={(groups) => setCustomElementGroups(groups)}
+          onGenerated={refreshLibrary}
         />
       )}
       {collectionEditor && (
