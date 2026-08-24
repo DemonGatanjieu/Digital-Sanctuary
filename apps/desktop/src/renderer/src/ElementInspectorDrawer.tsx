@@ -39,6 +39,7 @@ export function ElementInspectorDrawer({
   const [notice, setNotice] = useState("");
   const [minConfidenceFilter, setMinConfidenceFilter] = useState<number>(0.2);
   const [runtimeStatus, setRuntimeStatus] = useState<ApplicationStatus | null>(null);
+  const [activeSection, setActiveSection] = useState<"features" | "prompt" | "filter">("features");
 
   const loadAnalysis = useCallback((overridePageIndex?: number) => {
     if (!target) return;
@@ -109,8 +110,10 @@ export function ElementInspectorDrawer({
       setError("");
       setSelectedTags([]);
       setNotice("");
+      setActiveSection("features");
       return;
     }
+    setActiveSection("features");
     loadAnalysis();
   }, [loadAnalysis, targetKey]);
 
@@ -189,6 +192,85 @@ export function ElementInspectorDrawer({
       current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag]
     );
   };
+
+  const renderTagBrowser = (selectable: boolean) => (
+    <>
+      <div className="inspector-conf-filter-row">
+        <button
+          type="button"
+          className={`inspector-conf-tab ${minConfidenceFilter === 0.2 ? "active" : ""}`}
+          onClick={() => setMinConfidenceFilter(0.2)}
+        >
+          主要特征 ({countAt20})
+        </button>
+        <button
+          type="button"
+          className={`inspector-conf-tab ${minConfidenceFilter === 0.4 ? "active" : ""}`}
+          onClick={() => setMinConfidenceFilter(0.4)}
+        >
+          高把握特征 ({countAt40})
+        </button>
+        <button
+          type="button"
+          className={`inspector-conf-tab ${minConfidenceFilter === 0.05 ? "active" : ""}`}
+          onClick={() => setMinConfidenceFilter(0.05)}
+        >
+          全部特征 ({rawEntries.length})
+        </button>
+      </div>
+
+      <div className="inspector-controls-bar">
+        <input
+          type="search"
+          className="inspector-search-input"
+          placeholder="搜索标签，例如 cat_ears、swimsuit…"
+          value={searchFilter}
+          onChange={(e) => setSearchFilter(e.target.value)}
+        />
+        <span className="inspector-count-chip">
+          {sortedTags.length} / {rawEntries.length}
+        </span>
+      </div>
+
+      <div className={`inspector-tags-grid ${selectable ? "is-selectable" : "is-readable"}`}>
+        {sortedTags.length === 0 ? (
+          <div className="inspector-no-tags">
+            <span>当前筛选条件或搜索没有匹配标签</span>
+          </div>
+        ) : (
+          sortedTags.map(([tag, confidence]) => {
+            const isSelected = selectedTags.includes(tag);
+            const pct = Math.round(confidence * 100);
+            const isHigh = confidence >= 0.7;
+            const isMedium = confidence >= 0.4 && confidence < 0.7;
+            const className = `inspector-tag-pill ${isSelected ? "selected" : ""} ${isHigh ? "high-conf" : isMedium ? "med-conf" : ""} ${selectable ? "" : "is-static"}`;
+            const content = (
+              <>
+                <span className="inspector-tag-name">{tag}</span>
+                <span className="inspector-tag-conf">{pct}%</span>
+                {selectable && <span className="inspector-tag-check">{isSelected ? "✓" : "+"}</span>}
+              </>
+            );
+            return selectable ? (
+              <button
+                key={tag}
+                type="button"
+                className={className}
+                onClick={() => toggleTag(tag)}
+                title={`识别把握 ${pct}% · 点击选择为探索拦截规则`}
+              >
+                {content}
+              </button>
+            ) : (
+              <span key={tag} className={className} title={`WD Tagger 识别把握 ${pct}%`}>
+                {content}
+              </span>
+            );
+          })
+        )}
+      </div>
+    </>
+  );
 
   if (!target) return null;
 
@@ -309,119 +391,89 @@ export function ElementInspectorDrawer({
             </Button>
           </div>
         ) : assessment ? (
-          <>
-            <div className="inspector-conf-filter-row">
-              <button
-                type="button"
-                className={`inspector-conf-tab ${minConfidenceFilter === 0.2 ? "active" : ""}`}
-                onClick={() => setMinConfidenceFilter(0.2)}
-              >
-                主要特征 ({countAt20})
+          <div className="inspector-workspace">
+            <nav className="inspector-section-tabs" aria-label="元素透视功能切换">
+              <button type="button" className={activeSection === "features" ? "active" : ""} onClick={() => setActiveSection("features")}>
+                <span>看懂画面</span><small>{rawEntries.length} 个标签</small>
               </button>
-              <button
-                type="button"
-                className={`inspector-conf-tab ${minConfidenceFilter === 0.4 ? "active" : ""}`}
-                onClick={() => setMinConfidenceFilter(0.4)}
-              >
-                高确信特征 ({countAt40})
+              <button type="button" className={activeSection === "prompt" ? "active" : ""} onClick={() => setActiveSection("prompt")}>
+                <span>整理提示词</span><small>本图临时选择</small>
               </button>
-              <button
-                type="button"
-                className={`inspector-conf-tab ${minConfidenceFilter === 0.05 ? "active" : ""}`}
-                onClick={() => setMinConfidenceFilter(0.05)}
-              >
-                全部特征 ({rawEntries.length})
+              <button type="button" className={activeSection === "filter" ? "active" : ""} onClick={() => setActiveSection("filter")}>
+                <span>设置探索拦截</span><small>{selectedTags.length > 0 ? `已选 ${selectedTags.length}` : "可选"}</small>
               </button>
-            </div>
+            </nav>
 
-            <div className="inspector-controls-bar">
-              <input
-                type="search"
-                className="inspector-search-input"
-                placeholder="搜索标签 (例如 cat_ears, 3d, swimsuit)..."
-                value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value)}
-              />
-              <span className="inspector-count-chip">
-                {sortedTags.length} / {rawEntries.length}
-              </span>
-            </div>
-
-            <div className="inspector-tags-grid">
-              {sortedTags.length === 0 ? (
-                <div className="inspector-no-tags">
-                  <span>🍃 当前筛选条件或搜索无匹配标签</span>
+            {activeSection === "features" && (
+              <section className="inspector-section-panel" aria-label="画面识别结果">
+                <div className="inspector-section-intro">
+                  <div><strong>这张图片里识别到了什么</strong><span>按识别把握从高到低排列，可以搜索或切换显示范围。</span></div>
+                  <p><strong>%</strong> 表示模型认为元素存在的把握，不是生成提示词权重。</p>
                 </div>
-              ) : (
-                sortedTags.map(([tag, confidence]) => {
-                  const isSelected = selectedTags.includes(tag);
-                  const pct = Math.round(confidence * 100);
-                  const isHigh = confidence >= 0.7;
-                  const isMedium = confidence >= 0.4 && confidence < 0.7;
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      className={`inspector-tag-pill ${isSelected ? "selected" : ""} ${isHigh ? "high-conf" : isMedium ? "med-conf" : ""}`}
-                      onClick={() => toggleTag(tag)}
-                      title={`置信度: ${pct}% · 点击选择以加入拦截`}
-                    >
-                      <span className="inspector-tag-name">{tag}</span>
-                      <span className="inspector-tag-conf">{pct}%</span>
-                      <span className="inspector-tag-check">{isSelected ? "✓" : "+"}</span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
+                {renderTagBrowser(false)}
+              </section>
+            )}
 
-            <PromptWorkbenchPanel
-              assessment={assessment}
-              workId={target.workId}
-              pageIndex={activePageIndex}
-              onGenerated={onGenerated}
-            />
+            {activeSection === "prompt" && (
+              <section className="inspector-section-panel prompt-section-panel" aria-label="本图生成提示词">
+                <PromptWorkbenchPanel
+                  assessment={assessment}
+                  workId={target.workId}
+                  pageIndex={activePageIndex}
+                  onGenerated={onGenerated}
+                />
+              </section>
+            )}
 
-            <div className="inspector-action-footer">
-              <div className="inspector-action-header">
-                <strong>🛡️ 自定义拦截规则设定</strong>
-                <span>选中 {selectedTags.length} 个标签</span>
-              </div>
-              <div className="inspector-rule-inputs">
-                <div className="inspector-input-group">
-                  <label>拦截动作</label>
-                  <select
-                    className="inspector-select"
-                    value={action}
-                    onChange={(e) => setAction(e.target.value as "hide" | "blur")}
+            {activeSection === "filter" && (
+              <section className="inspector-section-panel" aria-label="探索拦截规则">
+                <div className="inspector-section-intro">
+                  <div><strong>以后在探索里少看到哪些元素</strong><span>先选择元素，再决定隐藏方式和触发把握。</span></div>
+                  <p>只影响远程探索；已经下载到画廊的图片始终正常显示。</p>
+                </div>
+                {renderTagBrowser(true)}
+                <div className="inspector-action-footer">
+                  <div className="inspector-action-header">
+                    <strong>自定义探索拦截</strong>
+                    <span>已选择 {selectedTags.length} 个标签</span>
+                  </div>
+                  <div className="inspector-rule-inputs">
+                    <div className="inspector-input-group">
+                      <label>命中后怎么显示</label>
+                      <select
+                        className="inspector-select"
+                        value={action}
+                        onChange={(e) => setAction(e.target.value as "hide" | "blur")}
+                      >
+                        <option value="hide">遮住整张图片</option>
+                        <option value="blur">保持模糊，可手动查看</option>
+                      </select>
+                    </div>
+                    <div className="inspector-input-group">
+                      <label>至少达到多少识别把握：{Math.round(threshold * 100)}%</label>
+                      <input
+                        type="range"
+                        min="0.1"
+                        max="0.9"
+                        step="0.05"
+                        value={threshold}
+                        className="inspector-slider"
+                        onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    variant="primary"
+                    disabled={selectedTags.length === 0 || saving}
+                    onClick={handleAddBlacklist}
+                    className="inspector-submit-btn"
                   >
-                    <option value="hide">完全遮挡 / 隐藏</option>
-                    <option value="blur">高斯模糊保护</option>
-                  </select>
+                    {saving ? "正在保存…" : selectedTags.length === 0 ? "请先选择要拦截的元素" : `保存 ${selectedTags.length} 个探索拦截规则`}
+                  </Button>
                 </div>
-                <div className="inspector-input-group">
-                  <label>触发阈值 ({Math.round(threshold * 100)}%)</label>
-                  <input
-                    type="range"
-                    min="0.1"
-                    max="0.9"
-                    step="0.05"
-                    value={threshold}
-                    className="inspector-slider"
-                    onChange={(e) => setThreshold(parseFloat(e.target.value))}
-                  />
-                </div>
-              </div>
-              <Button
-                variant="primary"
-                disabled={selectedTags.length === 0 || saving}
-                onClick={handleAddBlacklist}
-                className="inspector-submit-btn"
-              >
-                {saving ? "正在生效..." : `🚫 将选中的 ${selectedTags.length} 个标签加入拦截规则`}
-              </Button>
-            </div>
-          </>
+              </section>
+            )}
+          </div>
         ) : null}
       </div>
     </aside>

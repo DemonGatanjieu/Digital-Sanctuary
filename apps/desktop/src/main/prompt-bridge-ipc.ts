@@ -5,7 +5,8 @@ import {
   type PromptWorkspacePreferences
 } from "@sanctuary/domain";
 
-const PROMPT_PREFERENCE_PREFIX = "prompt.workspace.v1";
+const PROMPT_PREFERENCE_PREFIX = "prompt.workspace.v2";
+const LEGACY_PROMPT_PREFERENCE_PREFIX = "prompt.workspace.v1";
 
 export function promptWorkspacePreferenceKey(engine: string, engineVersion: string): string {
   return `${PROMPT_PREFERENCE_PREFIX}:${normalizeIdentity(engine)}:${normalizeIdentity(engineVersion)}`;
@@ -14,7 +15,15 @@ export function promptWorkspacePreferenceKey(engine: string, engineVersion: stri
 export function registerPromptBridgeIpc(ipc: IpcMain, database: LibraryDatabase): void {
   ipc.handle("prompt-bridge:get-workspace", (_event, engineValue: unknown, versionValue: unknown): PromptWorkspacePreferences => {
     const [engine, engineVersion] = parseModelIdentity(engineValue, versionValue);
-    return normalizePromptWorkspace(database.getPreference<unknown>(promptWorkspacePreferenceKey(engine, engineVersion)));
+    const key = promptWorkspacePreferenceKey(engine, engineVersion);
+    const current = database.getPreference<unknown>(key);
+    if (current !== null) return normalizePromptWorkspace(current);
+
+    const legacyKey = `${LEGACY_PROMPT_PREFERENCE_PREFIX}:${normalizeIdentity(engine)}:${normalizeIdentity(engineVersion)}`;
+    const legacy = database.getPreference<unknown>(legacyKey);
+    const migrated = normalizePromptWorkspace(legacy);
+    if (legacy !== null) database.setPreference(key, migrated);
+    return migrated;
   });
 
   ipc.handle("prompt-bridge:save-workspace", (_event, engineValue: unknown, versionValue: unknown, value: unknown): PromptWorkspacePreferences => {

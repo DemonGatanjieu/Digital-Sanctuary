@@ -1,4 +1,4 @@
-export type TagDisposition = "favorite" | "neutral" | "avoid";
+export type PromptTagRole = "positive" | "ignored" | "negative";
 
 export type PromptModelProfileId = "danbooru" | "sdxl-illustration" | "flux-natural";
 
@@ -11,18 +11,18 @@ export interface PromptModelProfile {
 export const PROMPT_MODEL_PROFILES: readonly PromptModelProfile[] = [
   {
     id: "danbooru",
-    name: "Danbooru 标签",
-    description: "保留 WD 标签结构，适合以标签为主的插画模型。"
+    name: "保留标签格式",
+    description: "保留 WD / Danbooru 标签结构，适合标签型插画工作流。"
   },
   {
     id: "sdxl-illustration",
-    name: "SDXL 插画",
-    description: "转换下划线并轻度强调喜欢的元素。"
+    name: "插画用语",
+    description: "把下划线转换为空格，不根据识别百分比添加生成权重。"
   },
   {
     id: "flux-natural",
-    name: "FLUX 自然语言",
-    description: "将标签整理为简洁的自然语言画面描述。"
+    name: "简洁自然语言",
+    description: "将选中的画面元素整理为一句简洁英文描述。"
   }
 ] as const;
 
@@ -30,15 +30,13 @@ export interface PromptPreset {
   id: string;
   name: string;
   modelProfile: PromptModelProfileId;
-  dispositions: Record<string, TagDisposition>;
   negativeLibrary: string[];
   createdAt: string;
 }
 
 export interface PromptWorkspacePreferences {
-  version: 1;
+  version: 2;
   modelProfile: PromptModelProfileId;
-  dispositions: Record<string, TagDisposition>;
   negativeLibrary: string[];
   presets: PromptPreset[];
 }
@@ -49,17 +47,19 @@ export interface PromptPreview {
   negativePrompt: string;
   positiveTags: string[];
   negativeTags: string[];
+  ignoredTags: string[];
 }
 
 export const DEFAULT_PROMPT_WORKSPACE: PromptWorkspacePreferences = {
-  version: 1,
+  version: 2,
   modelProfile: "danbooru",
-  dispositions: {},
   negativeLibrary: [],
   presets: []
 };
 
-const MAX_TAGS = 2_000;
+export const DEFAULT_PROMPT_MINIMUM_CONFIDENCE = 0.2;
+export const DEFAULT_PROMPT_POSITIVE_CONFIDENCE = 0.4;
+
 const MAX_PRESETS = 30;
 const MAX_LIBRARY_ITEMS = 80;
 
@@ -71,45 +71,47 @@ export function normalizePromptWorkspace(value: unknown): PromptWorkspacePrefere
   if (!value || typeof value !== "object") return structuredClone(DEFAULT_PROMPT_WORKSPACE);
   const input = value as Partial<PromptWorkspacePreferences>;
   const modelProfile = isPromptModelProfileId(input.modelProfile) ? input.modelProfile : "danbooru";
-  const dispositions = normalizeDispositions(input.dispositions);
   const negativeLibrary = normalizeStringList(input.negativeLibrary, MAX_LIBRARY_ITEMS, 160);
   const presets = Array.isArray(input.presets)
     ? input.presets.flatMap((preset) => normalizePromptPreset(preset) ?? []).slice(0, MAX_PRESETS)
     : [];
-  return { version: 1, modelProfile, dispositions, negativeLibrary, presets };
+  return { version: 2, modelProfile, negativeLibrary, presets };
+}
+
+export function defaultPromptTagRole(
+  confidence: number,
+  positiveConfidence = DEFAULT_PROMPT_POSITIVE_CONFIDENCE
+): PromptTagRole {
+  return Number.isFinite(confidence) && confidence >= positiveConfidence ? "positive" : "ignored";
 }
 
 export function composePromptPreview(
   labels: Record<string, number>,
   preferences: PromptWorkspacePreferences,
-  minimumConfidence = 0.2
+  minimumConfidence = DEFAULT_PROMPT_MINIMUM_CONFIDENCE,
+  tagRoles: Readonly<Record<string, PromptTagRole>> = {}
 ): PromptPreview {
   const normalized = normalizePromptWorkspace(preferences);
   const entries = Object.entries(labels)
     .filter((entry): entry is [string, number] => Number.isFinite(entry[1]) && entry[1] >= minimumConfidence)
     .map(([tag, confidence]) => ({ tag: normalizePromptTag(tag), confidence }))
     .filter(({ tag }) => Boolean(tag))
-    .sort((left, right) => {
-      const leftFavorite = normalized.dispositions[left.tag] === "favorite" ? 1 : 0;
-      const rightFavorite = normalized.dispositions[right.tag] === "favorite" ? 1 : 0;
-      return rightFavorite - leftFavorite || right.confidence - left.confidence || left.tag.localeCompare(right.tag);
-    });
+    .sort((left, right) => right.confidence - left.confidence || left.tag.localeCompare(right.tag));
 
-  const positiveTags = entries
-    .filter(({ tag }) => normalized.dispositions[tag] !== "avoid")
-    .map(({ tag }) => tag);
-  const negativeTags = entries
-    .filter(({ tag }) => normalized.dispositions[tag] === "avoid")
-    .map(({ tag }) => tag);
+  const roleOf = ({ tag, confidence }: { tag: string; confidence: number }): PromptTagRole =>
+    isPromptTagRole(tagRoles[tag]) ? tagRoles[tag] : defaultPromptTagRole(confidence);
+  const positiveTags = entries.filter((entry) => roleOf(entry) === "positive").map(({ tag }) => tag);
+  const negativeTags = entries.filter((entry) => roleOf(entry) === "negative").map(({ tag }) => tag);
+  const ignoredTags = entries.filter((entry) => roleOf(entry) === "ignored").map(({ tag }) => tag);
   const rawTags = entries.map(({ tag }) => tag).join(", ");
 
-  const positivePrompt = formatPositivePrompt(positiveTags, normalized.dispositions, normalized.modelProfile);
+  const positivePrompt = formatPositivePrompt(positiveTags, normalized.modelProfile);
   const negativePrompt = [
     ...negativeTags.map((tag) => formatTag(tag, normalized.modelProfile)),
     ...normalized.negativeLibrary
   ].filter(Boolean).join(", ");
 
-  return { rawTags, positivePrompt, negativePrompt, positiveTags, negativeTags };
+  return { rawTags, positivePrompt, negativePrompt, positiveTags, negativeTags, ignoredTags };
 }
 
 export function createPromptPreset(
@@ -125,7 +127,6 @@ export function createPromptPreset(
     id: id.trim().slice(0, 100),
     name: normalizedName,
     modelProfile: normalized.modelProfile,
-    dispositions: { ...normalized.dispositions },
     negativeLibrary: [...normalized.negativeLibrary],
     createdAt
   };
@@ -139,7 +140,6 @@ export function applyPromptPreset(
   return {
     ...normalized,
     modelProfile: preset.modelProfile,
-    dispositions: { ...preset.dispositions },
     negativeLibrary: [...preset.negativeLibrary]
   };
 }
@@ -148,16 +148,8 @@ export function isPromptModelProfileId(value: unknown): value is PromptModelProf
   return value === "danbooru" || value === "sdxl-illustration" || value === "flux-natural";
 }
 
-function normalizeDispositions(value: unknown): Record<string, TagDisposition> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const result: Record<string, TagDisposition> = {};
-  for (const [rawTag, disposition] of Object.entries(value).slice(0, MAX_TAGS)) {
-    const tag = normalizePromptTag(rawTag);
-    if (tag && (disposition === "favorite" || disposition === "neutral" || disposition === "avoid")) {
-      if (disposition !== "neutral") result[tag] = disposition;
-    }
-  }
-  return result;
+export function isPromptTagRole(value: unknown): value is PromptTagRole {
+  return value === "positive" || value === "ignored" || value === "negative";
 }
 
 function normalizePromptPreset(value: unknown): PromptPreset | null {
@@ -169,7 +161,6 @@ function normalizePromptPreset(value: unknown): PromptPreset | null {
     id: input.id.trim().slice(0, 100),
     name: input.name.trim().slice(0, 80),
     modelProfile: input.modelProfile,
-    dispositions: normalizeDispositions(input.dispositions),
     negativeLibrary: normalizeStringList(input.negativeLibrary, MAX_LIBRARY_ITEMS, 160),
     createdAt: input.createdAt.slice(0, 40)
   };
@@ -183,23 +174,12 @@ function normalizeStringList(value: unknown, maximum: number, maximumLength: num
     .filter(Boolean))].slice(0, maximum);
 }
 
-function formatPositivePrompt(
-  tags: string[],
-  dispositions: Record<string, TagDisposition>,
-  profile: PromptModelProfileId
-): string {
+function formatPositivePrompt(tags: string[], profile: PromptModelProfileId): string {
   if (profile === "flux-natural") {
     const terms = tags.slice(0, 60).map((tag) => formatTag(tag, profile));
     return terms.length ? `An illustration featuring ${terms.join(", ")}.` : "";
   }
-  return tags
-    .map((tag) => {
-      const formatted = formatTag(tag, profile);
-      return profile === "sdxl-illustration" && dispositions[tag] === "favorite"
-        ? `(${formatted}:1.15)`
-        : formatted;
-    })
-    .join(", ");
+  return tags.map((tag) => formatTag(tag, profile)).join(", ");
 }
 
 function formatTag(tag: string, profile: PromptModelProfileId): string {
