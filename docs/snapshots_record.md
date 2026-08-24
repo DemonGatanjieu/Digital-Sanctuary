@@ -54,7 +54,7 @@
 | **workspace-agent-governance-consolidated** | `236f9b7422459cd758805536252b1fe044bf921a` | 2026-08-15 | 去除 `GEMINI.md`、`AGENTS.md` 与模块规则三重重复，建立入口、跨模型底线和按作用域规则三层治理；收紧 Git 快照安全边界、GPU 合成适用范围，并明确画册 4 种装裱风格与 4 种翻页效果。 |
 | **vision-element-inspector-and-triage-studio** | `3522bf7e` | 2026-08-18 | 实现交互式单图 AI 元素透视抽屉、自定义黑名单拦截规则、Pixiv 探索悬浮毛玻璃控制胶囊与独立智能清洗排查工坊 (Triage Studio)。 |
 | **personal-prompt-bridge-and-local-comfyui** | `0d159e1` | 2026-08-24 | 完成模型版本隔离的标签三态调音台、模型适配提示词/复制/负向词库/预设、本机回环 ComfyUI 工作流与持久任务、多输出可信回收和生成来源追溯；区域遮罩因独立门槛未通过而保持不实现。 |
-
+| **element-inspector-prompt-workspace-v2** | `b4efed052e87fb4eb09b35047396a6f9537e9fc0` | 2026-08-24 | 元素透视拆分为识别说明、本图提示词整理与探索拦截三页；Prompt Bridge v2 移除跨作品标签累计和置信度伪权重，只持久化格式、负向词库与主动预设，并保留当前本机 ComfyUI 显式发送链路。 |
 
 
 
