@@ -8,7 +8,7 @@
 
 ## 当前任务与提案
 
-- [`TASK_PERSONAL_TAG_PREFERENCE_AND_PROMPT_BRIDGE.md`](./TASK_PERSONAL_TAG_PREFERENCE_AND_PROMPT_BRIDGE.md)：当前已授权施工的双向偏好学习，以及后续标签调音台与 ComfyUI 本地桥接边界。
+- 当前没有仍在施工的授权任务；下一项候选仍需用户明确授权。
 - [`TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_FOR_GEMINI.md`](./TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_FOR_GEMINI.md)：经过架构评审、可由 Gemini 分阶段执行的排版系统任务。
 - [`TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_IMPLEMENTATION_PLAN.md`](./TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_IMPLEMENTATION_PLAN.md)：排版需求来源草案；冲突时以上述执行版为准。
 - [`TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md`](./TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md)：排队中的语义搜索架构提案，尚未授权施工。
@@ -22,6 +22,7 @@
 - [`archive/2026-08-14-theme-system-backend.md`](./archive/2026-08-14-theme-system-backend.md)：已经完成的主题后端任务。
 - [`archive/2026-08-14-task-ai-radar-and-external-vision-implementation-plan.md`](./archive/2026-08-14-task-ai-radar-and-external-vision-implementation-plan.md)：已经完成的 AI 雷达与外部视觉实施规划。
 - [`archive/2026-08-15-full-product-visual-audit.md`](./archive/2026-08-15-full-product-visual-audit.md)：已经完成的全产品视觉审计任务书；验收证据仍在 `docs/reviews/visual-audit/2026-08-15/`。
+- [`archive/2026-08-24-personal-tag-preference-and-prompt-bridge-complete.md`](./archive/2026-08-24-personal-tag-preference-and-prompt-bridge-complete.md)：已完成的探索双向偏好、标签调音台、ComfyUI 本地桥接与区域遮罩独立评审。
 
 归档文档只用于追溯，不代表仍待实现；其中与当前代码冲突的内容以根目录 [`ARCHITECTURE.md`](../../ARCHITECTURE.md)、[`Project_Vision.md`](../../Project_Vision.md) 和现行路线为准。
 

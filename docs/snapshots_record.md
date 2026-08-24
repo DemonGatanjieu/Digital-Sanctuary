@@ -53,7 +53,7 @@
 | **workspace-modular-rules-directory-structure** | `39f596f43519d8acc2a709c8d957fcc7500887e8` | 2026-08-15 | 建立 `.agents/rules/` 模块化规则体系目录，拆分为 4 大专属规范文件并显式标注 Antigravity/Gemini 专属作用域，配置 `.gitignore` 放行规则保护，实现结构化组织与分层治理。 |
 | **workspace-agent-governance-consolidated** | `236f9b7422459cd758805536252b1fe044bf921a` | 2026-08-15 | 去除 `GEMINI.md`、`AGENTS.md` 与模块规则三重重复，建立入口、跨模型底线和按作用域规则三层治理；收紧 Git 快照安全边界、GPU 合成适用范围，并明确画册 4 种装裱风格与 4 种翻页效果。 |
 | **vision-element-inspector-and-triage-studio** | `3522bf7e` | 2026-08-18 | 实现交互式单图 AI 元素透视抽屉、自定义黑名单拦截规则、Pixiv 探索悬浮毛玻璃控制胶囊与独立智能清洗排查工坊 (Triage Studio)。 |
-
+| **personal-prompt-bridge-and-local-comfyui** | `0d159e1` | 2026-08-24 | 完成模型版本隔离的标签三态调音台、模型适配提示词/复制/负向词库/预设、本机回环 ComfyUI 工作流与持久任务、多输出可信回收和生成来源追溯；区域遮罩因独立门槛未通过而保持不实现。 |
 
 
 
