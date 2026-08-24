@@ -1440,7 +1440,8 @@ function registerIpc(): void {
       );
     }
     remoteReviewCache.clear();
-    database.clearRemoteImageReviews();
+    // Persistent reviews are keyed by the complete rules fingerprint. Undo restores the
+    // previous fingerprint, so its matching reviews remain valid and should be reused.
     return { success: true };
   });
   ipcMain.on("explore:inspect-url", (event, value: unknown) => {
