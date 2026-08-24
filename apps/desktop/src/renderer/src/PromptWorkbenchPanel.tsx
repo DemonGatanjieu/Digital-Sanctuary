@@ -47,6 +47,7 @@ export function PromptWorkbenchPanel({
   const [comfyJobs, setComfyJobs] = useState<ComfyUiJob[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [sending, setSending] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<"positive" | "negative" | "raw" | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -158,11 +159,15 @@ export function PromptWorkbenchPanel({
     }
   }
 
-  async function copy(text: string, label: string) {
+  async function copy(text: string, label: string, key: "positive" | "negative" | "raw") {
     if (!text) return;
     try {
       await window.sanctuary.copyPromptText(text);
-      setNotice(`${label}已复制`);
+      setCopiedKey(key);
+      setNotice(`${label}已复制到剪贴板`);
+      window.setTimeout(() => {
+        setCopiedKey((curr) => (curr === key ? null : curr));
+      }, 2000);
     } catch (reason) {
       setError(messageOf(reason, "复制失败"));
     }
@@ -189,54 +194,80 @@ export function PromptWorkbenchPanel({
     }
   }
 
-  if (loading) return <div className="prompt-workbench-loading">正在读取本地提示词设置…</div>;
+  if (loading) {
+    return (
+      <div className="prompt-workbench-loading">
+        <span className="prompt-loading-spinner" aria-hidden="true" />
+        <span>正在读取本地提示词设置…</span>
+      </div>
+    );
+  }
+
+  const isCustomRolesActive = Object.keys(tagRoles).length > 0;
 
   return (
     <section className="prompt-workbench" aria-label="生成提示词整理">
       <header className="prompt-workbench-heading">
-        <div>
-          <p className="eyebrow">PROMPT DRAFT</p>
+        <div className="prompt-heading-text">
+          <p className="eyebrow">PROMPT WORKBENCH</p>
           <h4>整理这张图片的生成提示词</h4>
-          <span>这里只整理当前图片，不会把标签积累成长期模型偏好。</span>
+          <span>选择仅在当前图片当次使用，切换作品或模型后重置，不积累成隐式画像。</span>
         </div>
-        <span className="prompt-local-badge">本图临时选择</span>
+        <span className="prompt-local-badge" title="本图选择仅保存在当前内存，不跨作品持久化">
+          本图临时选择
+        </span>
       </header>
 
       {notice && <AppNotice tone="success" onDismiss={() => setNotice("")}>{notice}</AppNotice>}
       {error && <AppNotice tone="error" onDismiss={() => setError("")}>{error}</AppNotice>}
 
       <div className="prompt-confidence-note">
-        <span aria-hidden="true">%</span>
+        <span className="prompt-note-icon" aria-hidden="true">%</span>
         <div>
           <strong>百分比只是“识别把握”</strong>
-          <small>它只帮助筛选候选元素，不会直接变成 ComfyUI 的提示词权重。</small>
+          <small>它只帮助筛选候选元素，不会直接变成 ComfyUI 的提示词权重或伪权重。</small>
         </div>
       </div>
 
       <div className="prompt-role-summary" aria-label="本次提示词分类摘要">
-        <span className="positive"><strong>{preview.positiveTags.length}</strong> 放进正向</span>
-        <span className="ignored"><strong>{preview.ignoredTags.length}</strong> 本次忽略</span>
-        <span className="negative"><strong>{preview.negativeTags.length}</strong> 移到负向</span>
-        <button type="button" onClick={() => setTagRoles({})} disabled={Object.keys(tagRoles).length === 0}>恢复默认</button>
+        <span className="role-chip positive" title="放进正向提示词输出的标签数量">
+          <strong>{preview.positiveTags.length}</strong> 正向
+        </span>
+        <span className="role-chip ignored" title="本次不输出的标签数量">
+          <strong>{preview.ignoredTags.length}</strong> 忽略
+        </span>
+        <span className="role-chip negative" title="移到负向提示词输出的标签数量">
+          <strong>{preview.negativeTags.length}</strong> 负向
+        </span>
+        <button
+          type="button"
+          className="prompt-reset-roles-btn"
+          onClick={() => setTagRoles({})}
+          disabled={!isCustomRolesActive}
+          title={isCustomRolesActive ? "将所有标签恢复为默认把握分级" : "当前已处于默认分级"}
+        >
+          恢复默认分级
+        </button>
       </div>
 
-      <div className="prompt-tag-tuner">
+      <div className="prompt-tag-tuner" role="group" aria-label="本图特征标签取向调整">
         {visibleTags.map(([tag, confidence]) => {
           const current = tagRoles[tag] ?? defaultPromptTagRole(confidence);
+          const pct = Math.round(confidence * 100);
           return (
             <article key={tag} className={`prompt-tuner-tag ${current}`}>
-              <div>
+              <div className="prompt-tuner-tag-info">
                 <code title={tag}>{tag}</code>
-                <small>{Math.round(confidence * 100)}% 识别把握</small>
+                <small>{pct}% 把握</small>
               </div>
-              <div className="prompt-tristate" role="group" aria-label={`${tag}本次发送方式`}>
+              <div className="prompt-tristate" role="group" aria-label={`${tag} 发送取向`}>
                 {TAG_ROLES.map((option) => (
                   <button
                     key={option.value}
                     type="button"
-                    className={current === option.value ? "active" : ""}
+                    className={`tristate-btn ${option.value} ${current === option.value ? "active" : ""}`}
                     aria-pressed={current === option.value}
-                    title={option.label}
+                    title={`${tag}: ${option.label}`}
                     onClick={() => setRole(tag, option.value)}
                   >
                     {option.shortLabel}
@@ -249,57 +280,87 @@ export function PromptWorkbenchPanel({
       </div>
 
       <div className="prompt-preview-grid">
-        <PromptOutput tone="positive" label={`正向提示词 · ${preview.positiveTags.length} 项`} value={preview.positivePrompt} onCopy={() => void copy(preview.positivePrompt, "正向提示词")} />
-        <PromptOutput tone="negative" label={`负向提示词 · ${preview.negativeTags.length + workspace.negativeLibrary.length} 项`} value={preview.negativePrompt} onCopy={() => void copy(preview.negativePrompt, "负向提示词")} />
-        <PromptOutput tone="raw" label="原始识别标签（核对用）" value={preview.rawTags} onCopy={() => void copy(preview.rawTags, "原始标签")} />
+        <PromptOutput
+          tone="positive"
+          label={`正向提示词 · ${preview.positiveTags.length} 项`}
+          value={preview.positivePrompt}
+          isCopied={copiedKey === "positive"}
+          onCopy={() => void copy(preview.positivePrompt, "正向提示词", "positive")}
+        />
+        <PromptOutput
+          tone="negative"
+          label={`负向提示词 · ${preview.negativeTags.length + workspace.negativeLibrary.length} 项`}
+          value={preview.negativePrompt}
+          isCopied={copiedKey === "negative"}
+          onCopy={() => void copy(preview.negativePrompt, "负向提示词", "negative")}
+        />
+        <PromptOutput
+          tone="raw"
+          label="原始识别标签（核对参考）"
+          value={preview.rawTags}
+          isCopied={copiedKey === "raw"}
+          onCopy={() => void copy(preview.rawTags, "原始标签", "raw")}
+        />
       </div>
 
       <details className="prompt-advanced-settings">
         <summary>
-          <span><strong>输出格式与常用负向词</strong><small>可选设置，会保存在当前本地视觉模型下</small></span>
-          <span aria-hidden="true">⌄</span>
+          <span>
+            <strong>输出格式与常用负向词库</strong>
+            <small>可选设置，会持久化保存在当前本地视觉模型配置下</small>
+          </span>
+          <span className="prompt-summary-arrow" aria-hidden="true">⌄</span>
         </summary>
         <div className="prompt-advanced-body">
           <label className="prompt-profile-field">
-            <span>输出文字格式</span>
+            <span className="prompt-field-title">输出文字格式</span>
             <select
               value={workspace.modelProfile}
               disabled={saving}
-              onChange={(event) => void persist({ ...workspace, modelProfile: event.target.value as PromptWorkspacePreferences["modelProfile"] })}
+              className="prompt-select"
+              onChange={(event) => void persist({ ...workspace, modelProfile: event.target.value as PromptWorkspacePreferences["modelProfile"] }, "已更新输出格式")}
             >
               {PROMPT_MODEL_PROFILES.map((profile) => (
                 <option key={profile.id} value={profile.id}>{profile.name}</option>
               ))}
             </select>
-            <small>{PROMPT_MODEL_PROFILES.find((profile) => profile.id === workspace.modelProfile)?.description}</small>
+            <small className="prompt-field-desc">
+              {PROMPT_MODEL_PROFILES.find((profile) => profile.id === workspace.modelProfile)?.description}
+            </small>
           </label>
 
           <div className="prompt-library-row">
             <label>
-              <strong>常用负向词</strong>
-              <small>这里只保存通用词，例如 watermark、low quality；不会保存本图元素选择。</small>
+              <strong>常用负向词库</strong>
+              <small>这里只保存通用质量词（如 watermark, low quality），不会保存本图临时选择。</small>
               <textarea
                 value={negativeInput}
                 rows={3}
                 maxLength={8_000}
-                placeholder="例如：watermark, low quality"
+                placeholder="例如：watermark, low quality, worst quality, blurry"
                 onChange={(event) => setNegativeInput(event.target.value)}
               />
             </label>
-            <Button size="small" disabled={saving} onClick={saveNegativeLibrary}>保存常用负向词</Button>
+            <Button size="small" disabled={saving} onClick={saveNegativeLibrary}>
+              保存常用负向词
+            </Button>
           </div>
 
           <div className="prompt-preset-row">
             <input
               value={presetName}
               maxLength={80}
-              placeholder="保存当前输出格式和常用负向词"
+              placeholder="输入预设名称，保存当前格式与负向词"
               onChange={(event) => setPresetName(event.target.value)}
+              className="prompt-preset-input"
             />
-            <Button size="small" disabled={!presetName.trim() || saving} onClick={savePreset}>保存格式预设</Button>
+            <Button size="small" disabled={!presetName.trim() || saving} onClick={savePreset}>
+              保存为格式预设
+            </Button>
             {workspace.presets.length > 0 && (
               <select
                 defaultValue=""
+                className="prompt-select"
                 aria-label="应用提示词格式预设"
                 onChange={(event) => {
                   const preset = workspace.presets.find((item) => item.id === event.target.value);
@@ -315,14 +376,24 @@ export function PromptWorkbenchPanel({
           {workspace.presets.length > 0 && (
             <div className="prompt-preset-list" aria-label="本地提示词格式预设">
               {workspace.presets.map((preset) => (
-                <span key={preset.id}>
-                  <button type="button" onClick={() => void persist(applyPromptPreset(workspace, preset), `已应用格式预设“${preset.name}”`)}>{preset.name}</button>
+                <span key={preset.id} className="prompt-preset-chip">
                   <button
                     type="button"
+                    className="preset-name-btn"
+                    title={`应用预设: ${preset.name}`}
+                    onClick={() => void persist(applyPromptPreset(workspace, preset), `已应用格式预设“${preset.name}”`)}
+                  >
+                    {preset.name}
+                  </button>
+                  <button
+                    type="button"
+                    className="preset-del-btn"
                     aria-label={`删除格式预设 ${preset.name}`}
-                    title="删除预设"
+                    title="删除此预设"
                     onClick={() => void persist({ ...workspace, presets: workspace.presets.filter((item) => item.id !== preset.id) }, `已删除格式预设“${preset.name}”`)}
-                  >×</button>
+                  >
+                    ×
+                  </button>
                 </span>
               ))}
             </div>
@@ -331,35 +402,58 @@ export function PromptWorkbenchPanel({
       </details>
 
       <div className="comfy-send-panel">
-        <div>
-          <strong>使用当前本地后端快速生成</strong>
+        <div className="comfy-send-header">
+          <strong>使用本地 ComfyUI 后端快速生成</strong>
           <small>{!workId
-            ? "探索中的远程图片不能直接发送；请先明确下载到本地画廊。"
+            ? "探索中的远程图片不能直接发送；请先在画廊或作品详情中下载到本地。"
             : !comfyConfig?.enabled
-              ? "ComfyUI 桥接尚未启用，请先到设置中开启。"
+              ? "本地 ComfyUI 桥接尚未启用，请在“设置中心 -> 本地 ComfyUI”中开启。"
               : comfyTemplates.length === 0
-                ? "请先在设置中导入一个 ComfyUI API 工作流。"
-                : "会发送当前本地页、上面的正负提示词和你选择的工作流。"}</small>
+                ? "暂无可用的 API 工作流模板，请在“设置中心 -> 本地 ComfyUI”中导入。"
+                : "会发送当前本地画作、上述正负提示词以及选中的工作流模板。"}</small>
         </div>
         {workId && comfyConfig?.enabled && comfyTemplates.length > 0 && (
           <div className="comfy-send-actions">
-            <label>
-              <span>工作流</span>
-              <select value={selectedTemplateId} onChange={(event) => setSelectedTemplateId(event.target.value)}>
-                {comfyTemplates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
+            <label className="comfy-template-picker">
+              <span>工作流模板</span>
+              <select
+                value={selectedTemplateId}
+                onChange={(event) => setSelectedTemplateId(event.target.value)}
+                className="prompt-select"
+              >
+                {comfyTemplates.map((template) => (
+                  <option key={template.id} value={template.id}>{template.name}</option>
+                ))}
               </select>
             </label>
-            <Button variant="primary" busy={sending} busyLabel="正在发送…" disabled={!preview.positivePrompt} onClick={() => void sendToComfyUi()}>
-              发送当前图片
+            <Button
+              variant="primary"
+              busy={sending}
+              busyLabel="正在发送到 ComfyUI…"
+              disabled={!preview.positivePrompt || sending}
+              onClick={() => void sendToComfyUi()}
+              className="comfy-submit-btn"
+            >
+              🚀 发送当前图片
             </Button>
           </div>
         )}
         {comfyJobs.slice(0, 3).map((job) => (
           <div key={job.id} className={`comfy-inline-job ${job.status}`}>
-            <span>{job.templateName} · {comfyJobLabel(job.status)}</span>
-            {job.error && <small>{job.error}</small>}
+            <div className="comfy-job-meta">
+              <span className="comfy-job-template">{job.templateName}</span>
+              <span className={`comfy-job-badge status-${job.status}`}>{comfyJobLabel(job.status)}</span>
+            </div>
+            {job.error && <small className="comfy-job-err">{job.error}</small>}
             {(job.status === "queued" || job.status === "running") && (
-              <button type="button" onClick={() => void window.sanctuary.cancelComfyUiJob(job.id).then(() => window.sanctuary.listComfyUiJobs()).then(setComfyJobs)}>取消等待</button>
+              <button
+                type="button"
+                className="comfy-cancel-btn"
+                onClick={() => void window.sanctuary.cancelComfyUiJob(job.id).then(() => window.sanctuary.listComfyUiJobs()).then(setComfyJobs)}
+                title="取消此任务"
+              >
+                取消等待
+              </button>
             )}
           </div>
         ))}
@@ -368,11 +462,34 @@ export function PromptWorkbenchPanel({
   );
 }
 
-function PromptOutput({ label, value, onCopy, tone }: { label: string; value: string; onCopy: () => void; tone: "positive" | "negative" | "raw" }) {
+function PromptOutput({
+  label,
+  value,
+  onCopy,
+  tone,
+  isCopied
+}: {
+  label: string;
+  value: string;
+  onCopy: () => void;
+  tone: "positive" | "negative" | "raw";
+  isCopied?: boolean;
+}) {
   return (
-    <article className={tone}>
-      <header><strong>{label}</strong><button type="button" onClick={onCopy} disabled={!value}>复制</button></header>
-      <p>{value || "当前没有可输出的内容"}</p>
+    <article className={`prompt-output-card ${tone}`}>
+      <header>
+        <strong>{label}</strong>
+        <button
+          type="button"
+          onClick={onCopy}
+          disabled={!value}
+          className={`prompt-copy-btn ${isCopied ? "copied" : ""}`}
+          title="复制到剪贴板"
+        >
+          {isCopied ? "✓ 已复制" : "复制"}
+        </button>
+      </header>
+      <p>{value || "当前没有可输出的提示词内容"}</p>
     </article>
   );
 }

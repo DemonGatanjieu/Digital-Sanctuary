@@ -172,16 +172,15 @@
   flex: 1;
   overflow: hidden;
   background: transparent;
-  transition: margin-right var(--ds-transition-normal, 0.2s ease);
 }
 
 .explore-surface.with-drawer {
-  margin-right: 480px;
+  margin-right: clamp(680px, 62vw, 980px);
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1100px) {
   .explore-surface.with-drawer {
-    margin-right: 50vw;
+    margin-right: 0;
   }
 }
 

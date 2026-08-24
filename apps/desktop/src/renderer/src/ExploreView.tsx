@@ -80,7 +80,7 @@ export function ExploreView({
     };
 
     const syncBounds = () => {
-      if (isModalOpen) {
+      if (isModalOpen || (isDrawerOpen && window.innerWidth <= 1100)) {
         if (shown) {
           shown = false;
           void window.sanctuary.hideExplore();
@@ -88,7 +88,13 @@ export function ExploreView({
         return;
       }
       const bounds = measure();
-      if (!bounds) return;
+      if (!bounds || bounds.width < 100) {
+        if (shown) {
+          shown = false;
+          void window.sanctuary.hideExplore();
+        }
+        return;
+      }
       if (!shown) {
         shown = true;
         void window.sanctuary.showExplore(bounds)
