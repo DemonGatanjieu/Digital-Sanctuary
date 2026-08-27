@@ -1,6 +1,6 @@
 {
   "name": "digital-sanctuary",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "本地优先的 Pixiv 资源管理、元素拦截与显式模型整理桌面应用",
   "author": "SilverLoli",
   "private": true,

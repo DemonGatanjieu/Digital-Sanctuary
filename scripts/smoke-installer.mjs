@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
-import { readdir, rm, stat } from "node:fs/promises";
+import { readFile, readdir, rm, stat } from "node:fs/promises";
 import { resolve, join, relative } from "node:path";
 
 const workspace = resolve(".");
 const temporaryRoot = resolve(".tmp");
 const installDirectory = resolve(temporaryRoot, `installed-smoke-${Date.now()}`);
-const installer = resolve("release/Digital-Sanctuary-Setup-0.1.0.exe");
+const packageMetadata = JSON.parse(await readFile(resolve("package.json"), "utf8"));
+const installer = resolve(`release/Digital-Sanctuary-Setup-${packageMetadata.version}.exe`);
 if (relative(temporaryRoot, installDirectory).startsWith("..")) throw new Error("Unsafe installer smoke path");
 
 try {

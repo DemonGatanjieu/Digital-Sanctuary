@@ -20,13 +20,24 @@ try {
   const cdp = await connectCdp(target.webSocketDebuggerUrl);
   try {
     const state = await cdp.evaluate(`(async () => {
-      const started = Date.now();
-      while (!window.sanctuary && Date.now() - started < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
-      const appStatus = await window.sanctuary.status();
-      while (!document.querySelector("nav") && Date.now() - started < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
-      const organize = Array.from(document.querySelectorAll("nav button")).find((button) => button.textContent.trim() === "模型整理");
+      const bridgeStarted = Date.now();
+      while (!window.sanctuary && Date.now() - bridgeStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
+
+      let appStatus = await window.sanctuary.status();
+      const visionStarted = Date.now();
+      while (appStatus.visionState === "starting" && Date.now() - visionStarted < 60000) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        appStatus = await window.sanctuary.status();
+      }
+
+      const navigationStarted = Date.now();
+      while (!document.querySelector("nav") && Date.now() - navigationStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
+      const organize = Array.from(document.querySelectorAll("nav button")).find((button) =>
+        button.dataset.nav === "organize" || ["智能工坊", "模型整理"].includes(button.textContent.trim())
+      );
       organize?.click();
-      while (!document.querySelector(".analysis-scope-card") && Date.now() - started < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
+      const analysisStarted = Date.now();
+      while (!document.querySelector(".analysis-scope-card") && Date.now() - analysisStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
       return {
         title: document.title,
         appStatus,
@@ -38,8 +49,9 @@ try {
     if (!visionStat.isFile() || visionStat.size < 100_000) failures.push("vision runtime missing");
     if (!modelStat.isFile() || modelStat.size < 100_000_000) failures.push("WD Tagger model missing");
     if (state.appStatus.visionEngine !== "wd-swinv2-tagger-v3") failures.push("packaged app did not select WD Tagger");
+    if (!state.appStatus.visionReady || state.appStatus.visionState !== "ready") failures.push("packaged WD Tagger did not become ready");
     if (!state.analysisReady) failures.push("analysis center did not render");
-    if (state.activeNavigation !== "模型整理") failures.push("navigation accessibility state is missing");
+    if (!["智能工坊", "模型整理"].includes(state.activeNavigation)) failures.push("navigation accessibility state is missing");
     console.log(JSON.stringify({ executable, visionRuntimeMb: Math.round(visionStat.size / 1024 / 1024 * 10) / 10, modelMb: Math.round(modelStat.size / 1024 / 1024), ...state, status: failures.length ? "failed" : "passed", failures }, null, 2));
     if (failures.length) process.exitCode = 1;
   } finally {
