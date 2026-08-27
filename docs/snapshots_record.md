@@ -55,7 +55,7 @@
 | **vision-element-inspector-and-triage-studio** | `3522bf7e` | 2026-08-18 | 实现交互式单图 AI 元素透视抽屉、自定义黑名单拦截规则、Pixiv 探索悬浮毛玻璃控制胶囊与独立智能清洗排查工坊 (Triage Studio)。 |
 | **personal-prompt-bridge-and-local-comfyui** | `0d159e1` | 2026-08-24 | 完成模型版本隔离的标签三态调音台、模型适配提示词/复制/负向词库/预设、本机回环 ComfyUI 工作流与持久任务、多输出可信回收和生成来源追溯；区域遮罩因独立门槛未通过而保持不实现。 |
 | **element-inspector-prompt-workspace-v2** | `b4efed052e87fb4eb09b35047396a6f9537e9fc0` | 2026-08-24 | 元素透视拆分为识别说明、本图提示词整理与探索拦截三页；Prompt Bridge v2 移除跨作品标签累计和置信度伪权重，只持久化格式、负向词库与主动预设，并保留当前本机 ComfyUI 显式发送链路。 |
-
+| **data-preserving-release-0.1.1** | `9446f26` | 2026-08-27 | 产出可覆盖早期安装的 0.1.1 离线安装包，保留图库、偏好、登录状态和下载目录；同步安装器版本检测，并以隔离安装、WD Tagger 就绪与真实推理完成发布验收。 |
 
 
 
