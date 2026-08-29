@@ -10,8 +10,11 @@ describe("adaptive evaluation contract", () => {
   it("asks the model to choose exactly six image-specific axes", () => {
     const prompt = createEvaluationPrompt(ADAPTIVE_ART_SUITE_V1);
     expect(prompt).toContain("恰好六个");
-    expect(prompt).toContain("不得全部填 0");
+    expect(prompt).toContain("不要全部填 0");
     expect(prompt).toContain("axis_1、axis_2、axis_3、axis_4、axis_5、axis_6");
+    expect(prompt).toContain("95 以上只留给极少见");
+    expect(prompt).toContain("不要一味赞美");
+    expect(prompt).toContain("两到三句中文");
   });
 
   it("repairs Chinese keys and an explanation alias from a small local model", () => {

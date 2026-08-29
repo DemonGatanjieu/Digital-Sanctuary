@@ -77,6 +77,12 @@ export class LocalArtCriticService {
       const timeoutSignal = AbortSignal.timeout(this.#inferenceTimeoutMs);
       const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
       try {
+        const requestProfile = localCriticRequestProfile(runtime.entry.id);
+        const imageContent = {
+          type: "image_url",
+          image_url: { url: `data:${image.mimeType};base64,${image.buffer.toString("base64")}` }
+        };
+        const instructionContent = { type: "text", text: "请只根据这张图片完成评价，并严格输出 JSON。" };
         const response = await this.#fetch(`${this.#endpoint}/v1/chat/completions`, {
           method: "POST",
           headers: {
@@ -89,18 +95,16 @@ export class LocalArtCriticService {
               { role: "system", content: createEvaluationPrompt(suite) },
               {
                 role: "user",
-                content: [
-                  { type: "text", text: "请只根据这张图片完成评价，并严格输出 JSON。" },
-                  {
-                    type: "image_url",
-                    image_url: { url: `data:${image.mimeType};base64,${image.buffer.toString("base64")}` }
-                  }
-                ]
+                content: requestProfile.imageFirst
+                  ? [imageContent, instructionContent]
+                  : [instructionContent, imageContent]
               }
             ],
             response_format: { type: "json_object" },
-            temperature: 0.2,
-            max_tokens: 1200,
+            temperature: requestProfile.temperature,
+            top_p: requestProfile.topP,
+            top_k: requestProfile.topK,
+            max_tokens: 1600,
             stream: false
           }),
           signal: requestSignal
@@ -295,6 +299,18 @@ function invalidLocalResult(runtime: ResolvedRuntimeModel, summary: string) {
       summary
     }
   };
+}
+
+export function localCriticRequestProfile(modelId: string): {
+  imageFirst: boolean;
+  temperature: number;
+  topP?: number;
+  topK?: number;
+} {
+  if (modelId.startsWith("gemma-4-")) {
+    return { imageFirst: true, temperature: 1, topP: 0.95, topK: 64 };
+  }
+  return { imageFirst: false, temperature: 0.2 };
 }
 
 function parseJsonObject(content: string): Record<string, unknown> | null {

@@ -6,6 +6,25 @@ const WD_TAGS = {
   sha256: "298633d94d0031d2081c0893f29c82eab7f0df00b08483ba8f29d1e979441217"
 } as const;
 
+const LLAMA_CPP_B10516_VULKAN = {
+  fileName: "llama-b10516-bin-win-vulkan-x64.zip",
+  url: "https://github.com/ggml-org/llama.cpp/releases/download/b10516/llama-b10516-bin-win-vulkan-x64.zip",
+  size: 34_861_181,
+  sha256: "530f57d2a874ce017827c1e5a926812b9d5de4667248575d1372b1c0acf94d83",
+  extract: "zip" as const
+};
+
+const LLAMA_CPP_VLM_RUNTIME_FILES = [
+  "llama-server.exe",
+  "llama-server-impl.dll",
+  "llama-common.dll",
+  "llama.dll",
+  "ggml.dll",
+  "ggml-base.dll",
+  "ggml-vulkan.dll",
+  "mtmd.dll"
+] as const;
+
 function wdFiles(repository: string, size: number, sha256: string) {
   const root = `https://huggingface.co/${repository}/resolve/main`;
   return [
@@ -157,22 +176,77 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
         sha256: "f9a68fabba69c3b81e153367b2c7521030b0fa8bb0de400c9599c8e6725f9c82"
       },
       {
-        fileName: "llama-b10516-bin-win-vulkan-x64.zip",
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b10516/llama-b10516-bin-win-vulkan-x64.zip",
-        size: 34_861_181,
-        sha256: "530f57d2a874ce017827c1e5a926812b9d5de4667248575d1372b1c0acf94d83",
-        extract: "zip"
+        ...LLAMA_CPP_B10516_VULKAN
       }
     ],
-    requiredRuntimeFiles: [
-      "llama-server.exe",
-      "llama-server-impl.dll",
-      "llama-common.dll",
-      "llama.dll",
-      "ggml.dll",
-      "ggml-base.dll",
-      "ggml-vulkan.dll",
-      "mtmd.dll"
-    ]
+    requiredRuntimeFiles: [...LLAMA_CPP_VLM_RUNTIME_FILES]
+  },
+  {
+    id: "gemma-4-e2b-it-q4",
+    name: "Gemma 4 E2B · Q4",
+    version: "Q4_0/b4243c156154",
+    author: "Google DeepMind / ggml-org",
+    description: "新一代轻量多模态画评模型。比 Qwen 2B 更擅长组织自然语言，同时优先照顾 4–6GB 显存设备。",
+    capability: "art_critic",
+    runtime: "llama_cpp_vlm",
+    tier: "balanced",
+    availability: "ready",
+    license: "Apache-2.0",
+    homepage: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF",
+    downloadSize: 3_433_710_429,
+    diskSize: 3_500_000_000,
+    recommendedRamGb: 16,
+    recommendedVramGb: 4,
+    badges: ["流畅画评", "多模态", "本地运行", "版本锁定"],
+    files: [
+      {
+        fileName: "gemma-4-E2B-it-Q4_0.gguf",
+        url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/b4243c156154b6dca9324415f8c7ccc098b4aed1/gemma-4-E2B-it-Q4_0.gguf",
+        size: 2_841_481_184,
+        sha256: "8e30dff3ac4c8434c49a7036fa15564bdbb6044e42bf04550bf1a096ad7e6a52"
+      },
+      {
+        fileName: "mmproj-gemma-4-E2B-it-Q8_0.gguf",
+        url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/b4243c156154b6dca9324415f8c7ccc098b4aed1/mmproj-gemma-4-E2B-it-Q8_0.gguf",
+        size: 557_368_064,
+        sha256: "9406f99c16d68cda4f1f0552192dcc99021ea1fc6d2fd50b1dc3ccf30d04b292"
+      },
+      { ...LLAMA_CPP_B10516_VULKAN }
+    ],
+    requiredRuntimeFiles: [...LLAMA_CPP_VLM_RUNTIME_FILES]
+  },
+  {
+    id: "gemma-4-e4b-it-q4",
+    name: "Gemma 4 E4B · Q4",
+    version: "Q4_0/1288d42c1f05",
+    author: "Google DeepMind / ggml-org",
+    description: "纯净领域推荐的高质量本地画评模型。语言、推理与画面细节表达更充分；6GB 显存可尝试，8GB 以上更从容。",
+    capability: "art_critic",
+    runtime: "llama_cpp_vlm",
+    tier: "advanced",
+    availability: "ready",
+    license: "Apache-2.0",
+    homepage: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF",
+    downloadSize: 5_185_543_389,
+    diskSize: 5_260_000_000,
+    recommendedRamGb: 24,
+    recommendedVramGb: 8,
+    badges: ["画评推荐", "表达增强", "多模态", "版本锁定"],
+    files: [
+      {
+        fileName: "gemma-4-E4B-it-Q4_0.gguf",
+        url: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/1288d42c1f05addc1e3d947f29c8a5669c25182f/gemma-4-E4B-it-Q4_0.gguf",
+        size: 4_590_807_392,
+        sha256: "a555b900214b477d8880e7832e0b8925e139b0159640036b09fe472b6f2097f2"
+      },
+      {
+        fileName: "mmproj-gemma-4-E4B-it-Q8_0.gguf",
+        url: "https://huggingface.co/ggml-org/gemma-4-E4B-it-GGUF/resolve/1288d42c1f05addc1e3d947f29c8a5669c25182f/mmproj-gemma-4-E4B-it-Q8_0.gguf",
+        size: 559_874_816,
+        sha256: "197f49a93027f9843772bd24a6a9e0be2a32a788de5a3def330e9c585d86edd1"
+      },
+      { ...LLAMA_CPP_B10516_VULKAN }
+    ],
+    requiredRuntimeFiles: [...LLAMA_CPP_VLM_RUNTIME_FILES]
   }
 ] as const;

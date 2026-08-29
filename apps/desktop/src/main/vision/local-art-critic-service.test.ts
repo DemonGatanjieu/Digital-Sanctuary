@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ADAPTIVE_ART_SUITE_V1, type ModelCatalogEntry } from "@sanctuary/domain";
 import type { ResolvedRuntimeModel } from "../model-center/model-center-service.js";
-import { LocalArtCriticService } from "./local-art-critic-service.js";
+import { LocalArtCriticService, localCriticRequestProfile } from "./local-art-critic-service.js";
 
 const fixture = fileURLToPath(new URL("../fixtures/local-art-critic-fixture.mjs", import.meta.url));
 const entry: ModelCatalogEntry = {
@@ -32,6 +32,19 @@ const buildFixtureCommand = (_runtime: ResolvedRuntimeModel, port: number) => ({
 });
 
 describe("LocalArtCriticService", () => {
+  it("uses Gemma's image-first sampling profile without changing Qwen defaults", () => {
+    expect(localCriticRequestProfile("gemma-4-e4b-it-q4")).toEqual({
+      imageFirst: true,
+      temperature: 1,
+      topP: 0.95,
+      topK: 64
+    });
+    expect(localCriticRequestProfile("qwen3-vl-2b-instruct-q4")).toEqual({
+      imageFirst: false,
+      temperature: 0.2
+    });
+  });
+
   it("starts a loopback runtime and validates model-selected six dimensions", async () => {
     const service = new LocalArtCriticService({
       resolveActiveModel: async () => runtime,
