@@ -16,6 +16,7 @@ export function createEvaluationPrompt(suite: VisionSuiteDefinition): string {
 - label：原创、自然、简短的中文维度名；
 - score：0 到 100 的数字；
 - reason：简短中文理由，必须点出这张图中可见的具体证据。
+六项的 key 请依次固定写成 axis_1、axis_2、axis_3、axis_4、axis_5、axis_6；真正面向用户的中文维度名写在 label 中。
 summary 是一句简洁中文总评。不要输出 Markdown、前后解释、示例值或模板占位词。`;
   }
   return `你是一位谨慎的视觉艺术评论者。只根据图片中可见的证据，按照“${suite.name}”完成主观评价。
@@ -30,7 +31,7 @@ export function validateEvaluationDimensions(
   suite: VisionSuiteDefinition
 ): ValidationOutcome<VisionDimensionScore[]> {
   if (suite.kind !== "external_adaptive_highlights") return validateDimensionScores(rawDimensions, suite);
-  const adaptive = validateAdaptiveHighlights(rawDimensions, 6);
+  const adaptive = validateAdaptiveHighlights(repairAdaptiveModelDimensions(rawDimensions), 6);
   if (!adaptive.valid || !adaptive.normalized) return { valid: false, errors: adaptive.errors ?? ["Invalid adaptive dimensions"] };
   return {
     valid: true,
@@ -41,4 +42,63 @@ export function validateEvaluationDimensions(
       ...(highlight.reason ? { explanation: highlight.reason } : {})
     }))
   };
+}
+
+/**
+ * Small local vision-language models sometimes put the Chinese display label in
+ * `key`, use `explanation` instead of `reason`, or return one surplus axis. Those
+ * are transport-shape mistakes rather than invalid visual evidence, so repair
+ * them before applying the strict domain validator. Scores, labels, evidence,
+ * uniqueness and the final six-axis contract remain validated afterwards.
+ */
+export function repairAdaptiveModelDimensions(rawDimensions: unknown): unknown {
+  if (!Array.isArray(rawDimensions)) return rawDimensions;
+
+  const usedKeys = new Set<string>();
+  const repaired = rawDimensions.map((item, index) => {
+    if (!item || typeof item !== "object") return item;
+    const candidate = item as Record<string, unknown>;
+    const originalKey = typeof candidate.key === "string" ? candidate.key.trim() : "";
+    const validOriginalKey = /^[a-z0-9_]{1,64}$/.test(originalKey) && !usedKeys.has(originalKey);
+    const key = validOriginalKey
+      ? originalKey
+      : allocateAdaptiveKey(index, usedKeys);
+    usedKeys.add(key);
+
+    const label = typeof candidate.label === "string" && candidate.label.trim()
+      ? candidate.label.trim()
+      : originalKey && !/^[a-z0-9_]{1,64}$/.test(originalKey)
+        ? originalKey
+        : candidate.label;
+    const reason = typeof candidate.reason === "string" && candidate.reason.trim()
+      ? candidate.reason
+      : candidate.explanation;
+
+    return { ...candidate, key, label, reason };
+  });
+
+  if (repaired.length <= 6 || repaired.length > 10) return repaired;
+
+  const ranked = repaired
+    .map((item, index) => ({ item, index, score: scoreOf(item) }))
+    .sort((left, right) => right.score - left.score || left.index - right.index)
+    .slice(0, 6)
+    .sort((left, right) => left.index - right.index);
+  return ranked.map(({ item }) => item);
+}
+
+function allocateAdaptiveKey(index: number, usedKeys: ReadonlySet<string>): string {
+  let suffix = index + 1;
+  let key = `adaptive_axis_${suffix}`;
+  while (usedKeys.has(key)) {
+    suffix += 1;
+    key = `adaptive_axis_${suffix}`;
+  }
+  return key;
+}
+
+function scoreOf(item: unknown): number {
+  if (!item || typeof item !== "object") return Number.NEGATIVE_INFINITY;
+  const score = (item as Record<string, unknown>).score;
+  return typeof score === "number" && Number.isFinite(score) ? score : Number.NEGATIVE_INFINITY;
 }

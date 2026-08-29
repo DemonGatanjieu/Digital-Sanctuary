@@ -146,7 +146,7 @@ export class AnthropicVisionAdapter implements ExternalVisionAdapter {
             status: "invalid_response",
             dimensions: [],
             reasonCode: "schema_validation_failed",
-            summary: `返回维度评分不符合套件规范: ${validation.errors?.join(", ")}`
+            summary: "模型这次没有返回完整可用的维度评分，请重新分析一次。"
           };
         }
 

@@ -127,7 +127,7 @@ export class LocalArtCriticService {
         if (!parsed) return invalidLocalResult(runtime, "本地评论模型返回的内容无法解析为 JSON");
         const validation = validateEvaluationDimensions(parsed.dimensions, suite);
         if (!validation.valid || !validation.normalized) {
-          return invalidLocalResult(runtime, `本地评论模型返回格式不合规：${validation.errors?.join("；")}`);
+          return invalidLocalResult(runtime, "本地评论模型这次没有返回完整可用的六维评分，请重新分析一次。");
         }
         const summary = typeof parsed.summary === "string" && parsed.summary.trim()
           ? parsed.summary.trim().slice(0, 300)

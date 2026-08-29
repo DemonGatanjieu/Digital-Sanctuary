@@ -1,12 +1,73 @@
 import { describe, expect, it } from "vitest";
 import { ADAPTIVE_ART_SUITE_V1, FINE_ART_SUITE_V1 } from "@sanctuary/domain";
-import { createEvaluationPrompt, validateEvaluationDimensions } from "./evaluation-contract.js";
+import {
+  createEvaluationPrompt,
+  repairAdaptiveModelDimensions,
+  validateEvaluationDimensions
+} from "./evaluation-contract.js";
 
 describe("adaptive evaluation contract", () => {
   it("asks the model to choose exactly six image-specific axes", () => {
     const prompt = createEvaluationPrompt(ADAPTIVE_ART_SUITE_V1);
     expect(prompt).toContain("恰好六个");
     expect(prompt).toContain("不得全部填 0");
+    expect(prompt).toContain("axis_1、axis_2、axis_3、axis_4、axis_5、axis_6");
+  });
+
+  it("repairs Chinese keys and an explanation alias from a small local model", () => {
+    const dimensions = ["构图", "角色表演", "线条节奏", "材质塑造", "色彩关系", "光影"].map((label, index) => ({
+      key: label,
+      label,
+      score: 70 + index,
+      explanation: `${label}具有明确的画面证据`
+    }));
+
+    const result = validateEvaluationDimensions(dimensions, ADAPTIVE_ART_SUITE_V1);
+    expect(result.valid).toBe(true);
+    expect(result.normalized).toHaveLength(6);
+    expect(result.normalized?.map((item) => item.key)).toEqual([
+      "adaptive_axis_1",
+      "adaptive_axis_2",
+      "adaptive_axis_3",
+      "adaptive_axis_4",
+      "adaptive_axis_5",
+      "adaptive_axis_6"
+    ]);
+    expect(result.normalized?.[0]).toMatchObject({ label: "构图", explanation: "构图具有明确的画面证据" });
+  });
+
+  it("keeps the highest-scoring six when the model returns one surplus axis", () => {
+    const dimensions = ["构图", "角色表演", "线条节奏", "材质塑造", "色彩关系", "光影", "氛围"].map((label, index) => ({
+      key: label,
+      label,
+      score: index === 2 ? 12 : 80 - index,
+      reason: `${label}具有明确的画面证据`
+    }));
+
+    const repaired = repairAdaptiveModelDimensions(dimensions) as Array<Record<string, unknown>>;
+    expect(repaired).toHaveLength(6);
+    expect(repaired.map((item) => item.label)).not.toContain("线条节奏");
+    expect(validateEvaluationDimensions(dimensions, ADAPTIVE_ART_SUITE_V1).valid).toBe(true);
+  });
+
+  it("still rejects incomplete evidence instead of inventing missing axes", () => {
+    const dimensions = ["构图", "角色表演", "线条节奏", "材质塑造", "色彩关系"].map((label, index) => ({
+      key: label,
+      label,
+      score: 70 + index,
+      reason: `${label}具有明确的画面证据`
+    }));
+    expect(validateEvaluationDimensions(dimensions, ADAPTIVE_ART_SUITE_V1).valid).toBe(false);
+  });
+
+  it("rejects a wildly oversized response instead of treating it as a harmless surplus", () => {
+    const dimensions = Array.from({ length: 11 }, (_, index) => ({
+      key: `axis_${index + 1}`,
+      label: `观察维度${index + 1}`,
+      score: 70 + index,
+      reason: `第${index + 1}项具有明确的画面证据`
+    }));
+    expect(validateEvaluationDimensions(dimensions, ADAPTIVE_ART_SUITE_V1).valid).toBe(false);
   });
 
   it("accepts six dynamic axes but rejects five", () => {
