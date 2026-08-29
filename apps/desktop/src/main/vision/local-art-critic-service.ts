@@ -7,7 +7,7 @@ import type { VisionSuiteDefinition } from "@sanctuary/domain";
 import type { ResolvedRuntimeModel } from "../model-center/model-center-service.js";
 import type { PreparedVisionImage } from "./vision-image-preprocessor.js";
 import type { ExternalVisionAdapterResult } from "./adapters/types.js";
-import { createEvaluationPrompt, validateEvaluationDimensions } from "./adapters/evaluation-contract.js";
+import { createEvaluationPrompt, normalizeImageReading, validateEvaluationDimensions } from "./adapters/evaluation-contract.js";
 
 interface LocalArtCriticServiceOptions {
   resolveActiveModel: () => Promise<ResolvedRuntimeModel | null>;
@@ -136,11 +136,13 @@ export class LocalArtCriticService {
         const summary = typeof parsed.summary === "string" && parsed.summary.trim()
           ? parsed.summary.trim().slice(0, 300)
           : undefined;
+        const reading = normalizeImageReading(parsed);
         return {
           identity: identityOf(runtime),
           result: {
             status: "success",
             dimensions: validation.normalized,
+            ...(reading ? { reading } : {}),
             ...(summary ? { summary } : {}),
             rawUsage: {
               promptTokens: payload.usage?.prompt_tokens,

@@ -66,6 +66,12 @@ describe("LocalArtCriticService", () => {
       expect(evaluation.result.status).toBe("success");
       expect(evaluation.result.dimensions).toHaveLength(6);
       expect(evaluation.result.dimensions[0]).toMatchObject({ key: "story_staging", label: "自选维度1" });
+      expect(evaluation.result.reading).toEqual({
+        observation: "画面中央有一位角色，背景以蓝色为主。",
+        interpretation: "冷色调可能营造出安静的感觉。",
+        visualFocus: ["角色面部", "蓝色背景"],
+        uncertainties: ["无法确认角色身份"]
+      });
     } finally {
       service.close();
     }

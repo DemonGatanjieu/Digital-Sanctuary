@@ -1,7 +1,7 @@
 import type { VisionSuiteDefinition } from "@sanctuary/domain";
 import type { PreparedVisionImage } from "../vision-image-preprocessor.js";
 import type { ExternalVisionAdapter, ExternalVisionAdapterResult } from "./types.js";
-import { createEvaluationPrompt, validateEvaluationDimensions } from "./evaluation-contract.js";
+import { createEvaluationPrompt, normalizeImageReading, validateEvaluationDimensions } from "./evaluation-contract.js";
 
 export class GeminiVisionAdapter implements ExternalVisionAdapter {
   readonly providerId = "gemini";
@@ -45,7 +45,8 @@ export class GeminiVisionAdapter implements ExternalVisionAdapter {
       ],
       generationConfig: {
         response_mime_type: "application/json",
-        temperature: 0.2
+        temperature: 0.2,
+        maxOutputTokens: 1600
       }
     };
 
@@ -153,10 +154,12 @@ export class GeminiVisionAdapter implements ExternalVisionAdapter {
         const summary = typeof parsed.summary === "string" && parsed.summary.trim()
           ? parsed.summary.trim().slice(0, 300)
           : undefined;
+        const reading = normalizeImageReading(parsed);
 
         return {
           status: "success",
           dimensions: validation.normalized,
+          ...(reading ? { reading } : {}),
           summary,
           rawUsage: {
             promptTokens: data?.usageMetadata?.promptTokenCount,

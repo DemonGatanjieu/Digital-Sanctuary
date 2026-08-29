@@ -54,6 +54,106 @@
   font-family: var(--ds-font-mono);
 }
 
+.vision-image-reading {
+  width: 100%;
+  box-sizing: border-box;
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--accent-color, #705df2) 28%, transparent);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--accent-color, #705df2) 14%, transparent), transparent 52%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.vision-reading-heading,
+.vision-reading-interpretation > span,
+.vision-radar-summary > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.vision-reading-heading {
+  justify-content: space-between;
+}
+
+.vision-reading-kicker {
+  color: var(--text-bright, #f8fafc);
+}
+
+.vision-reading-fact-badge {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(52, 211, 153, 0.22);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.vision-reading-observation,
+.vision-reading-interpretation p,
+.vision-radar-summary p {
+  margin: 0;
+  color: var(--text-secondary, #cbd5e1);
+  font-size: 11px;
+  line-height: 1.68;
+}
+
+.vision-reading-focus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.vision-reading-focus span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: #ddd6fe;
+  background: rgba(139, 92, 246, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  font-size: 9px;
+}
+
+.vision-reading-interpretation {
+  display: grid;
+  gap: 5px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.vision-reading-interpretation > span {
+  color: #f9a8d4;
+}
+
+.vision-reading-uncertainty {
+  color: var(--text-muted, #94a3b8);
+  font-size: 10px;
+}
+
+.vision-reading-uncertainty summary {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.vision-reading-uncertainty summary::-webkit-details-marker {
+  display: none;
+}
+
+.vision-reading-uncertainty ul {
+  margin: 2px 0 0;
+  padding-left: 18px;
+  line-height: 1.55;
+}
+
 .vision-radar-svg {
   overflow: visible;
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));
@@ -88,12 +188,20 @@
 }
 
 .vision-radar-summary {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  box-sizing: border-box;
+  padding: 10px 12px;
   font-size: 11px;
-  font-style: italic;
   line-height: 1.4;
-  color: var(--text-secondary, #cbd5e1);
-  text-align: center;
+  text-align: left;
   margin: 4px 0 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.vision-radar-summary > span {
+  color: #c4b5fd;
 }
 
 .radar-empty-container {

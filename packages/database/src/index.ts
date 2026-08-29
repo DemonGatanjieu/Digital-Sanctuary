@@ -204,6 +204,7 @@ interface VisionEvaluationResultRow {
   suite_version: number;
   status: string;
   reason_code: string | null;
+  reading_json: string | null;
   summary: string | null;
   provider_id: string | null;
   model_id: string | null;
@@ -1502,13 +1503,14 @@ export class LibraryDatabase {
       this.#database.prepare(
         `INSERT INTO vision_evaluation_results
            (id, work_id, asset_id, scope, kind, suite_id, suite_version,
-            status, reason_code, summary, provider_id, model_id,
+            status, reason_code, reading_json, summary, provider_id, model_id,
             evaluator_version, prompt_version, preprocessing_fingerprint,
             asset_version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            reason_code = excluded.reason_code,
+           reading_json = excluded.reading_json,
            summary = excluded.summary,
            updated_at = excluded.updated_at`
       ).run(
@@ -1521,6 +1523,7 @@ export class LibraryDatabase {
         result.suiteVersion,
         result.status,
         result.reasonCode ?? null,
+        result.reading ? JSON.stringify(result.reading) : null,
         result.summary ?? null,
         result.providerId ?? null,
         result.modelId ?? null,
@@ -1745,6 +1748,7 @@ export class LibraryDatabase {
         score: Number(d.score),
         explanation: d.explanation ?? undefined
       })),
+      reading: parseJson<VisionEvaluationResult["reading"]>(row.reading_json) ?? undefined,
       summary: row.summary ?? undefined,
       providerId: row.provider_id ?? undefined,
       modelId: row.model_id ?? undefined,
@@ -2095,6 +2099,7 @@ export class LibraryDatabase {
         suite_version INTEGER NOT NULL,
         status TEXT NOT NULL,
         reason_code TEXT,
+        reading_json TEXT,
         summary TEXT,
         provider_id TEXT,
         model_id TEXT,
@@ -2131,7 +2136,16 @@ export class LibraryDatabase {
       CREATE INDEX IF NOT EXISTS idx_vision_eval_asset_cache ON vision_evaluation_results(asset_id, kind, suite_id, suite_version, preprocessing_fingerprint, asset_version);
       CREATE INDEX IF NOT EXISTS idx_vision_dim_query ON vision_dimension_scores(dimension_key, score);
     `);
-    this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)").run(new Date().toISOString());
+    const columns = new Set(
+      (this.#database.prepare("PRAGMA table_info(vision_evaluation_results)").all() as unknown as Array<{ name: string }>)
+        .map((column) => column.name)
+    );
+    if (!columns.has("reading_json")) {
+      this.#database.exec("ALTER TABLE vision_evaluation_results ADD COLUMN reading_json TEXT");
+    }
+    const now = new Date().toISOString();
+    this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (4, ?)").run(now);
+    this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (6, ?)").run(now);
   }
 
   #ensureComfyUiSchema(): void {

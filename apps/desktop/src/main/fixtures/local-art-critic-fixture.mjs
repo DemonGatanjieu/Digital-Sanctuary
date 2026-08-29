@@ -22,7 +22,14 @@ const server = http.createServer((request, response) => {
         : [];
       response.writeHead(200, { "Content-Type": "application/json" });
       response.end(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({ dimensions, summary: "本地测试解读" }) } }],
+        choices: [{ message: { content: JSON.stringify({
+          observation: "画面中央有一位角色，背景以蓝色为主。",
+          visual_focus: ["角色面部", "蓝色背景"],
+          interpretation: "冷色调可能营造出安静的感觉。",
+          uncertainty: ["无法确认角色身份"],
+          dimensions,
+          summary: "本地测试解读"
+        }) } }],
         usage: { prompt_tokens: 20, completion_tokens: 30 }
       }));
     });

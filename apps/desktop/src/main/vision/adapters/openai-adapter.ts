@@ -1,7 +1,7 @@
 import type { VisionSuiteDefinition } from "@sanctuary/domain";
 import type { PreparedVisionImage } from "../vision-image-preprocessor.js";
 import type { ExternalVisionAdapter, ExternalVisionAdapterResult } from "./types.js";
-import { createEvaluationPrompt, validateEvaluationDimensions } from "./evaluation-contract.js";
+import { createEvaluationPrompt, normalizeImageReading, validateEvaluationDimensions } from "./evaluation-contract.js";
 
 export class OpenAiVisionAdapter implements ExternalVisionAdapter {
   readonly providerId: string;
@@ -49,7 +49,7 @@ export class OpenAiVisionAdapter implements ExternalVisionAdapter {
       ],
       response_format: { type: "json_object" },
       temperature: 0.2,
-      max_tokens: 800
+      max_tokens: 1600
     };
 
     let attempt = 0;
@@ -158,10 +158,12 @@ export class OpenAiVisionAdapter implements ExternalVisionAdapter {
         const summary = typeof parsed.summary === "string" && parsed.summary.trim()
           ? parsed.summary.trim().slice(0, 300)
           : undefined;
+        const reading = normalizeImageReading(parsed);
 
         return {
           status: "success",
           dimensions: validation.normalized,
+          ...(reading ? { reading } : {}),
           summary,
           rawUsage: {
             promptTokens: data?.usage?.prompt_tokens,

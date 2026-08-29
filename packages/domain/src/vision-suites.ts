@@ -25,6 +25,17 @@ export interface VisionDimensionScore {
   explanation?: string | undefined;
 }
 
+export interface VisionImageReading {
+  /** 只陈述图片中可见的主体、位置、颜色、动作与关系。 */
+  observation: string;
+  /** 模型对氛围、叙事或设计意图的主观解读。 */
+  interpretation?: string | undefined;
+  /** 最值得注意的视觉落点，按重要性排序。 */
+  visualFocus: string[];
+  /** 无法仅凭当前图片确认的事项。 */
+  uncertainties: string[];
+}
+
 export interface VisionEvaluationResult {
   id: string;
   workId: string;
@@ -36,6 +47,7 @@ export interface VisionEvaluationResult {
   status: VisionEvaluationStatus;
   reasonCode?: string | undefined;
   dimensions: VisionDimensionScore[];
+  reading?: VisionImageReading | undefined;
   summary?: string | undefined;
   providerId?: string | undefined;
   modelId?: string | undefined;

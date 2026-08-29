@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ADAPTIVE_ART_SUITE_V1, FINE_ART_SUITE_V1 } from "@sanctuary/domain";
 import {
   createEvaluationPrompt,
+  normalizeImageReading,
   repairAdaptiveModelDimensions,
   validateEvaluationDimensions
 } from "./evaluation-contract.js";
@@ -15,6 +16,24 @@ describe("adaptive evaluation contract", () => {
     expect(prompt).toContain("95 以上只留给极少见");
     expect(prompt).toContain("不要一味赞美");
     expect(prompt).toContain("两到三句中文");
+    expect(prompt).toContain("observation");
+    expect(prompt).toContain("可见的主体、位置、颜色、动作与关系");
+    expect(prompt).toContain("无法确认");
+  });
+
+  it("keeps observable facts separate from interpretation and bounded uncertainty", () => {
+    expect(normalizeImageReading({
+      observation: " 角色位于画面中央，手中拿着一束花。 ",
+      visual_focus: ["角色面部", "手中花束", "角色面部"],
+      interpretation: "冷色调可能营造安静的氛围。",
+      uncertainty: ["无法确认角色身份", 12, "无法确认作品出处"]
+    })).toEqual({
+      observation: "角色位于画面中央，手中拿着一束花。",
+      interpretation: "冷色调可能营造安静的氛围。",
+      visualFocus: ["角色面部", "手中花束"],
+      uncertainties: ["无法确认角色身份", "无法确认作品出处"]
+    });
+    expect(normalizeImageReading({ interpretation: "缺少观察" })).toBeUndefined();
   });
 
   it("repairs Chinese keys and an explanation alias from a small local model", () => {

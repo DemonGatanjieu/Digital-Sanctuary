@@ -33,6 +33,10 @@ describe("OpenAiVisionAdapter contract tests", () => {
         {
           message: {
             content: JSON.stringify({
+              observation: "人物位于画面中央，背景以低饱和蓝色为主。",
+              visual_focus: ["人物面部", "背景光斑"],
+              interpretation: "冷色和留白可能营造宁静的感觉。",
+              uncertainty: ["无法确认人物身份"],
               dimensions: [
                 { key: "composition", score: 85, explanation: "三分法结构严谨" },
                 { key: "color_harmony", score: 90, explanation: "互补色运用娴熟" },
@@ -65,6 +69,8 @@ describe("OpenAiVisionAdapter contract tests", () => {
     expect(result.status).toBe("success");
     expect(result.dimensions).toHaveLength(6);
     expect(result.summary).toBe("画面色彩与意境表现力俱佳");
+    expect(result.reading?.observation).toContain("人物位于画面中央");
+    expect(result.reading?.visualFocus).toEqual(["人物面部", "背景光斑"]);
     expect(result.dimensions.find((d) => d.key === "composition")?.score).toBe(85);
   });
 

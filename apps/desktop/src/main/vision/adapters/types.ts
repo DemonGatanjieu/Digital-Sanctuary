@@ -1,6 +1,7 @@
 import type {
   VisionDimensionScore,
   VisionEvaluationStatus,
+  VisionImageReading,
   VisionSuiteDefinition
 } from "@sanctuary/domain";
 import type { PreparedVisionImage } from "../vision-image-preprocessor.js";
@@ -8,6 +9,7 @@ import type { PreparedVisionImage } from "../vision-image-preprocessor.js";
 export interface ExternalVisionAdapterResult {
   status: VisionEvaluationStatus;
   dimensions: VisionDimensionScore[];
+  reading?: VisionImageReading | undefined;
   summary?: string | undefined;
   reasonCode?: string | undefined;
   rawUsage?: {

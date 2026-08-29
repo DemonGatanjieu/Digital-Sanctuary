@@ -74,6 +74,35 @@ export function VisionRadarChart({
         )}
       </div>
 
+      {!isLocalProfile && evaluation?.reading && (
+        <section className="vision-image-reading" aria-label="模型眼中的画面">
+          <div className="vision-reading-heading">
+            <span className="vision-reading-kicker">模型眼中的画面</span>
+            <span className="vision-reading-fact-badge">可见事实</span>
+          </div>
+          <p className="vision-reading-observation">{evaluation.reading.observation}</p>
+          {evaluation.reading.visualFocus.length > 0 && (
+            <div className="vision-reading-focus" aria-label="主要视觉落点">
+              {evaluation.reading.visualFocus.map((focus) => <span key={focus}>{focus}</span>)}
+            </div>
+          )}
+          {evaluation.reading.interpretation && (
+            <div className="vision-reading-interpretation">
+              <span>主观解读</span>
+              <p>{evaluation.reading.interpretation}</p>
+            </div>
+          )}
+          {evaluation.reading.uncertainties.length > 0 && (
+            <details className="vision-reading-uncertainty">
+              <summary>模型没有把握的地方 · {evaluation.reading.uncertainties.length}</summary>
+              <ul>
+                {evaluation.reading.uncertainties.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </details>
+          )}
+        </section>
+      )}
+
       <svg
         width={size}
         height={size}
@@ -212,7 +241,10 @@ export function VisionRadarChart({
       )}
 
       {evaluation?.summary && (
-        <p className="vision-radar-summary">“{evaluation.summary}”</p>
+        <div className="vision-radar-summary">
+          <span>综合画评</span>
+          <p>{evaluation.summary}</p>
+        </div>
       )}
     </div>
   );

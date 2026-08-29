@@ -17,6 +17,7 @@ import type { VisionClient } from "./vision-client.js";
 import type { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import type { ExternalVisionService } from "./vision/external-vision-service.js";
 import type { LocalArtCriticService } from "./vision/local-art-critic-service.js";
+import { EVALUATION_PROMPT_VERSION } from "./vision/adapters/evaluation-contract.js";
 import { prepareVisionImage } from "./vision/vision-image-preprocessor.js";
 import { parseWorkId } from "../shared/library-query.js";
 
@@ -224,7 +225,7 @@ export async function evaluateWorkVision(
   if (config && !config.enabled) throw new Error("该视觉评论模型尚未启用，请先在设置中完成连接");
   const modelId = localIdentity?.modelId ?? config!.model;
   const prepared = await prepareVisionImage(asset.path, { maxLongEdge: config?.maxLongEdge ?? 1344 });
-  const fingerprint = `${prepared.fingerprint}:${request.providerId}:${modelId}`;
+  const fingerprint = `${prepared.fingerprint}:${request.providerId}:${modelId}:${EVALUATION_PROMPT_VERSION}`;
   try {
     if (!request.force) {
       const cached = database.getCachedVisionEvaluation(
@@ -258,10 +259,11 @@ export async function evaluateWorkVision(
       createdAt: now,
       updatedAt: now,
       ...(evaluated.reasonCode ? { reasonCode: evaluated.reasonCode } : {}),
+      ...(evaluated.reading ? { reading: evaluated.reading } : {}),
       ...(evaluated.summary ? { summary: evaluated.summary } : {}),
       providerId: request.providerId,
       modelId,
-      promptVersion: `${suite.id}@v${suite.version}`
+      promptVersion: `${suite.id}@v${suite.version}:${EVALUATION_PROMPT_VERSION}`
     };
     if (result.status === "success") database.saveVisionEvaluationResult(result);
     return result;

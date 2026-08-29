@@ -7,13 +7,13 @@ import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
-  it("records schema version 5 and creates a portable SQLite backup", () => {
+  it("records schema version 6 and creates a portable SQLite backup", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-backup-"));
     const databasePath = join(directory, "library.db");
     const backupPath = join(directory, "library-backup.db");
     const database = new LibraryDatabase(databasePath);
     try {
-      expect(database.schemaVersion()).toBe(5);
+      expect(database.schemaVersion()).toBe(6);
       database.createCollection("Backup fixture");
       expect(database.backupTo(backupPath)).toBe(backupPath);
       const backup = new DatabaseSync(backupPath, { readOnly: true });
@@ -740,6 +740,12 @@ describe("LibraryDatabase", () => {
         suiteId: "technical_visual_v1",
         suiteVersion: 1,
         status: "success",
+        reading: {
+          observation: "画面中央是一位手持花束的角色，背景以蓝白色为主。",
+          interpretation: "冷色和留白可能营造出安静的感觉。",
+          visualFocus: ["角色面部", "手中花束"],
+          uncertainties: ["无法确认角色身份"]
+        },
         dimensions: [
           { key: "colorfulness", label: "���", score: 85.5 },
           { key: "tonal_range", label: "broken label", score: 70.0 }
@@ -784,6 +790,12 @@ describe("LibraryDatabase", () => {
       expect(cached?.dimensions).toHaveLength(2);
       expect(cached?.dimensions[0]?.score).toBe(85.5);
       expect(cached?.dimensions.map((dimension) => dimension.label)).toEqual(["色彩丰富度", "明暗跨度"]);
+      expect(cached?.reading).toEqual({
+        observation: "画面中央是一位手持花束的角色，背景以蓝白色为主。",
+        interpretation: "冷色和留白可能营造出安静的感觉。",
+        visualFocus: ["角色面部", "手中花束"],
+        uncertainties: ["无法确认角色身份"]
+      });
 
       // Cache miss on different asset version
       const staleCheck = database.getCachedVisionEvaluation(

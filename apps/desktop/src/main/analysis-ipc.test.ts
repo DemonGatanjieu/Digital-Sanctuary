@@ -91,7 +91,17 @@ describe("evaluateWorkVision", () => {
           modelVersion: "Q4_K_M",
           evaluatorVersion: "llama.cpp-test"
         },
-        result: { status: "success" as const, dimensions, summary: "模型自行选择观察维度" }
+        result: {
+          status: "success" as const,
+          dimensions,
+          reading: {
+            observation: "角色位于画面中央，背景为蓝色。",
+            interpretation: "冷色调可能带来安静感。",
+            visualFocus: ["角色面部"],
+            uncertainties: []
+          },
+          summary: "模型自行选择观察维度"
+        }
       })
     } as unknown as LocalArtCriticService;
 
@@ -106,7 +116,9 @@ describe("evaluateWorkVision", () => {
       expect(result.kind).toBe("external_adaptive_highlights");
       expect(result.providerId).toBe("local_model");
       expect(result.dimensions).toHaveLength(6);
+      expect(result.reading?.observation).toContain("角色位于画面中央");
       expect(database.listVisionEvaluationsForWork(work.id)[0]?.summary).toBe("模型自行选择观察维度");
+      expect(database.listVisionEvaluationsForWork(work.id)[0]?.reading?.visualFocus).toEqual(["角色面部"]);
     } finally {
       database.close();
     }
