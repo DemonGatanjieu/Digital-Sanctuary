@@ -1,11 +1,7 @@
-import {
-  validateDimensionScores,
-  type VisionDimensionScore,
-  type VisionEvaluationStatus,
-  type VisionSuiteDefinition
-} from "@sanctuary/domain";
+import type { VisionSuiteDefinition } from "@sanctuary/domain";
 import type { PreparedVisionImage } from "../vision-image-preprocessor.js";
 import type { ExternalVisionAdapter, ExternalVisionAdapterResult } from "./types.js";
+import { createEvaluationPrompt, validateEvaluationDimensions } from "./evaluation-contract.js";
 
 export class OpenAiVisionAdapter implements ExternalVisionAdapter {
   readonly providerId: string;
@@ -36,14 +32,7 @@ export class OpenAiVisionAdapter implements ExternalVisionAdapter {
     const endpoint = input.endpoint?.trim() || "https://api.openai.com/v1";
     const url = `${endpoint.replace(/\/+$/, "")}/chat/completions`;
 
-    const systemPrompt = `You are a professional visual art analyzer. Analyze the provided illustration and output a JSON evaluation strictly conforming to the ${input.suite.name} suite.
-Your output must be a valid JSON object with the following schema:
-{
-  "dimensions": [
-    ${input.suite.dimensions.map((d) => `{"key": "${d.key}", "score": <number 0-100>, "explanation": "<brief rationale>"}`).join(",\n    ")}
-  ],
-  "summary": "<one sentence overall artistic impression>"
-}`;
+    const systemPrompt = createEvaluationPrompt(input.suite);
 
     const base64Data = `data:${input.image.mimeType};base64,${input.image.buffer.toString("base64")}`;
     const payload = {
@@ -156,7 +145,7 @@ Your output must be a valid JSON object with the following schema:
           };
         }
 
-        const validation = validateDimensionScores(parsed.dimensions, input.suite);
+        const validation = validateEvaluationDimensions(parsed.dimensions, input.suite);
         if (!validation.valid || !validation.normalized) {
           return {
             status: "invalid_response",

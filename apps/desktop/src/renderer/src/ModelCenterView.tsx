@@ -10,7 +10,7 @@ import { Button } from "./Button";
 const CAPABILITIES: { id: ModelCapability; label: string; description: string }[] = [
   { id: "element_tagging", label: "元素识别", description: "看懂服装、动作、场景与不受欢迎元素" },
   { id: "aesthetic_scoring", label: "整体观感", description: "给动漫插画提供独立的观感参考" },
-  { id: "art_critic", label: "六维评价", description: "构图、色彩、光影、焦点、氛围与细节" },
+  { id: "art_critic", label: "六维评价", description: "可使用标准美术六维，也可让模型按当前作品自选六维" },
   { id: "semantic_embedding", label: "相似搜索", description: "为未来的自然语言与以图搜图准备" }
 ];
 
@@ -82,13 +82,26 @@ export function ModelCenterView({ onError }: { onError: (error: unknown) => void
     }
   }
 
+  async function deactivate(modelId: string) {
+    setBusyModelId(modelId);
+    setNotice("");
+    try {
+      setSnapshot(await window.sanctuary.deactivateModel(modelId));
+      setNotice("本地评论模型已停用，显存与内存会被释放。");
+    } catch (error) {
+      onError(error);
+    } finally {
+      setBusyModelId("");
+    }
+  }
+
   return (
     <section className="model-center-page">
       <header className="topbar model-center-heading">
         <div>
           <p className="eyebrow">LOCAL VISION ENGINE LIBRARY</p>
           <h1>模型中心</h1>
-          <p className="page-description">按能力安装和切换模型。下载只保存模型权重，不执行模型仓库中的脚本。</p>
+          <p className="page-description">按能力安装和切换模型。只使用受控清单中的权重与固定运行时，不执行模型仓库中的脚本。</p>
         </div>
         <Button variant="secondary" size="small" onClick={() => void window.sanctuary.openModelsDirectory()}>
           打开模型目录
@@ -138,6 +151,7 @@ export function ModelCenterView({ onError }: { onError: (error: unknown) => void
             onInstall={() => void install(model.id)}
             onCancel={() => void window.sanctuary.cancelModelDownload(model.id)}
             onActivate={() => void activate(model.id)}
+            onDeactivate={() => void deactivate(model.id)}
             onRemove={() => void remove(model.id)}
             onHomepage={() => void window.sanctuary.openModelHomepage(model.id)}
           />
@@ -153,6 +167,7 @@ function ModelCard({
   onInstall,
   onCancel,
   onActivate,
+  onDeactivate,
   onRemove,
   onHomepage
 }: {
@@ -161,6 +176,7 @@ function ModelCard({
   onInstall: () => void;
   onCancel: () => void;
   onActivate: () => void;
+  onDeactivate: () => void;
   onRemove: () => void;
   onHomepage: () => void;
 }) {
@@ -206,6 +222,8 @@ function ModelCard({
               {!model.bundled && <Button variant="ghost" size="small" disabled={busy} onClick={onRemove}>删除</Button>}
               <Button variant="primary" size="small" busy={busy} busyLabel="启动自检…" onClick={onActivate}>切换使用</Button>
             </>
+          ) : model.capability !== "element_tagging" ? (
+            <Button variant="secondary" size="small" busy={busy} busyLabel="正在释放…" onClick={onDeactivate}>停用并释放</Button>
           ) : (
             <span className="model-ready-label">已安装并启用</span>
           )}

@@ -50,7 +50,7 @@ export interface VisionEvaluationResult {
 export interface VisionEvaluationRequest {
   workId: string;
   suiteId: string;
-  providerId?: ExternalVisionProviderId | undefined;
+  providerId?: VisionEvaluationProviderId | undefined;
   force?: boolean | undefined;
 }
 
@@ -66,6 +66,8 @@ export type ExternalVisionProviderId =
   | "gemini"
   | "anthropic"
   | "openai_compatible";
+
+export type VisionEvaluationProviderId = ExternalVisionProviderId | "local_model";
 
 export interface ExternalVisionPublicConfig {
   id: string;
@@ -144,10 +146,20 @@ export const CHARACTER_PRESENCE_SUITE_V1: VisionSuiteDefinition = {
   ]
 };
 
+export const ADAPTIVE_ART_SUITE_V1: VisionSuiteDefinition = {
+  id: "adaptive_art_highlights_v1",
+  version: 1,
+  name: "AI 自选六维画面解读",
+  description: "由视觉语言模型根据当前作品自行挑选六个最有解释力的观察维度。不同作品的轴可能不同，因此不用于跨作品硬排序。",
+  kind: "external_adaptive_highlights",
+  dimensions: []
+};
+
 export const VISION_SUITE_REGISTRY: Record<string, VisionSuiteDefinition> = {
   [`${TECHNICAL_VISUAL_SUITE_V1.id}@v${TECHNICAL_VISUAL_SUITE_V1.version}`]: TECHNICAL_VISUAL_SUITE_V1,
   [`${FINE_ART_SUITE_V1.id}@v${FINE_ART_SUITE_V1.version}`]: FINE_ART_SUITE_V1,
-  [`${CHARACTER_PRESENCE_SUITE_V1.id}@v${CHARACTER_PRESENCE_SUITE_V1.version}`]: CHARACTER_PRESENCE_SUITE_V1
+  [`${CHARACTER_PRESENCE_SUITE_V1.id}@v${CHARACTER_PRESENCE_SUITE_V1.version}`]: CHARACTER_PRESENCE_SUITE_V1,
+  [`${ADAPTIVE_ART_SUITE_V1.id}@v${ADAPTIVE_ART_SUITE_V1.version}`]: ADAPTIVE_ART_SUITE_V1
 };
 
 export function getVisionSuite(suiteId: string, version = 1): VisionSuiteDefinition | null {
@@ -239,7 +251,8 @@ export function validateDimensionScores(
 }
 
 export function validateAdaptiveHighlights(
-  rawHighlights: unknown
+  rawHighlights: unknown,
+  expectedCount?: number
 ): ValidationOutcome<AdaptiveHighlight[]> {
   if (!Array.isArray(rawHighlights)) {
     return { valid: false, errors: ["Highlights must be an array"] };
@@ -248,6 +261,7 @@ export function validateAdaptiveHighlights(
   const errors: string[] = [];
   const normalized: AdaptiveHighlight[] = [];
   const seenKeys = new Set<string>();
+  const seenLabels = new Set<string>();
 
   for (const item of rawHighlights) {
     if (!item || typeof item !== "object") {
@@ -267,6 +281,15 @@ export function validateAdaptiveHighlights(
       errors.push(`Highlight label must be 1-64 characters (got ${label})`);
       continue;
     }
+    const normalizedLabel = label.toLowerCase().replaceAll(/\s+/g, " ");
+    if (expectedCount !== undefined && ["short chinese label", "label", "标签", "维度"].includes(normalizedLabel)) {
+      errors.push(`Highlight ${key} label is a template placeholder`);
+      continue;
+    }
+    if (seenLabels.has(normalizedLabel)) {
+      errors.push(`Duplicate highlight label: ${label}`);
+      continue;
+    }
     if (typeof rawScore !== "number" || !Number.isFinite(rawScore) || rawScore < 0 || rawScore > 100) {
       errors.push(`Highlight ${key} score must be a finite number between 0 and 100`);
       continue;
@@ -276,10 +299,16 @@ export function validateAdaptiveHighlights(
       continue;
     }
 
-    seenKeys.add(key);
     const reason = typeof candidate.reason === "string" && candidate.reason.trim()
       ? candidate.reason.trim().slice(0, 300)
       : undefined;
+    if (expectedCount !== undefined && (!reason || reason.length < 4)) {
+      errors.push(`Highlight ${key} must include concrete visual evidence`);
+      continue;
+    }
+
+    seenKeys.add(key);
+    seenLabels.add(normalizedLabel);
 
     normalized.push({
       key,
@@ -289,8 +318,13 @@ export function validateAdaptiveHighlights(
     });
   }
 
-  if (normalized.length < 1 || normalized.length > 10) {
+  if (expectedCount !== undefined && normalized.length !== expectedCount) {
+    errors.push(`Adaptive highlights count must be exactly ${expectedCount} (got ${normalized.length})`);
+  } else if (normalized.length < 1 || normalized.length > 10) {
     errors.push(`Adaptive highlights count must be between 1 and 10 (got ${normalized.length})`);
+  }
+  if (expectedCount !== undefined && normalized.length > 0 && normalized.every((item) => item.score === 0)) {
+    errors.push("Adaptive highlights cannot use zero for every selected dimension");
   }
 
   if (errors.length > 0) {

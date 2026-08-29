@@ -131,6 +131,7 @@ import { ComfyUiService } from "./comfyui/service.js";
 import { registerComfyUiIpc } from "./comfyui/ipc.js";
 import { ModelCenterService, type ResolvedRuntimeModel } from "./model-center/model-center-service.js";
 import { registerModelCenterIpc } from "./model-center/model-center-ipc.js";
+import { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -151,6 +152,7 @@ let externalVisionService: ExternalVisionService | undefined;
 let fontService: FontService | undefined;
 let comfyUiService: ComfyUiService | undefined;
 let modelCenter: ModelCenterService | undefined;
+let localArtCriticService: LocalArtCriticService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let exploreView: WebContentsView | undefined;
 let exploreBounds: ExploreBounds | undefined;
@@ -266,6 +268,9 @@ if (!hasSingleInstanceLock) {
       writeActiveModelId: (capability, modelId) => database?.setPreference(`models.active.${capability}`, modelId)
     });
     const activeTagger = await modelCenter.resolveActiveRuntimeModel("element_tagging");
+    localArtCriticService = new LocalArtCriticService({
+      resolveActiveModel: () => modelCenter?.resolveActiveRuntimeModel("art_critic") ?? Promise.resolve(null)
+    });
     vision = new VisionClient({ ...resolveVisionProcess(activeTagger), startupProbeImage });
     vision.onStateChange((snapshot) => {
       console.info(`[vision] runtime state=${snapshot.state} provider=${snapshot.executionProvider}`);
@@ -321,6 +326,7 @@ app.on("before-quit", () => {
   if (windowStateTimer) clearTimeout(windowStateTimer);
   saveWindowState();
   vision?.close();
+  localArtCriticService?.close();
   database?.close();
 });
 
@@ -572,7 +578,7 @@ function localImageUrl(imagePath: string): string {
 
 function registerIpc(): void {
   if (!database || !vision || !themeManager || !themeStore || !comfyUiService || !modelCenter) throw new Error("Application services are unavailable");
-  registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService);
+  registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService, localArtCriticService);
   registerModelCenterIpc({
     ipc: ipcMain,
     service: modelCenter,
@@ -580,7 +586,13 @@ function registerIpc(): void {
     onActivate: async (modelId) => {
       if (!vision || !modelCenter || !database) return false;
       const runtime = await modelCenter.resolveRuntimeModel(modelId);
-      if (!runtime || runtime.entry.capability !== "element_tagging") return false;
+      if (!runtime) return false;
+      if (runtime.entry.capability === "art_critic") {
+        if (!localArtCriticService) return false;
+        await localArtCriticService.activate(runtime);
+        return true;
+      }
+      if (runtime.entry.capability !== "element_tagging") return false;
       const previousRuntime = await modelCenter.resolveActiveRuntimeModel("element_tagging");
       remoteReviewCache.clear();
       remoteReviewPending.clear();
@@ -602,6 +614,11 @@ function registerIpc(): void {
       database.invalidateAssessmentsExcept(vision.engine);
       mainWindow?.webContents.send("app:status-changed", currentApplicationStatus());
       return true;
+    },
+    onDeactivate: async (modelId) => {
+      if (!modelCenter) return;
+      const entry = modelCenter.getEntry(modelId);
+      if (entry.capability === "art_critic") localArtCriticService?.close();
     }
   });
   registerPromptBridgeIpc(ipcMain, database);

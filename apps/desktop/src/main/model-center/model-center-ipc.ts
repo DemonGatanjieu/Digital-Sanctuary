@@ -9,8 +9,9 @@ export function registerModelCenterIpc(options: {
   service: ModelCenterService;
   getWindow: () => BrowserWindow | undefined;
   onActivate: (modelId: string) => Promise<boolean>;
+  onDeactivate: (modelId: string) => Promise<void>;
 }): () => void {
-  const { ipc, service, getWindow, onActivate } = options;
+  const { ipc, service, getWindow, onActivate, onDeactivate } = options;
   const unsubscribe = service.onProgress((progress) => {
     const window = getWindow();
     if (window && !window.isDestroyed()) window.webContents.send("models:download-progress", progress);
@@ -32,6 +33,11 @@ export function registerModelCenterIpc(options: {
     if (!runtimeRestarted) throw new Error("这个模型当前还没有可用的本地运行时。");
     const result = await service.activate(safeModelId);
     return { ...result, runtimeRestarted };
+  });
+  ipc.handle("models:deactivate", async (_event, modelId: unknown): Promise<ModelCenterSnapshot> => {
+    const safeModelId = requireModelId(modelId);
+    await onDeactivate(safeModelId);
+    return service.deactivate(safeModelId);
   });
   ipc.handle("models:open-homepage", async (_event, modelId: unknown): Promise<boolean> => {
     const entry = service.getEntry(requireModelId(modelId));

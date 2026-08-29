@@ -1,11 +1,7 @@
-import {
-  validateDimensionScores,
-  type VisionDimensionScore,
-  type VisionEvaluationStatus,
-  type VisionSuiteDefinition
-} from "@sanctuary/domain";
+import type { VisionSuiteDefinition } from "@sanctuary/domain";
 import type { PreparedVisionImage } from "../vision-image-preprocessor.js";
 import type { ExternalVisionAdapter, ExternalVisionAdapterResult } from "./types.js";
+import { createEvaluationPrompt, validateEvaluationDimensions } from "./evaluation-contract.js";
 
 export class GeminiVisionAdapter implements ExternalVisionAdapter {
   readonly providerId = "gemini";
@@ -31,14 +27,7 @@ export class GeminiVisionAdapter implements ExternalVisionAdapter {
     const baseUrl = input.endpoint?.trim() || "https://generativelanguage.googleapis.com";
     const url = `${baseUrl.replace(/\/+$/, "")}/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(input.apiKey)}`;
 
-    const promptText = `You are a visual artwork evaluator. Analyze the given artwork image according to the ${input.suite.name} suite.
-Output a strict JSON object conforming to:
-{
-  "dimensions": [
-    ${input.suite.dimensions.map((d) => `{"key": "${d.key}", "score": <number 0-100>, "explanation": "<brief reason>"}`).join(",\n    ")}
-  ],
-  "summary": "<one sentence impression>"
-}`;
+    const promptText = createEvaluationPrompt(input.suite);
 
     const payload = {
       contents: [
@@ -151,7 +140,7 @@ Output a strict JSON object conforming to:
           };
         }
 
-        const validation = validateDimensionScores(parsed.dimensions, input.suite);
+        const validation = validateEvaluationDimensions(parsed.dimensions, input.suite);
         if (!validation.valid || !validation.normalized) {
           return {
             status: "invalid_response",

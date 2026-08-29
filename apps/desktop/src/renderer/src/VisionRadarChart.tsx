@@ -59,12 +59,13 @@ export function VisionRadarChart({
     .join(" ");
 
   const isLocalProfile = evaluation?.kind === "local_technical_profile";
+  const isAdaptive = evaluation?.kind === "external_adaptive_highlights";
 
   return (
     <div className="vision-radar-widget" style={{ width: size }}>
       <div className="vision-radar-header">
         <span className={`vision-radar-badge ${isLocalProfile ? "badge-local" : "badge-ai"}`}>
-          {isLocalProfile ? "📊 确定性技术特征" : "🤖 AI 主观解读"}
+          {isLocalProfile ? "📊 确定性技术特征" : isAdaptive ? "✦ AI 自选六维" : "🤖 标准六维解读"}
         </span>
         {evaluation?.providerId && (
           <span className="vision-radar-provider">

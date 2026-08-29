@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADAPTIVE_ART_SUITE_V1,
   CHARACTER_PRESENCE_SUITE_V1,
   FINE_ART_SUITE_V1,
   TECHNICAL_VISUAL_SUITE_V1,
@@ -13,7 +14,7 @@ import {
 describe("Vision Suite Registry", () => {
   it("registers technical and external fixed suites with version 1", () => {
     const suites = listVisionSuites();
-    expect(suites).toHaveLength(3);
+    expect(suites).toHaveLength(4);
 
     const tech = getVisionSuite("technical_visual_v1", 1);
     expect(tech).not.toBeNull();
@@ -34,6 +35,10 @@ describe("Vision Suite Registry", () => {
     const char = getVisionSuite("character_presence_v1", 1);
     expect(char?.kind).toBe("external_fixed_suite");
     expect(char?.dimensions).toHaveLength(6);
+
+    const adaptive = getVisionSuite(ADAPTIVE_ART_SUITE_V1.id, 1);
+    expect(adaptive?.kind).toBe("external_adaptive_highlights");
+    expect(adaptive?.dimensions).toHaveLength(0);
   });
 
   it("returns null for unknown suite or invalid version", () => {
@@ -122,6 +127,17 @@ describe("validateAdaptiveHighlights", () => {
     expect(validateAdaptiveHighlights([]).valid).toBe(false);
     expect(validateAdaptiveHighlights([{ key: "INVALID-KEY!", label: "Test", score: 50 }]).valid).toBe(false);
     expect(validateAdaptiveHighlights([{ key: "score_over", label: "Test", score: 150 }]).valid).toBe(false);
+  });
+
+  it("can require exactly six model-selected dimensions", () => {
+    const six = Array.from({ length: 6 }, (_, index) => ({
+      key: `dimension_${index}`,
+      label: `维度 ${index}`,
+      score: 60 + index,
+      reason: "画面中存在具体可见证据"
+    }));
+    expect(validateAdaptiveHighlights(six, 6).valid).toBe(true);
+    expect(validateAdaptiveHighlights(six.slice(0, 5), 6).valid).toBe(false);
   });
 });
 

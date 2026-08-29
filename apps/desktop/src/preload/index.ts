@@ -183,6 +183,7 @@ export interface SanctuaryApi {
   cancelModelDownload(modelId: string): Promise<boolean>;
   removeModel(modelId: string): Promise<ModelCenterSnapshot>;
   activateModel(modelId: string): Promise<ModelActivationResult>;
+  deactivateModel(modelId: string): Promise<ModelCenterSnapshot>;
   openModelHomepage(modelId: string): Promise<boolean>;
   openModelsDirectory(): Promise<boolean>;
   onModelDownloadProgress(listener: (event: ModelDownloadProgress) => void): () => void;
@@ -368,6 +369,8 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("models:remove", modelId) as Promise<ModelCenterSnapshot>,
   activateModel: (modelId) =>
     ipcRenderer.invoke("models:activate", modelId) as Promise<ModelActivationResult>,
+  deactivateModel: (modelId) =>
+    ipcRenderer.invoke("models:deactivate", modelId) as Promise<ModelCenterSnapshot>,
   openModelHomepage: (modelId) =>
     ipcRenderer.invoke("models:open-homepage", modelId) as Promise<boolean>,
   openModelsDirectory: () =>

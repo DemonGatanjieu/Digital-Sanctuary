@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type {
   ExternalVisionProviderId,
   ExternalVisionPublicConfig,
+  InstalledModelView,
   VisionEvaluationResult
 } from "@sanctuary/domain";
 import { Button } from "./Button";
@@ -21,7 +22,11 @@ export function RadarEvaluationPanel({
   const [runningSuite, setRunningSuite] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [providers, setProviders] = useState<ExternalVisionPublicConfig[]>([]);
+  const [localCritic, setLocalCritic] = useState<InstalledModelView | null>(null);
   const activeProvider = useMemo(() => providers.find((provider) => provider.enabled), [providers]);
+  const evaluatorLabel = localCritic
+    ? `${localCritic.name}（完全本地）`
+    : activeProvider?.model;
   const hasTechnicalProfile = evaluations.some((item) => item.suiteId === "technical_visual_v1");
 
   useEffect(() => {
@@ -33,14 +38,25 @@ export function RadarEvaluationPanel({
     return () => { cancelled = true; };
   }, []);
 
-  async function run(suiteId: "technical_visual_v1" | "fine_art_v1") {
+  useEffect(() => {
+    let cancelled = false;
+    void window.sanctuary.getModelCenterSnapshot().then((snapshot) => {
+      if (!cancelled) {
+        setLocalCritic(snapshot.models.find((model) => model.capability === "art_critic" && model.active && model.installed) ?? null);
+      }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
+  async function run(suiteId: "technical_visual_v1" | "fine_art_v1" | "adaptive_art_highlights_v1") {
     setError("");
     setRunningSuite(suiteId);
     try {
       const result = await window.sanctuary.evaluateWorkVision({
         workId,
         suiteId,
-        ...(suiteId === "fine_art_v1" && activeProvider ? { providerId: activeProvider.provider } : {})
+        ...(suiteId !== "technical_visual_v1" && localCritic ? { providerId: "local_model" as const } : {}),
+        ...(suiteId !== "technical_visual_v1" && !localCritic && activeProvider ? { providerId: activeProvider.provider } : {})
       });
       if (result.status !== "success") {
         throw new Error(result.summary ?? `模型没有完成分析（${result.status}）`);
@@ -75,18 +91,30 @@ export function RadarEvaluationPanel({
       <div className="radar-evaluation-actions radar-evaluation-actions--subjective">
         <div className="radar-evaluation-action-copy">
           <strong>AI 美术六维</strong>
-          <span>{activeProvider ? `使用已启用的 ${activeProvider.model}` : "需先在设置中启用视觉评论服务，或等待本地评论模型运行时。"}</span>
+          <span>{evaluatorLabel ? `使用 ${evaluatorLabel}` : "请在模型中心安装本地评论模型，或在设置中启用视觉评论服务。"}</span>
         </div>
-        <Button
-          size="small"
-          variant="secondary"
-          disabled={!activeProvider}
-          busy={runningSuite === "fine_art_v1"}
-          busyLabel="正在解读…"
-          onClick={() => void run("fine_art_v1")}
-        >
-          生成六维评价
-        </Button>
+        <div className="radar-evaluation-choice-row">
+          <Button
+            size="small"
+            variant="secondary"
+            disabled={!evaluatorLabel || runningSuite !== null}
+            busy={runningSuite === "fine_art_v1"}
+            busyLabel="正在解读…"
+            onClick={() => void run("fine_art_v1")}
+          >
+            标准六维
+          </Button>
+          <Button
+            size="small"
+            variant="primary"
+            disabled={!evaluatorLabel || runningSuite !== null}
+            busy={runningSuite === "adaptive_art_highlights_v1"}
+            busyLabel="正在选轴…"
+            onClick={() => void run("adaptive_art_highlights_v1")}
+          >
+            AI 自选六维
+          </Button>
+        </div>
       </div>
 
       {error && <p className="radar-evaluation-error" role="alert">{error}</p>}

@@ -25,6 +25,7 @@ export interface ModelFileDefinition {
   url: string;
   size: number;
   sha256: string;
+  extract?: "zip" | undefined;
 }
 
 export interface ModelCatalogEntry {
@@ -45,6 +46,7 @@ export interface ModelCatalogEntry {
   recommendedVramGb: number;
   badges: string[];
   files: ModelFileDefinition[];
+  requiredRuntimeFiles?: string[] | undefined;
 }
 
 export interface InstalledModelView extends ModelCatalogEntry {

@@ -14,6 +14,7 @@ import type {
 } from "@sanctuary/domain";
 import { isSafeModelId } from "@sanctuary/domain";
 import { MODEL_CATALOG } from "./catalog.js";
+import { extractTrustedZip } from "./secure-zip.js";
 
 interface ModelCenterOptions {
   modelsRoot: string;
@@ -110,6 +111,15 @@ export class ModelCenterService {
         await this.#downloadFile(entry, file, stagingDirectory, completedBytes, state);
         completedBytes += file.size;
       }
+      for (const file of entry.files.filter((candidate) => candidate.extract === "zip")) {
+        this.#update(state, {
+          phase: "installing",
+          fileName: file.fileName,
+          downloadedBytes: totalBytes,
+          message: `正在展开 ${entry.name} 的本地运行时…`
+        });
+        await extractTrustedZip(join(stagingDirectory, file.fileName), stagingDirectory);
+      }
       this.#update(state, {
         phase: "installing",
         fileName: "",
@@ -169,6 +179,13 @@ export class ModelCenterService {
     if (!runtime) throw new Error("请先下载并安装这个模型。");
     this.#writeActiveModelId(entry.capability, modelId);
     return { modelId, capability: entry.capability, active: true, runtimeRestarted: false };
+  }
+
+  async deactivate(modelId: string): Promise<ModelCenterSnapshot> {
+    const entry = this.#requireEntry(modelId);
+    if (entry.capability === "element_tagging") throw new Error("探索元素模型必须保留一个当前选择。");
+    if (this.#resolveActiveId(entry.capability) === modelId) this.#writeActiveModelId(entry.capability, "");
+    return this.snapshot();
   }
 
   async resolveActiveRuntimeModel(capability: ModelCapability): Promise<ResolvedRuntimeModel | null> {
@@ -323,7 +340,11 @@ export class ModelCenterService {
 
 async function hasRequiredFiles(directory: string, entry: ModelCatalogEntry): Promise<boolean> {
   if (!directory || entry.files.length === 0) return false;
-  return (await Promise.all(entry.files.map((file) => isFile(join(directory, file.fileName))))).every(Boolean);
+  const required = [
+    ...entry.files.map((file) => file.fileName),
+    ...(entry.requiredRuntimeFiles ?? [])
+  ];
+  return (await Promise.all(required.map((fileName) => isFile(join(directory, fileName))))).every(Boolean);
 }
 
 async function isFile(path: string): Promise<boolean> {

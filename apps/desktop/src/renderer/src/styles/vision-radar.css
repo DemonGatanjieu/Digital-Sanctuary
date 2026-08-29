@@ -224,6 +224,12 @@
   line-height: 1.5;
 }
 
+.radar-evaluation-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 /* Vision Settings Section */
 .vision-settings-section {
   display: flex;

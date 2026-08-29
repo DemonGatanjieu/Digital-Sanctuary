@@ -131,18 +131,48 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
     name: "Qwen3-VL 2B · Q4",
     version: "Q4_K_M",
     author: "Qwen",
-    description: "拟用于构图、色彩、光影、焦点、氛围和细节六维评价的本地视觉评论模型。",
+    description: "本地视觉评论模型：既能按标准美术六维评价，也能针对每张作品自行挑选最有解释力的六个维度。",
     capability: "art_critic",
     runtime: "llama_cpp_vlm",
     tier: "balanced",
-    availability: "runtime_pending",
-    license: "Apache-2.0",
+    availability: "ready",
+    license: "Apache-2.0 / MIT",
     homepage: "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF",
-    downloadSize: 1_555_000_000,
-    diskSize: 1_555_000_000,
+    downloadSize: 1_587_324_349,
+    diskSize: 1_660_000_000,
     recommendedRamGb: 16,
     recommendedVramGb: 4,
-    badges: ["六维评价", "本地运行", "接入准备"],
-    files: []
+    badges: ["六维评价", "自选维度", "本地运行", "Vulkan"],
+    files: [
+      {
+        fileName: "Qwen3VL-2B-Instruct-Q4_K_M.gguf",
+        url: "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/main/Qwen3VL-2B-Instruct-Q4_K_M.gguf",
+        size: 1_107_409_952,
+        sha256: "089d75c52f4b7ffc56ba998ffc50aae89fcafc755f9e7208aacca281dca6c2ae"
+      },
+      {
+        fileName: "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
+        url: "https://huggingface.co/Qwen/Qwen3-VL-2B-Instruct-GGUF/resolve/main/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf",
+        size: 445_053_216,
+        sha256: "f9a68fabba69c3b81e153367b2c7521030b0fa8bb0de400c9599c8e6725f9c82"
+      },
+      {
+        fileName: "llama-b10516-bin-win-vulkan-x64.zip",
+        url: "https://github.com/ggml-org/llama.cpp/releases/download/b10516/llama-b10516-bin-win-vulkan-x64.zip",
+        size: 34_861_181,
+        sha256: "530f57d2a874ce017827c1e5a926812b9d5de4667248575d1372b1c0acf94d83",
+        extract: "zip"
+      }
+    ],
+    requiredRuntimeFiles: [
+      "llama-server.exe",
+      "llama-server-impl.dll",
+      "llama-common.dll",
+      "llama.dll",
+      "ggml.dll",
+      "ggml-base.dll",
+      "ggml-vulkan.dll",
+      "mtmd.dll"
+    ]
   }
 ] as const;

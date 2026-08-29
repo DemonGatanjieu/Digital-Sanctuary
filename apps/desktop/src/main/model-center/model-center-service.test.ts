@@ -65,6 +65,33 @@ describe("ModelCenterService", () => {
     expect(snapshot.models.find((model) => model.id === "downloadable")?.installed).toBe(false);
   });
 
+  it("allows an optional non-filter model to be deactivated", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sanctuary-model-center-optional-"));
+    roots.push(root);
+    const directory = join(root, "models", "critic");
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "model.gguf"), "model");
+    await writeFile(join(directory, "sanctuary-model.json"), "{}");
+    const critic: ModelCatalogEntry = {
+      ...entry("critic", [file("model.gguf", "https://example.test/model.gguf", Buffer.from("model"))], "light"),
+      capability: "art_critic",
+      runtime: "llama_cpp_vlm"
+    };
+    let selected = "critic";
+    const service = new ModelCenterService({
+      modelsRoot: join(root, "models"),
+      bundledModels: {},
+      readActiveModelId: () => selected,
+      writeActiveModelId: (_capability, modelId) => { selected = modelId; },
+      catalog: [critic]
+    });
+
+    expect((await service.snapshot()).activeByCapability.art_critic).toBe("critic");
+    await service.deactivate("critic");
+    expect(selected).toBe("");
+    expect((await service.snapshot()).activeByCapability.art_critic).toBeUndefined();
+  });
+
   it("rejects files whose declared hash does not match", async () => {
     const root = await mkdtemp(join(tmpdir(), "sanctuary-model-center-hash-"));
     roots.push(root);

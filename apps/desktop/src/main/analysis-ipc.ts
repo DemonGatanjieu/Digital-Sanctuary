@@ -15,6 +15,7 @@ import {
 import type { VisionClient } from "./vision-client.js";
 import type { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import type { ExternalVisionService } from "./vision/external-vision-service.js";
+import type { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 import { prepareVisionImage } from "./vision/vision-image-preprocessor.js";
 import { parseWorkId } from "../shared/library-query.js";
 
@@ -23,7 +24,8 @@ export function registerAnalysisIpc(
   database: LibraryDatabase,
   vision: VisionClient,
   scheduler: AnalysisJobScheduler,
-  externalVisionService?: ExternalVisionService
+  externalVisionService?: ExternalVisionService,
+  localArtCriticService?: LocalArtCriticService
 ): void {
   ipc.handle("analysis:preview", (_event, value: unknown, engineValue?: unknown): AnalysisScopePreview => {
     if (!isAnalysisScope(value)) throw new Error("Invalid analysis scope");
@@ -138,7 +140,7 @@ export function registerAnalysisIpc(
 
   ipc.handle("vision:evaluate-work", async (_event, value: unknown): Promise<VisionEvaluationResult> => {
     const request = parseVisionEvaluationRequest(value);
-    return evaluateWorkVision(request, database, vision, externalVisionService);
+    return evaluateWorkVision(request, database, vision, externalVisionService, localArtCriticService);
   });
 }
 
@@ -146,7 +148,8 @@ export async function evaluateWorkVision(
   request: VisionEvaluationRequest,
   database: LibraryDatabase,
   vision: VisionClient,
-  externalVisionService?: ExternalVisionService
+  externalVisionService?: ExternalVisionService,
+  localArtCriticService?: LocalArtCriticService
 ): Promise<VisionEvaluationResult> {
   const suite = getVisionSuite(request.suiteId);
   if (!suite) throw new Error("未知的视觉评价方案");
@@ -197,15 +200,26 @@ export async function evaluateWorkVision(
     return result;
   }
 
-  if (suite.kind !== "external_fixed_suite" || !externalVisionService) {
+  if (suite.kind !== "external_fixed_suite" && suite.kind !== "external_adaptive_highlights") {
     throw new Error("这个评价方案的运行时尚未接通");
   }
   if (!request.providerId) throw new Error("请选择一个视觉评论模型");
-  const config = externalVisionService.getPublicConfig(request.providerId);
-  if (!config.enabled) throw new Error("该视觉评论模型尚未启用，请先在设置中完成连接");
-
-  const prepared = await prepareVisionImage(asset.path, { maxLongEdge: config.maxLongEdge });
-  const fingerprint = `${prepared.fingerprint}:${request.providerId}:${config.model}`;
+  const localIdentity = request.providerId === "local_model"
+    ? await localArtCriticService?.getActiveIdentity()
+    : null;
+  if (request.providerId === "local_model" && (!localIdentity || !localArtCriticService)) {
+    throw new Error("请先在模型中心安装并启用本地六维评论模型");
+  }
+  if (request.providerId !== "local_model" && !externalVisionService) {
+    throw new Error("外部视觉服务不可用");
+  }
+  const config = request.providerId === "local_model"
+    ? null
+    : externalVisionService!.getPublicConfig(request.providerId);
+  if (config && !config.enabled) throw new Error("该视觉评论模型尚未启用，请先在设置中完成连接");
+  const modelId = localIdentity?.modelId ?? config!.model;
+  const prepared = await prepareVisionImage(asset.path, { maxLongEdge: config?.maxLongEdge ?? 1344 });
+  const fingerprint = `${prepared.fingerprint}:${request.providerId}:${modelId}`;
   try {
     if (!request.force) {
       const cached = database.getCachedVisionEvaluation(
@@ -218,7 +232,10 @@ export async function evaluateWorkVision(
       );
       if (cached) return cached;
     }
-    const evaluated = await externalVisionService.analyzeImage(request.providerId, prepared, suite);
+    const localEvaluation = request.providerId === "local_model"
+      ? await localArtCriticService!.analyze(prepared, suite)
+      : null;
+    const evaluated = localEvaluation?.result ?? await externalVisionService!.analyzeImage(request.providerId, prepared, suite);
     const now = new Date().toISOString();
     const result: VisionEvaluationResult = {
       id: randomUUID(),
@@ -230,7 +247,7 @@ export async function evaluateWorkVision(
       suiteVersion: suite.version,
       status: evaluated.status,
       dimensions: evaluated.dimensions,
-      evaluatorVersion: `${request.providerId}:${config.model}`,
+      evaluatorVersion: localEvaluation?.identity.evaluatorVersion ?? `${request.providerId}:${modelId}`,
       preprocessingFingerprint: fingerprint,
       assetVersion: asset.updatedAt,
       createdAt: now,
@@ -238,7 +255,7 @@ export async function evaluateWorkVision(
       ...(evaluated.reasonCode ? { reasonCode: evaluated.reasonCode } : {}),
       ...(evaluated.summary ? { summary: evaluated.summary } : {}),
       providerId: request.providerId,
-      modelId: config.model,
+      modelId,
       promptVersion: `${suite.id}@v${suite.version}`
     };
     if (result.status === "success") database.saveVisionEvaluationResult(result);
@@ -256,7 +273,7 @@ function parseVisionEvaluationRequest(value: unknown): VisionEvaluationRequest {
     throw new Error("无效的视觉评价请求");
   }
   const providerId = typeof candidate.providerId === "string" ? candidate.providerId : undefined;
-  if (providerId && !["openai", "gemini", "anthropic", "openai_compatible"].includes(providerId)) {
+  if (providerId && !["openai", "gemini", "anthropic", "openai_compatible", "local_model"].includes(providerId)) {
     throw new Error("不支持的视觉评论模型");
   }
   return {

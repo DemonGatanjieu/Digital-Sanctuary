@@ -80,7 +80,17 @@ export class FakeVisionAdapter implements ExternalVisionAdapter {
     }
 
     // Deterministic mock generation based on suite dimensions & image length
-    const dimensions: VisionDimensionScore[] = input.suite.dimensions.map((dim, idx) => {
+    const definitions = input.suite.kind === "external_adaptive_highlights"
+      ? [
+          { key: "storybook_staging", label: "绘本式调度" },
+          { key: "material_softness", label: "材质柔和度" },
+          { key: "character_intimacy", label: "角色亲近感" },
+          { key: "palette_breathing", label: "配色呼吸感" },
+          { key: "silhouette_rhythm", label: "轮廓节奏" },
+          { key: "narrative_detail", label: "叙事细节" }
+        ]
+      : input.suite.dimensions;
+    const dimensions: VisionDimensionScore[] = definitions.map((dim, idx) => {
       const customScore = this.#customScores?.[dim.key];
       const score = customScore !== undefined
         ? customScore
