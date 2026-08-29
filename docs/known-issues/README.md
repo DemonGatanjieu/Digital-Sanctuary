@@ -13,3 +13,4 @@
 | [KI-0007](./KI-0007-stale-build-and-bulk-download-failure-cascade.md) | 已修复 / 待真实收藏任务复核 | 旧构建掩盖更新，批量下载把全局故障级联为数百个作品失败 |
 | [KI-0008](./KI-0008-unsigned-large-installer.md) | 已确认 / 发布前处理 | 离线安装包内含完整模型且尚未配置商业代码签名，体积较大并可能触发未知发布者提示 |
 | [KI-0009](./KI-0009-packaged-model-failure-masquerades-as-blocked.md) | 代码已修复 / 待重新打包验收 | 安装包模型故障曾被表现成全部探索图片遭到拦截 |
+| [KI-0010](./KI-0010-radar-label-windows-encoding.md) | 已修复 / 自动兼容旧缓存 / 待重启目视验收 | Windows 代码页曾让 Python 技术画像的中文轴名在 JSONL 协议中乱码 |
