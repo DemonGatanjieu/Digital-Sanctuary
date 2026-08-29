@@ -57,7 +57,7 @@
 | **element-inspector-prompt-workspace-v2** | `b4efed052e87fb4eb09b35047396a6f9537e9fc0` | 2026-08-24 | 元素透视拆分为识别说明、本图提示词整理与探索拦截三页；Prompt Bridge v2 移除跨作品标签累计和置信度伪权重，只持久化格式、负向词库与主动预设，并保留当前本机 ComfyUI 显式发送链路。 |
 | **data-preserving-release-0.1.1** | `9446f26` | 2026-08-27 | 产出可覆盖早期安装的 0.1.1 离线安装包，保留图库、偏好、登录状态和下载目录；同步安装器版本检测，并以隔离安装、WD Tagger 就绪与真实推理完成发布验收。 |
 | **model-center-and-radar-runtime-phase-1** | `319d20e1bc69af21e988272f9fda9e28c5b738c7` | 2026-08-29 | 建立受控模型中心、断点下载与 SHA256 校验、WD 模型安全切换/失败回退，并打通画廊内一键本地技术画像及已配置外部模型的六维评价。 |
-
+| **local-adaptive-art-critic-runtime-phase-2** | `e695de746452a6055192234363b216d09f4f5254` | 2026-08-30 | 接通 Qwen3-VL 2B + llama.cpp 本地评论运行时、安全下载展开、标准/AI 自选六维、结构化质量门禁、90 秒超时与闲置资源释放；真实图片烟雾测试通过。 |
 
 
 
