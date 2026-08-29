@@ -11,6 +11,7 @@ PROTOCOL_VERSION = 1
 
 
 def main() -> None:
+    configure_standard_streams()
     wd_engine = None
 
     for line in sys.stdin:
@@ -77,6 +78,14 @@ def main() -> None:
             )
 
 
+def configure_standard_streams() -> None:
+    """Keep the JSONL protocol UTF-8 even on Windows consoles using GBK."""
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="strict")
+
+
 def validate_request(request: Any) -> None:
     if not isinstance(request, dict):
         raise ValueError("Vision request must be an object")
@@ -95,7 +104,9 @@ def validate_request(request: Any) -> None:
 
 
 def write_response(response: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
+    # ASCII JSON escapes are valid UTF-8 and remain lossless even if a frozen
+    # Windows runtime unexpectedly inherits a legacy console code page.
+    sys.stdout.write(json.dumps(response, ensure_ascii=True, separators=(",", ":")) + "\n")
     sys.stdout.flush()
 
 

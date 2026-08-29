@@ -741,8 +741,8 @@ describe("LibraryDatabase", () => {
         suiteVersion: 1,
         status: "success",
         dimensions: [
-          { key: "colorfulness", label: "色彩丰富度", score: 85.5 },
-          { key: "tonal_range", label: "明暗跨度", score: 70.0 }
+          { key: "colorfulness", label: "���", score: 85.5 },
+          { key: "tonal_range", label: "broken label", score: 70.0 }
         ],
         evaluatorVersion: "0.1.0",
         preprocessingFingerprint: "none",
@@ -783,6 +783,7 @@ describe("LibraryDatabase", () => {
       expect(cached).not.toBeNull();
       expect(cached?.dimensions).toHaveLength(2);
       expect(cached?.dimensions[0]?.score).toBe(85.5);
+      expect(cached?.dimensions.map((dimension) => dimension.label)).toEqual(["色彩丰富度", "明暗跨度"]);
 
       // Cache miss on different asset version
       const staleCheck = database.getCachedVisionEvaluation(

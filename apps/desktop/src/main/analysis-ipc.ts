@@ -5,6 +5,7 @@ import type { LibraryDatabase } from "@sanctuary/database";
 import {
   getVisionSuite,
   isAnalysisScope,
+  validateDimensionScores,
   type AnalysisApplyResult,
   type AnalysisJob,
   type AnalysisScopePreview,
@@ -179,6 +180,10 @@ export async function evaluateWorkVision(
     }
     const profile = await vision.computeTechnicalProfile(asset.path, 30_000);
     if (profile.status !== "success") throw new Error(profile.error ?? "本地技术画像计算失败");
+    const validatedProfile = validateDimensionScores(profile.dimensions, suite);
+    if (!validatedProfile.valid || !validatedProfile.normalized) {
+      throw new Error(`本地技术画像结果不完整：${validatedProfile.errors?.join("；") ?? "未知格式错误"}`);
+    }
     const now = new Date().toISOString();
     const result: VisionEvaluationResult = {
       id: randomUUID(),
@@ -189,7 +194,7 @@ export async function evaluateWorkVision(
       suiteId: suite.id,
       suiteVersion: suite.version,
       status: "success",
-      dimensions: profile.dimensions,
+      dimensions: validatedProfile.normalized,
       evaluatorVersion: profile.evaluatorVersion,
       preprocessingFingerprint: fingerprint,
       assetVersion: asset.updatedAt,

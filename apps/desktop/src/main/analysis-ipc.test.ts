@@ -31,7 +31,7 @@ describe("evaluateWorkVision", () => {
       suiteVersion: 1 as const,
       evaluatorVersion: "technical-profile-test",
       dimensions: [
-        { key: "colorfulness", label: "色彩丰富度", score: 61 },
+        { key: "colorfulness", label: "���", score: 61 },
         { key: "tonal_range", label: "明暗跨度", score: 62 },
         { key: "luminance_balance", label: "亮度均衡度", score: 63 },
         { key: "edge_density", label: "边缘密度", score: 64 },
@@ -56,6 +56,7 @@ describe("evaluateWorkVision", () => {
 
       expect(first.status).toBe("success");
       expect(first.dimensions).toHaveLength(6);
+      expect(first.dimensions[0]?.label).toBe("色彩丰富度");
       expect(second.id).toBe(first.id);
       expect(computeTechnicalProfile).toHaveBeenCalledTimes(1);
       expect(database.listVisionEvaluationsForWork(work.id)).toHaveLength(1);

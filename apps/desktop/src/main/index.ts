@@ -3020,13 +3020,17 @@ function resolveVisionProcess(runtimeModel?: ResolvedRuntimeModel | null): Visio
   const selectedHash = selectedModel?.files.find((file) => file.fileName === "model.onnx")?.sha256;
   const engine = selectedModel?.id ?? "wd-swinv2-tagger-v3";
   const engineVersion = selectedModel ? `${selectedModel.version}/ort-1.28.0` : "v3/e6774bff34d4/ort-1.28.0";
-  const modelEnvironment = selectedDirectory
-    ? {
-        WD_TAGGER_MODEL_DIR: selectedDirectory,
-        WD_TAGGER_MODEL_ID: engine,
-        ...(selectedHash ? { WD_TAGGER_MODEL_SHA256: selectedHash } : {})
-      }
-    : {};
+  const modelEnvironment = {
+    PYTHONUTF8: "1",
+    PYTHONIOENCODING: "utf-8",
+    ...(selectedDirectory
+      ? {
+          WD_TAGGER_MODEL_DIR: selectedDirectory,
+          WD_TAGGER_MODEL_ID: engine,
+          ...(selectedHash ? { WD_TAGGER_MODEL_SHA256: selectedHash } : {})
+        }
+      : {})
+  };
   if (app.isPackaged) {
     const executable = join(process.resourcesPath, "vision-runtime", "sanctuary-vision.exe");
     const modelDirectory = selectedDirectory ?? join(process.resourcesPath, "models", "wd-swinv2-tagger-v3");

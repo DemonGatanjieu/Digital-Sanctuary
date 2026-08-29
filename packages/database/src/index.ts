@@ -37,6 +37,7 @@ import type {
 import { SavedCollectionViewStore } from "./saved-collection-view-store.js";
 import {
   DEFAULT_ELEMENT_FILTER_SETTINGS,
+  getVisionSuite,
   isElementFilterSetting
 } from "@sanctuary/domain";
 
@@ -1537,7 +1538,13 @@ export class LibraryDatabase {
          VALUES (?, ?, ?, ?, ?)`
       );
       for (const dim of result.dimensions) {
-        insertDim.run(result.id, dim.key, dim.label, dim.score, dim.explanation ?? null);
+        insertDim.run(
+          result.id,
+          dim.key,
+          canonicalVisionDimensionLabel(result.suiteId, result.suiteVersion, dim.key, dim.label),
+          dim.score,
+          dim.explanation ?? null
+        );
       }
       this.#database.exec("COMMIT");
     } catch (error) {
@@ -1734,7 +1741,7 @@ export class LibraryDatabase {
       reasonCode: row.reason_code ?? undefined,
       dimensions: dimRows.map((d) => ({
         key: d.dimension_key,
-        label: d.label,
+        label: canonicalVisionDimensionLabel(row.suite_id, Number(row.suite_version), d.dimension_key, d.label),
         score: Number(d.score),
         explanation: d.explanation ?? undefined
       })),
@@ -2494,4 +2501,14 @@ function isWorkType(value: unknown): value is WorkType {
 function clampInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) return fallback;
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+function canonicalVisionDimensionLabel(
+  suiteId: string,
+  suiteVersion: number,
+  dimensionKey: string,
+  fallback: string
+): string {
+  const suite = getVisionSuite(suiteId, suiteVersion);
+  return suite?.dimensions.find((dimension) => dimension.key === dimensionKey)?.label ?? fallback;
 }

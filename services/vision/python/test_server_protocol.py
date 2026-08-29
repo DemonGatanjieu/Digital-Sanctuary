@@ -56,5 +56,39 @@ class VisionServerProtocolTests(unittest.TestCase):
         self.assertEqual(responses[1]["payload"]["status"], "complete")
 
 
+class VisionServerUtf8ProtocolTests(unittest.TestCase):
+    def test_technical_profile_labels_round_trip_as_utf8(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            image_path = Path(directory) / "彩色测试.png"
+            Image.new("RGB", (8, 8), color=(120, 80, 200)).save(image_path)
+            request = {
+                "version": 1,
+                "id": "technical-utf8",
+                "type": "compute-technical-profile",
+                "payload": {"imagePath": str(image_path)},
+            }
+            process = subprocess.Popen(
+                [sys.executable, str(Path(__file__).with_name("server.py"))],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="strict",
+            )
+            stdout, stderr = process.communicate(
+                json.dumps(request, ensure_ascii=False) + "\n",
+                timeout=30,
+            )
+
+        self.assertEqual(process.returncode, 0, stderr)
+        response = json.loads(stdout.strip())
+        self.assertEqual(response["type"], "compute-technical-profile-result")
+        self.assertEqual(
+            [dimension["label"] for dimension in response["payload"]["dimensions"]],
+            ["色彩丰富度", "明暗跨度", "亮度均衡度", "边缘密度", "清晰度代理值", "空间分布平衡"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
