@@ -59,7 +59,7 @@
 | **model-center-and-radar-runtime-phase-1** | `319d20e1bc69af21e988272f9fda9e28c5b738c7` | 2026-08-29 | 建立受控模型中心、断点下载与 SHA256 校验、WD 模型安全切换/失败回退，并打通画廊内一键本地技术画像及已配置外部模型的六维评价。 |
 | **local-adaptive-art-critic-runtime-phase-2** | `e695de746452a6055192234363b216d09f4f5254` | 2026-08-30 | 接通 Qwen3-VL 2B + llama.cpp 本地评论运行时、安全下载展开、标准/AI 自选六维、结构化质量门禁、90 秒超时与闲置资源释放；真实图片烟雾测试通过。 |
 | **radar-label-windows-encoding-fix** | `1cdef04` | 2026-08-30 | 固定 Python JSONL 为 UTF-8/ASCII 安全转义，并由领域套件规范化固定雷达标签；旧 SQLite 乱码缓存读取时自动恢复。 |
-
+| **adaptive-radar-contract-repair** | `25fa758` | 2026-08-30 | 兼容轻量视觉模型返回中文内部 key、理由字段别名和少量多选维度；保留严格内容门禁并将内部校验串改为用户可理解的提示。 |
 
 
 
