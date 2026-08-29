@@ -12,8 +12,11 @@ import onnxruntime
 from PIL import Image
 
 
-MODEL_NAME = "wd-swinv2-tagger-v3"
-MODEL_SHA256 = "e6774bff34d43bd49f75a47db4ef217dce701c9847b546523eb85ff6dbba1db1"
+MODEL_NAME = os.environ.get("WD_TAGGER_MODEL_ID", "wd-swinv2-tagger-v3").strip() or "wd-swinv2-tagger-v3"
+MODEL_SHA256 = os.environ.get(
+    "WD_TAGGER_MODEL_SHA256",
+    "e6774bff34d43bd49f75a47db4ef217dce701c9847b546523eb85ff6dbba1db1",
+).strip().lower()
 MIN_OUTPUT_CONFIDENCE = 0.05
 
 

@@ -47,6 +47,13 @@ export interface VisionEvaluationResult {
   updatedAt: string;
 }
 
+export interface VisionEvaluationRequest {
+  workId: string;
+  suiteId: string;
+  providerId?: ExternalVisionProviderId | undefined;
+  force?: boolean | undefined;
+}
+
 export interface AdaptiveHighlight {
   key: string;
   label: string;

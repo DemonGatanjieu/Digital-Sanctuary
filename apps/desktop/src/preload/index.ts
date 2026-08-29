@@ -26,6 +26,7 @@ import type {
   WorkDeletionResult,
   ExternalVisionPublicConfig,
   VisionEvaluationResult,
+  VisionEvaluationRequest,
   TypographyFontDescriptor,
   TypographyPreferencesV1,
   TriageQueryResultItem,
@@ -37,7 +38,10 @@ import type {
   ComfyUiJob,
   ComfyUiSendRequest,
   ComfyWorkflowTemplateSummary,
-  GenerationProvenance
+  GenerationProvenance,
+  ModelActivationResult,
+  ModelCenterSnapshot,
+  ModelDownloadProgress
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -173,6 +177,15 @@ export interface SanctuaryApi {
   deleteExternalVisionApiKey(providerId: string): Promise<void>;
   testExternalVisionConnection(providerId: string): Promise<{ success: boolean; latencyMs: number; error?: string }>;
   listVisionEvaluationsForWork(workId: string): Promise<VisionEvaluationResult[]>;
+  evaluateWorkVision(request: VisionEvaluationRequest): Promise<VisionEvaluationResult>;
+  getModelCenterSnapshot(): Promise<ModelCenterSnapshot>;
+  installModel(modelId: string): Promise<ModelCenterSnapshot>;
+  cancelModelDownload(modelId: string): Promise<boolean>;
+  removeModel(modelId: string): Promise<ModelCenterSnapshot>;
+  activateModel(modelId: string): Promise<ModelActivationResult>;
+  openModelHomepage(modelId: string): Promise<boolean>;
+  openModelsDirectory(): Promise<boolean>;
+  onModelDownloadProgress(listener: (event: ModelDownloadProgress) => void): () => void;
   getPromptWorkspace(engine: string, engineVersion: string): Promise<PromptWorkspacePreferences>;
   savePromptWorkspace(engine: string, engineVersion: string, preferences: PromptWorkspacePreferences): Promise<PromptWorkspacePreferences>;
   copyPromptText(text: string): Promise<boolean>;
@@ -343,6 +356,27 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("vision:test-connection", providerId) as Promise<{ success: boolean; latencyMs: number; error?: string }>,
   listVisionEvaluationsForWork: (workId) =>
     ipcRenderer.invoke("vision:list-evaluations", workId) as Promise<VisionEvaluationResult[]>,
+  evaluateWorkVision: (request) =>
+    ipcRenderer.invoke("vision:evaluate-work", request) as Promise<VisionEvaluationResult>,
+  getModelCenterSnapshot: () =>
+    ipcRenderer.invoke("models:snapshot") as Promise<ModelCenterSnapshot>,
+  installModel: (modelId) =>
+    ipcRenderer.invoke("models:install", modelId) as Promise<ModelCenterSnapshot>,
+  cancelModelDownload: (modelId) =>
+    ipcRenderer.invoke("models:cancel", modelId) as Promise<boolean>,
+  removeModel: (modelId) =>
+    ipcRenderer.invoke("models:remove", modelId) as Promise<ModelCenterSnapshot>,
+  activateModel: (modelId) =>
+    ipcRenderer.invoke("models:activate", modelId) as Promise<ModelActivationResult>,
+  openModelHomepage: (modelId) =>
+    ipcRenderer.invoke("models:open-homepage", modelId) as Promise<boolean>,
+  openModelsDirectory: () =>
+    ipcRenderer.invoke("models:open-directory") as Promise<boolean>,
+  onModelDownloadProgress: (listener) => {
+    const wrapped = (_event: Electron.IpcRendererEvent, data: ModelDownloadProgress) => listener(data);
+    ipcRenderer.on("models:download-progress", wrapped);
+    return () => ipcRenderer.removeListener("models:download-progress", wrapped);
+  },
   getPromptWorkspace: (engine, engineVersion) =>
     ipcRenderer.invoke("prompt-bridge:get-workspace", engine, engineVersion) as Promise<PromptWorkspacePreferences>,
   savePromptWorkspace: (engine, engineVersion, preferences) =>

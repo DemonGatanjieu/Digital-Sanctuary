@@ -3,6 +3,7 @@ import type {
   ExternalVisionPublicConfig,
   VisionSuiteDefinition
 } from "@sanctuary/domain";
+import { validateExternalVisionPublicConfig } from "@sanctuary/domain";
 import { generateStandardTestFixtures } from "../../../../../services/vision/src/fixtures.js";
 import { VisionSecretStore } from "./vision-secret-store.js";
 import { type PreparedVisionImage } from "./vision-image-preprocessor.js";
@@ -12,13 +13,20 @@ import { OpenAiVisionAdapter } from "./adapters/openai-adapter.js";
 import { GeminiVisionAdapter } from "./adapters/gemini-adapter.js";
 import { AnthropicVisionAdapter } from "./adapters/anthropic-adapter.js";
 
+export interface ExternalVisionConfigPersistence {
+  read(providerId: ExternalVisionProviderId): ExternalVisionPublicConfig | null;
+  write(config: ExternalVisionPublicConfig): void;
+}
+
 export class ExternalVisionService {
   readonly #secretStore: VisionSecretStore;
   readonly #adapters = new Map<string, ExternalVisionAdapter>();
   readonly #configs = new Map<string, ExternalVisionPublicConfig>();
+  readonly #persistence: ExternalVisionConfigPersistence | undefined;
 
-  constructor(secretStore: VisionSecretStore) {
+  constructor(secretStore: VisionSecretStore, persistence?: ExternalVisionConfigPersistence) {
     this.#secretStore = secretStore;
+    this.#persistence = persistence;
 
     // Register adapters
     this.registerAdapter(new FakeVisionAdapter());
@@ -68,6 +76,14 @@ export class ExternalVisionService {
       maxConcurrency: 1,
       maxLongEdge: 1568
     });
+
+    for (const provider of ["openai", "openai_compatible", "gemini", "anthropic"] as const) {
+      const persisted = this.#persistence?.read(provider);
+      const validated = persisted ? validateExternalVisionPublicConfig(persisted) : null;
+      if (validated?.valid && validated.normalized?.provider === provider) {
+        this.#configs.set(provider, validated.normalized);
+      }
+    }
   }
 
   registerAdapter(adapter: ExternalVisionAdapter): void {
@@ -97,11 +113,17 @@ export class ExternalVisionService {
   }
 
   savePublicConfig(config: ExternalVisionPublicConfig, newApiKey?: string): void {
-    this.#configs.set(config.id, {
-      ...config,
+    const validated = validateExternalVisionPublicConfig(config);
+    if (!validated.valid || !validated.normalized || validated.normalized.id !== validated.normalized.provider) {
+      throw new Error(validated.errors?.join("; ") || "Invalid external vision configuration");
+    }
+    const normalized = validated.normalized;
+    const saved: ExternalVisionPublicConfig = {
+      ...normalized,
       hasApiKey: newApiKey ? true : this.#secretStore.hasApiKey(config.provider),
       keyHint: newApiKey ? undefined : (config.keyHint ?? undefined)
-    });
+    };
+    this.#configs.set(normalized.id, saved);
 
     if (newApiKey !== undefined) {
       if (newApiKey.trim()) {
@@ -110,17 +132,24 @@ export class ExternalVisionService {
         this.#secretStore.deleteApiKey(config.provider);
       }
     }
+    this.#persistence?.write({
+      ...saved,
+      hasApiKey: false,
+      keyHint: undefined
+    });
   }
 
   deleteApiKey(providerId: string): void {
     this.#secretStore.deleteApiKey(providerId);
     const existing = this.#configs.get(providerId);
     if (existing) {
-      this.#configs.set(providerId, {
+      const updated: ExternalVisionPublicConfig = {
         ...existing,
         hasApiKey: false,
         keyHint: undefined
-      });
+      };
+      this.#configs.set(providerId, updated);
+      this.#persistence?.write(updated);
     }
   }
 

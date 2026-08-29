@@ -1,16 +1,21 @@
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import type { IpcMain } from "electron";
 import type { LibraryDatabase } from "@sanctuary/database";
 import {
+  getVisionSuite,
   isAnalysisScope,
   type AnalysisApplyResult,
   type AnalysisJob,
   type AnalysisScopePreview,
   type ExternalVisionPublicConfig,
+  type VisionEvaluationRequest,
   type VisionEvaluationResult
 } from "@sanctuary/domain";
 import type { VisionClient } from "./vision-client.js";
 import type { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import type { ExternalVisionService } from "./vision/external-vision-service.js";
+import { prepareVisionImage } from "./vision/vision-image-preprocessor.js";
 import { parseWorkId } from "../shared/library-query.js";
 
 export function registerAnalysisIpc(
@@ -130,4 +135,134 @@ export function registerAnalysisIpc(
     if (!workId) return [];
     return database.listVisionEvaluationsForWork(workId);
   });
+
+  ipc.handle("vision:evaluate-work", async (_event, value: unknown): Promise<VisionEvaluationResult> => {
+    const request = parseVisionEvaluationRequest(value);
+    return evaluateWorkVision(request, database, vision, externalVisionService);
+  });
+}
+
+export async function evaluateWorkVision(
+  request: VisionEvaluationRequest,
+  database: LibraryDatabase,
+  vision: VisionClient,
+  externalVisionService?: ExternalVisionService
+): Promise<VisionEvaluationResult> {
+  const suite = getVisionSuite(request.suiteId);
+  if (!suite) throw new Error("未知的视觉评价方案");
+
+  const work = database.getWork(request.workId);
+  if (!work) throw new Error("画廊中找不到这件作品");
+  const asset =
+    (work.coverAssetId ? work.assets.find((candidate) => candidate.id === work.coverAssetId) : undefined) ??
+    work.assets.find((candidate) => candidate.mediaType === "image" && candidate.fileState === "available") ??
+    work.assets[0];
+  if (!asset || asset.mediaType !== "image" || asset.fileState !== "available" || !existsSync(asset.path)) {
+    throw new Error("作品原图不在本地，暂时无法生成画像");
+  }
+
+  if (suite.kind === "local_technical_profile") {
+    const fingerprint = "technical_profile_v1";
+    if (!request.force) {
+      const cached = database.getCachedVisionEvaluation(
+        asset.id,
+        suite.kind,
+        suite.id,
+        suite.version,
+        fingerprint,
+        asset.updatedAt
+      );
+      if (cached) return cached;
+    }
+    const profile = await vision.computeTechnicalProfile(asset.path, 30_000);
+    if (profile.status !== "success") throw new Error(profile.error ?? "本地技术画像计算失败");
+    const now = new Date().toISOString();
+    const result: VisionEvaluationResult = {
+      id: randomUUID(),
+      workId: work.id,
+      assetId: asset.id,
+      scope: "cover_asset",
+      kind: suite.kind,
+      suiteId: suite.id,
+      suiteVersion: suite.version,
+      status: "success",
+      dimensions: profile.dimensions,
+      evaluatorVersion: profile.evaluatorVersion,
+      preprocessingFingerprint: fingerprint,
+      assetVersion: asset.updatedAt,
+      createdAt: now,
+      updatedAt: now
+    };
+    database.saveVisionEvaluationResult(result);
+    return result;
+  }
+
+  if (suite.kind !== "external_fixed_suite" || !externalVisionService) {
+    throw new Error("这个评价方案的运行时尚未接通");
+  }
+  if (!request.providerId) throw new Error("请选择一个视觉评论模型");
+  const config = externalVisionService.getPublicConfig(request.providerId);
+  if (!config.enabled) throw new Error("该视觉评论模型尚未启用，请先在设置中完成连接");
+
+  const prepared = await prepareVisionImage(asset.path, { maxLongEdge: config.maxLongEdge });
+  const fingerprint = `${prepared.fingerprint}:${request.providerId}:${config.model}`;
+  try {
+    if (!request.force) {
+      const cached = database.getCachedVisionEvaluation(
+        asset.id,
+        suite.kind,
+        suite.id,
+        suite.version,
+        fingerprint,
+        asset.updatedAt
+      );
+      if (cached) return cached;
+    }
+    const evaluated = await externalVisionService.analyzeImage(request.providerId, prepared, suite);
+    const now = new Date().toISOString();
+    const result: VisionEvaluationResult = {
+      id: randomUUID(),
+      workId: work.id,
+      assetId: asset.id,
+      scope: "cover_asset",
+      kind: suite.kind,
+      suiteId: suite.id,
+      suiteVersion: suite.version,
+      status: evaluated.status,
+      dimensions: evaluated.dimensions,
+      evaluatorVersion: `${request.providerId}:${config.model}`,
+      preprocessingFingerprint: fingerprint,
+      assetVersion: asset.updatedAt,
+      createdAt: now,
+      updatedAt: now,
+      ...(evaluated.reasonCode ? { reasonCode: evaluated.reasonCode } : {}),
+      ...(evaluated.summary ? { summary: evaluated.summary } : {}),
+      providerId: request.providerId,
+      modelId: config.model,
+      promptVersion: `${suite.id}@v${suite.version}`
+    };
+    if (result.status === "success") database.saveVisionEvaluationResult(result);
+    return result;
+  } finally {
+    prepared.cleanup();
+  }
+}
+
+function parseVisionEvaluationRequest(value: unknown): VisionEvaluationRequest {
+  if (!value || typeof value !== "object") throw new Error("无效的视觉评价请求");
+  const candidate = value as Record<string, unknown>;
+  const workId = parseWorkId(candidate.workId);
+  if (!workId || typeof candidate.suiteId !== "string" || candidate.suiteId.length > 80) {
+    throw new Error("无效的视觉评价请求");
+  }
+  const providerId = typeof candidate.providerId === "string" ? candidate.providerId : undefined;
+  if (providerId && !["openai", "gemini", "anthropic", "openai_compatible"].includes(providerId)) {
+    throw new Error("不支持的视觉评论模型");
+  }
+  return {
+    workId,
+    suiteId: candidate.suiteId,
+    ...(providerId ? { providerId: providerId as VisionEvaluationRequest["providerId"] } : {}),
+    force: candidate.force === true
+  };
 }

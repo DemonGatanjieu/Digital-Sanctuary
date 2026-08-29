@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import type { ArtworkRecord, VisionEvaluationResult } from "@sanctuary/domain";
 import { artworkImageUrl } from "./ArtworkCard";
-import { VisionRadarChart } from "./VisionRadarChart";
+import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 import { artworkLibraryWorkId, artworkPageIndex } from "./gallery-model";
 
@@ -267,20 +267,11 @@ export function ArtworkLightbox({
               ✕
             </button>
           </div>
-          <div className="radar-drawer-content">
-            {evaluations.length === 0 ? (
-              <div className="radar-drawer-empty">
-                <p>该画作尚未生成视觉雷达评估。</p>
-                <p className="hint">前往“任务中心”选择技术画像或专业套件即可一键生成。</p>
-              </div>
-            ) : (
-              evaluations.map((ev) => (
-                <div key={ev.id} className="radar-drawer-item">
-                  <VisionRadarChart evaluation={ev} size={260} />
-                </div>
-              ))
-            )}
-          </div>
+          <RadarEvaluationPanel
+            workId={libraryWorkId}
+            evaluations={evaluations}
+            onEvaluationsChange={setEvaluations}
+          />
         </aside>
       )}
 

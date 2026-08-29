@@ -15,7 +15,7 @@ import { DialogOverlay } from "./DialogOverlay";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
 import { InteractiveCompassDial } from "./InteractiveCompassDial";
-import { VisionRadarChart } from "./VisionRadarChart";
+import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 
 
@@ -727,18 +727,11 @@ function WorkLightbox({ work, onClose, onGenerated }: { work: WorkRecord; onClos
             <h3>多维视觉画像</h3>
             <button type="button" className="radar-drawer-close" onClick={() => setShowRadar(false)} aria-label="关闭雷达图">✕</button>
           </div>
-          {evaluations.length === 0 ? (
-            <div className="radar-drawer-empty">
-              <p>暂无多维视觉画像数据</p>
-              <p className="hint">可在画廊或模型整理中对该作品执行深度视觉评估</p>
-            </div>
-          ) : (
-            <div className="radar-drawer-content">
-              {evaluations.map((ev) => (
-                <VisionRadarChart key={ev.id} evaluation={ev} size={260} />
-              ))}
-            </div>
-          )}
+          <RadarEvaluationPanel
+            workId={work.id}
+            evaluations={evaluations}
+            onEvaluationsChange={setEvaluations}
+          />
         </aside>
       )}
 

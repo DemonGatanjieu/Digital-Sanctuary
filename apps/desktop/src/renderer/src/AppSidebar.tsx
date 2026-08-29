@@ -12,7 +12,7 @@ export interface AppStatus {
   modelBacked: boolean;
 }
 
-export type ActiveView = "gallery" | "organize" | "explore" | "settings";
+export type ActiveView = "gallery" | "organize" | "models" | "explore" | "settings";
 
 export function AppSidebar({
   activeView,
@@ -65,6 +65,9 @@ export function AppSidebar({
         </button>
         <button aria-current={activeView === "organize" ? "page" : undefined} className={`nav-item ${activeView === "organize" ? "active" : ""}`} data-nav="organize" title="智能清洗排查与模型整理工坊" onClick={() => onViewChange("organize")}>
           智能工坊
+        </button>
+        <button aria-current={activeView === "models" ? "page" : undefined} className={`nav-item ${activeView === "models" ? "active" : ""}`} data-nav="models" onClick={() => onViewChange("models")}>
+          模型中心
         </button>
         <button aria-current={activeView === "explore" ? "page" : undefined} className={`nav-item ${activeView === "explore" ? "active" : ""}`} data-nav="explore" onClick={() => onViewChange("explore")}>
           探索

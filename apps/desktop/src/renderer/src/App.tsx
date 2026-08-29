@@ -19,6 +19,7 @@ import { BookmarkDownloadDialog } from "./BookmarkDownloadDialog";
 import { ElementInspectorDrawer, type ElementInspectorTarget } from "./ElementInspectorDrawer";
 import { SettingsView } from "./SettingsView";
 import { AnalysisView } from "./AnalysisView";
+import { ModelCenterView } from "./ModelCenterView";
 import { ExploreView, initialExploreState } from "./ExploreView";
 import { AppSidebar, type ActiveView, type AppStatus } from "./AppSidebar";
 import { GalleryView, type GalleryMode } from "./GalleryView";
@@ -490,6 +491,8 @@ export function App() {
             onApplied={refreshLibrary}
             onError={showError}
           />
+        ) : activeView === "models" ? (
+          <ModelCenterView onError={showError} />
         ) : activeView === "settings" ? (
           <SettingsView
             settings={filterSettings}

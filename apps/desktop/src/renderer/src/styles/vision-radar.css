@@ -177,6 +177,53 @@
   gap: 16px;
 }
 
+.radar-evaluation-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radar-evaluation-actions {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(167, 139, 250, 0.24);
+  border-radius: 12px;
+  background: rgba(124, 58, 237, 0.1);
+}
+
+.radar-evaluation-actions--subjective {
+  border-color: rgba(244, 114, 182, 0.2);
+  background: rgba(190, 24, 93, 0.08);
+}
+
+.radar-evaluation-action-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.radar-evaluation-action-copy strong {
+  color: #f8fafc;
+  font-size: 12px;
+}
+
+.radar-evaluation-action-copy span {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.radar-evaluation-error {
+  margin: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(251, 113, 133, 0.3);
+  border-radius: 10px;
+  color: #fecdd3;
+  background: rgba(159, 18, 57, 0.18);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 /* Vision Settings Section */
 .vision-settings-section {
   display: flex;

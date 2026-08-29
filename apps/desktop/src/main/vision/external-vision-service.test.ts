@@ -44,6 +44,29 @@ describe("ExternalVisionService and FakeVisionAdapter", () => {
     expect((publicConfig as any).apiKey).toBeUndefined();
   });
 
+  it("restores public provider settings without persisting secrets", () => {
+    const persisted = new Map<string, import("@sanctuary/domain").ExternalVisionPublicConfig>();
+    const persistence = {
+      read: (providerId: import("@sanctuary/domain").ExternalVisionProviderId) => persisted.get(providerId) ?? null,
+      write: (config: import("@sanctuary/domain").ExternalVisionPublicConfig) => { persisted.set(config.provider, config); }
+    };
+    const first = new ExternalVisionService(new VisionSecretStore(), persistence);
+    first.savePublicConfig({
+      id: "gemini",
+      provider: "gemini",
+      model: "gemini-vision-test",
+      hasApiKey: false,
+      enabled: true,
+      maxConcurrency: 2,
+      maxLongEdge: 1024
+    }, "secret-value");
+
+    expect(persisted.get("gemini")).toMatchObject({ enabled: true, model: "gemini-vision-test", hasApiKey: false });
+    expect(persisted.get("gemini")?.keyHint).toBeUndefined();
+    const restored = new ExternalVisionService(new VisionSecretStore(), persistence);
+    expect(restored.getPublicConfig("gemini")).toMatchObject({ enabled: true, model: "gemini-vision-test" });
+  });
+
   it("analyzes image with FakeVisionAdapter using FINE_ART_SUITE_V1", async () => {
     fakeAdapter.setMode("success");
     const result = await service.analyzeImage("fake", sampleImage, FINE_ART_SUITE_V1);

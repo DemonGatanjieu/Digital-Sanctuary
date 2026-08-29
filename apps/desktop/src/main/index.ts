@@ -129,6 +129,8 @@ import { registerTypographyIpc } from "./typography/typography-ipc.js";
 import { registerPromptBridgeIpc } from "./prompt-bridge-ipc.js";
 import { ComfyUiService } from "./comfyui/service.js";
 import { registerComfyUiIpc } from "./comfyui/ipc.js";
+import { ModelCenterService, type ResolvedRuntimeModel } from "./model-center/model-center-service.js";
+import { registerModelCenterIpc } from "./model-center/model-center-ipc.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -148,6 +150,7 @@ let themeStore: ThemeStoreService | undefined;
 let externalVisionService: ExternalVisionService | undefined;
 let fontService: FontService | undefined;
 let comfyUiService: ComfyUiService | undefined;
+let modelCenter: ModelCenterService | undefined;
 let mainWindow: BrowserWindow | undefined;
 let exploreView: WebContentsView | undefined;
 let exploreBounds: ExploreBounds | undefined;
@@ -252,7 +255,18 @@ if (!hasSingleInstanceLock) {
     } catch (error) {
       console.error("[vision] unable to prepare startup self-test image", error);
     }
-    vision = new VisionClient({ ...resolveVisionProcess(), startupProbeImage });
+    modelCenter = new ModelCenterService({
+      modelsRoot: resolveLocalModelsRoot(userDataPath),
+      bundledModels: {
+        "wd-swinv2-tagger-v3": app.isPackaged
+          ? join(process.resourcesPath, "models", "wd-swinv2-tagger-v3")
+          : resolve(moduleDirectory, "../../../../models/wd-swinv2-tagger-v3")
+      },
+      readActiveModelId: (capability) => database?.getPreference<string>(`models.active.${capability}`) ?? null,
+      writeActiveModelId: (capability, modelId) => database?.setPreference(`models.active.${capability}`, modelId)
+    });
+    const activeTagger = await modelCenter.resolveActiveRuntimeModel("element_tagging");
+    vision = new VisionClient({ ...resolveVisionProcess(activeTagger), startupProbeImage });
     vision.onStateChange((snapshot) => {
       console.info(`[vision] runtime state=${snapshot.state} provider=${snapshot.executionProvider}`);
       syncExploreProtectionVisibility();
@@ -281,7 +295,11 @@ if (!hasSingleInstanceLock) {
         : {}),
     });
     externalVisionService = new ExternalVisionService(
-      new VisionSecretStore(join(userDataPath, "secrets"))
+      new VisionSecretStore(join(userDataPath, "secrets")),
+      {
+        read: (providerId) => database?.getPreference(`vision.config.${providerId}`) ?? null,
+        write: (config) => database?.setPreference(`vision.config.${config.provider}`, config)
+      }
     );
     fontService = new FontService(userDataPath);
     registerFontProtocol(session.defaultSession, fontService);
@@ -553,8 +571,39 @@ function localImageUrl(imagePath: string): string {
 }
 
 function registerIpc(): void {
-  if (!database || !vision || !themeManager || !themeStore || !comfyUiService) throw new Error("Application services are unavailable");
+  if (!database || !vision || !themeManager || !themeStore || !comfyUiService || !modelCenter) throw new Error("Application services are unavailable");
   registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService);
+  registerModelCenterIpc({
+    ipc: ipcMain,
+    service: modelCenter,
+    getWindow: () => mainWindow,
+    onActivate: async (modelId) => {
+      if (!vision || !modelCenter || !database) return false;
+      const runtime = await modelCenter.resolveRuntimeModel(modelId);
+      if (!runtime || runtime.entry.capability !== "element_tagging") return false;
+      const previousRuntime = await modelCenter.resolveActiveRuntimeModel("element_tagging");
+      remoteReviewCache.clear();
+      remoteReviewPending.clear();
+      exploreReviewGeneration += 1;
+      try {
+        await vision.reconfigure({
+          ...resolveVisionProcess(runtime),
+          startupProbeImage: join(app.getPath("userData"), ".vision-startup-probe.png")
+        });
+      } catch (error) {
+        if (previousRuntime && previousRuntime.entry.id !== runtime.entry.id) {
+          await vision.reconfigure({
+            ...resolveVisionProcess(previousRuntime),
+            startupProbeImage: join(app.getPath("userData"), ".vision-startup-probe.png")
+          }).catch(() => undefined);
+        }
+        throw error;
+      }
+      database.invalidateAssessmentsExcept(vision.engine);
+      mainWindow?.webContents.send("app:status-changed", currentApplicationStatus());
+      return true;
+    }
+  });
   registerPromptBridgeIpc(ipcMain, database);
   registerComfyUiIpc({
     ipc: ipcMain,
@@ -2948,17 +2997,29 @@ function parseThemeRepository(value: string | undefined): { owner: string; repos
   return match?.[1] && match[2] ? { owner: match[1], repository: match[2] } : null;
 }
 
-function resolveVisionProcess(): VisionProcessOptions {
+function resolveVisionProcess(runtimeModel?: ResolvedRuntimeModel | null): VisionProcessOptions {
+  const selectedModel = runtimeModel?.entry;
+  const selectedDirectory = runtimeModel?.modelDirectory;
+  const selectedHash = selectedModel?.files.find((file) => file.fileName === "model.onnx")?.sha256;
+  const engine = selectedModel?.id ?? "wd-swinv2-tagger-v3";
+  const engineVersion = selectedModel ? `${selectedModel.version}/ort-1.28.0` : "v3/e6774bff34d4/ort-1.28.0";
+  const modelEnvironment = selectedDirectory
+    ? {
+        WD_TAGGER_MODEL_DIR: selectedDirectory,
+        WD_TAGGER_MODEL_ID: engine,
+        ...(selectedHash ? { WD_TAGGER_MODEL_SHA256: selectedHash } : {})
+      }
+    : {};
   if (app.isPackaged) {
     const executable = join(process.resourcesPath, "vision-runtime", "sanctuary-vision.exe");
-    const modelDirectory = join(process.resourcesPath, "models", "wd-swinv2-tagger-v3");
+    const modelDirectory = selectedDirectory ?? join(process.resourcesPath, "models", "wd-swinv2-tagger-v3");
     return {
       executable,
       args: [],
-      engine: "wd-swinv2-tagger-v3",
-      engineVersion: "v3/e6774bff34d4/ort-1.28.0",
+      engine,
+      engineVersion,
       executionProvider: "CPU",
-      env: { WD_TAGGER_MODEL_DIR: modelDirectory }
+      env: { ...modelEnvironment, WD_TAGGER_MODEL_DIR: modelDirectory }
     };
   }
 
@@ -2972,17 +3033,18 @@ function resolveVisionProcess(): VisionProcessOptions {
   const python = join(projectRoot, ".venv", "Scripts", "python.exe");
   const gpuPython = join(projectRoot, ".venv-gpu", "Scripts", "python.exe");
   const pythonServer = join(projectRoot, "services", "vision", "python", "server.py");
-  const wdModel = join(projectRoot, "models", "wd-swinv2-tagger-v3", "model.onnx");
-  const wdTags = join(projectRoot, "models", "wd-swinv2-tagger-v3", "selected_tags.csv");
+  const modelDirectory = selectedDirectory ?? join(projectRoot, "models", "wd-swinv2-tagger-v3");
+  const wdModel = join(modelDirectory, "model.onnx");
+  const wdTags = join(modelDirectory, "selected_tags.csv");
 
   if (existsSync(gpuPython) && existsSync(pythonServer) && existsSync(wdModel) && existsSync(wdTags)) {
     return {
       executable: gpuPython,
       args: [pythonServer],
-      engine: "wd-swinv2-tagger-v3",
-      engineVersion: "v3/e6774bff34d4/ort-1.28.0",
+      engine,
+      engineVersion,
       executionProvider: "CUDA（CPU 回退）",
-      env: { SANCTUARY_ONNX_PROVIDER: "cuda" }
+      env: { ...modelEnvironment, WD_TAGGER_MODEL_DIR: modelDirectory, SANCTUARY_ONNX_PROVIDER: "cuda" }
     };
   }
 
@@ -2990,9 +3052,10 @@ function resolveVisionProcess(): VisionProcessOptions {
     return {
       executable: python,
       args: [pythonServer],
-      engine: "wd-swinv2-tagger-v3",
-      engineVersion: "v3/e6774bff34d4/ort-1.28.0",
-      executionProvider: "CPU"
+      engine,
+      engineVersion,
+      executionProvider: "CPU",
+      env: { ...modelEnvironment, WD_TAGGER_MODEL_DIR: modelDirectory }
     };
   }
 
@@ -3003,4 +3066,11 @@ function resolveVisionProcess(): VisionProcessOptions {
     engineVersion: "0.1.0",
     env: { ELECTRON_RUN_AS_NODE: "1" }
   };
+}
+
+function resolveLocalModelsRoot(userDataPath: string): string {
+  const localAppData = process.env.LOCALAPPDATA;
+  return localAppData
+    ? join(localAppData, "digital-sanctuary", "models")
+    : join(userDataPath, "models");
 }

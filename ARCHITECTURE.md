@@ -155,6 +155,7 @@ flowchart LR
 - `library-ipc.ts`：作品查询、详情读取和缩略图批任务 IPC；
 - `saved-collection-view-ipc.ts` / `packages/database/src/saved-collection-view-store.ts`：分类组合输入校验、IPC 注册与 SQLite 持久化；
 - `analysis-ipc.ts` / `analysis-job-runner.ts`：显式分析 API 与严格串行、可取消的执行器；
+- `model-center/catalog.ts` / `model-center/model-center-service.ts`：受信任模型清单、断点下载、文件大小与 SHA256 校验、受控安装目录、能力分组和当前模型切换；
 - `explore-policy.ts`、`explore-review-queue.ts`、`pixiv-dom-adapter.ts`：导航/广告策略、审查队列和远程 DOM 适配；
 - `shared/pixiv-download.ts` / `shared/bounded-concurrency.ts`：Pixiv 响应解析、下载状态和并发原语；
 - `thumbnail-service.ts`、`vision-client.ts`：缩略图缓存和模型子进程协议。
@@ -235,6 +236,16 @@ CREATE TABLE remote_image_reviews (
 - 每个返回输出建立独立可信画廊作品和 `generation_provenance`；来源删除时相应来源记录级联清理，但不会让探索规则反向作用于生成资源。
 - 区域级遮罩未接入生产。当前 WD Tagger 没有坐标，准确率、显存与延迟门槛见 `docs/research/REGION_LEVEL_MASKING_GATE_2026-08-24.md`。
 
+### 8.2 模型中心与视觉雷达运行边界
+
+- 安装包继续只携带日常所需的 WD SwinV2 基础模型；模型中心不会在首次启动时静默下载数 GB 权重。其他模型必须由用户明确点击安装。
+- 可下载模型来自代码内受控清单，下载地址必须是 HTTPS，文件名、声明大小和 SHA256 都通过后才能从暂存目录进入正式模型目录。中断保留 `.part` 文件供续传；不能把任意 URL 或任意磁盘路径交给 Renderer。
+- `element_tagging` 模型切换会重启同一个视觉客户端并执行 ready 握手与启动探针。新模型启动失败时尝试恢复原模型；已保存选择丢失或文件不完整时自动回退内置模型。
+- 画廊大图的“本地技术画像”是用户主动触发的确定性图像统计，只保存到 `vision_evaluation_results`，不影响画廊显示、探索规则或个人偏好。
+- “AI 美术六维”只在用户已启用外部视觉服务时允许执行，结果永久记录 provider、model、套件、提示词与预处理指纹。失败结果不进入长期缓存。
+- 本地六维评论模型和轻量美感分类头目前只进入受信任目录展示，标记为“运行时待接入”；在推理后端、结构化输出校验和资源门禁完成前不得伪装成可安装或可启用。
+- 详细能力矩阵、落盘规则和后续门槛见 `docs/design/MODEL_CENTER_AND_RADAR_RUNTIME.md`。
+
 ## 9. 近期架构里程碑
 
 1. **已完成**：元素黑名单、远程失败闭合、持久化审查缓存、占位层和一次性查看。
@@ -254,5 +265,6 @@ CREATE TABLE remote_image_reviews (
 15. **已完成并实机验收**：画廊可信显示、模型 ready 握手与启动推理、探索全局故障门、视口审查重新启用，以及“这张不该隐藏”的具体页例外、按标签渐进校准和即时撤销。
 16. **已完成并实机验收**：探索双向个人偏好学习；包含“少看类似”候选标签层、具体页隐藏、重复证据门槛、个人组合分、模型版本隔离画像、透明数值反馈、撤销及设置页启停/重置。本地画廊继续完全不读取该画像。
 17. **已完成并实机验收**：元素透视三页工作区与 ComfyUI 本地桥接；包含识别把握说明、本图临时三态、模型适配提示词、复制/负向词库/预设、本机连接与工作流模板、持久生成任务、多输出回收、可信入库和来源查看。区域级遮罩独立评审未过门，保持不实现。
+18. **已完成第一阶段，待实机验收**：模型中心、受控下载校验、WD 系列模型热切换与失败回退，以及画廊内一键生成本地技术雷达画像；外部已配置模型可生成固定六维评价。本地 Qwen 评论运行时与轻量美感分类头仍按“未接入”显示，不纳入完成项。
 
 详细任务与止损条件见 `docs/plans/ACTIVE_ROADMAP.md`，验收步骤见 `docs/handoff/02_VERIFICATION_CHECKLIST.md`。

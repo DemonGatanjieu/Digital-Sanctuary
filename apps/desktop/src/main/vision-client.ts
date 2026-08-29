@@ -42,9 +42,7 @@ export class VisionClient {
   #child: ChildProcessWithoutNullStreams | undefined;
   readonly #pending = new Map<string, PendingRequest>();
   readonly #listeners = new Set<(snapshot: VisionRuntimeSnapshot) => void>();
-  readonly #options: VisionProcessOptions;
-  readonly engine: string;
-  readonly engineVersion: string;
+  #options: VisionProcessOptions;
   executionProvider: string;
   #state: VisionRuntimeState = "starting";
   #error = "";
@@ -53,10 +51,16 @@ export class VisionClient {
 
   constructor(options: VisionProcessOptions) {
     this.#options = options;
-    this.engine = options.engine;
-    this.engineVersion = options.engineVersion;
     this.executionProvider = options.executionProvider ?? "unknown";
     this.#spawn();
+  }
+
+  get engine(): string {
+    return this.#options.engine;
+  }
+
+  get engineVersion(): string {
+    return this.#options.engineVersion;
   }
 
   get available(): boolean {
@@ -142,6 +146,15 @@ export class VisionClient {
   async restart(timeoutMs = 45_000): Promise<VisionRuntimeSnapshot> {
     this.#initialization = undefined;
     this.#terminate(new Error("Vision runtime restarting"));
+    this.#spawn();
+    return this.initialize(timeoutMs);
+  }
+
+  async reconfigure(options: VisionProcessOptions, timeoutMs = 45_000): Promise<VisionRuntimeSnapshot> {
+    this.#initialization = undefined;
+    this.#terminate(new Error("Vision runtime changing model"));
+    this.#options = options;
+    this.executionProvider = options.executionProvider ?? "unknown";
     this.#spawn();
     return this.initialize(timeoutMs);
   }
