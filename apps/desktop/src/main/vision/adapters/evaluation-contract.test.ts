@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ADAPTIVE_ART_SUITE_V1, FINE_ART_SUITE_V1 } from "@sanctuary/domain";
 import {
+  createEvaluationJsonSchema,
   createEvaluationPrompt,
   normalizeImageReading,
+  parseModelJsonObject,
   repairAdaptiveModelDimensions,
   validateEvaluationDimensions
 } from "./evaluation-contract.js";
@@ -34,6 +36,27 @@ describe("adaptive evaluation contract", () => {
       uncertainties: ["无法确认角色身份", "无法确认作品出处"]
     });
     expect(normalizeImageReading({ interpretation: "缺少观察" })).toBeUndefined();
+  });
+
+  it("provides llama.cpp with a strict six-dimension JSON schema", () => {
+    const schema = createEvaluationJsonSchema(ADAPTIVE_ART_SUITE_V1) as {
+      required: string[];
+      properties: { dimensions: { minItems: number; maxItems: number; items: { required: string[] } } };
+    };
+    expect(schema.required).toEqual([
+      "observation", "visual_focus", "interpretation", "uncertainty", "dimensions", "summary"
+    ]);
+    expect(schema.properties.dimensions).toMatchObject({ minItems: 6, maxItems: 6 });
+    expect(schema.properties.dimensions.items.required).toEqual(["key", "label", "score", "reason"]);
+  });
+
+  it("recovers common local-model JSON wrappers without weakening field validation", () => {
+    expect(parseModelJsonObject('模型说明：```json\n{"dimensions":[],}\n```谢谢')).toEqual({ dimensions: [] });
+    expect(parseModelJsonObject(JSON.stringify({ result: JSON.stringify({ observation: "可见人物" }) })))
+      .toEqual({ observation: "可见人物" });
+    expect(parseModelJsonObject([{ key: "axis_1", score: 70 }]))
+      .toEqual({ dimensions: [{ key: "axis_1", score: 70 }] });
+    expect(parseModelJsonObject("这是一段普通拒答")).toBeNull();
   });
 
   it("repairs Chinese keys and an explanation alias from a small local model", () => {

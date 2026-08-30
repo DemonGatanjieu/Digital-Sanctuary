@@ -11,6 +11,12 @@ const server = http.createServer((request, response) => {
     let body = "";
     request.on("data", (chunk) => { body += chunk; });
     request.on("end", () => {
+      const requestBody = JSON.parse(body);
+      if (requestBody?.response_format?.type !== "json_object" || !requestBody?.response_format?.schema) {
+        response.writeHead(400, { "Content-Type": "application/json" });
+        response.end('{"error":"missing structured schema"}');
+        return;
+      }
       const adaptive = body.includes("恰好六个");
       const dimensions = adaptive
         ? ["story_staging", "palette_air", "line_rhythm", "material_touch", "character_warmth", "detail_echo"].map((key, index) => ({

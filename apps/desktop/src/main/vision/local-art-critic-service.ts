@@ -7,7 +7,13 @@ import type { VisionSuiteDefinition } from "@sanctuary/domain";
 import type { ResolvedRuntimeModel } from "../model-center/model-center-service.js";
 import type { PreparedVisionImage } from "./vision-image-preprocessor.js";
 import type { ExternalVisionAdapterResult } from "./adapters/types.js";
-import { createEvaluationPrompt, normalizeImageReading, validateEvaluationDimensions } from "./adapters/evaluation-contract.js";
+import {
+  createEvaluationJsonSchema,
+  createEvaluationPrompt,
+  normalizeImageReading,
+  parseModelJsonObject,
+  validateEvaluationDimensions
+} from "./adapters/evaluation-contract.js";
 
 interface LocalArtCriticServiceOptions {
   resolveActiveModel: () => Promise<ResolvedRuntimeModel | null>;
@@ -100,7 +106,8 @@ export class LocalArtCriticService {
                   : [instructionContent, imageContent]
               }
             ],
-            response_format: { type: "json_object" },
+            response_format: { type: "json_object", schema: createEvaluationJsonSchema(suite) },
+            chat_template_kwargs: { enable_thinking: false },
             temperature: requestProfile.temperature,
             top_p: requestProfile.topP,
             top_k: requestProfile.topK,
@@ -122,13 +129,22 @@ export class LocalArtCriticService {
           };
         }
         const payload = await response.json() as {
-          choices?: { message?: { content?: string } }[];
+          choices?: { finish_reason?: string; message?: { content?: unknown } }[];
           usage?: { prompt_tokens?: number; completion_tokens?: number };
         };
-        const content = payload.choices?.[0]?.message?.content;
+        const choice = payload.choices?.[0];
+        const content = choice?.message?.content;
         if (!content) return invalidLocalResult(runtime, "本地评论模型没有返回内容");
-        const parsed = parseJsonObject(content);
-        if (!parsed) return invalidLocalResult(runtime, "本地评论模型返回的内容无法解析为 JSON");
+        const parsed = parseModelJsonObject(content);
+        if (!parsed) {
+          if (choice?.finish_reason === "length") {
+            return invalidLocalResult(runtime, "本地评论模型的结构化输出达到长度上限，请重新分析一次。");
+          }
+          if (looksLikeRefusal(content)) {
+            return invalidLocalResult(runtime, "本地评论模型这次返回了普通拒答，没有生成结构化画评。");
+          }
+          return invalidLocalResult(runtime, "本地评论模型返回格式异常，未能恢复为结构化画评。");
+        }
         const validation = validateEvaluationDimensions(parsed.dimensions, suite);
         if (!validation.valid || !validation.normalized) {
           return invalidLocalResult(runtime, "本地评论模型这次没有返回完整可用的六维评分，请重新分析一次。");
@@ -315,22 +331,9 @@ export function localCriticRequestProfile(modelId: string): {
   return { imageFirst: false, temperature: 0.2 };
 }
 
-function parseJsonObject(content: string): Record<string, unknown> | null {
-  const cleaned = content.replace(/```json\s*/gi, "").replace(/```\s*$/g, "").trim();
-  try {
-    const parsed = JSON.parse(cleaned);
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-  } catch {
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start < 0 || end <= start) return null;
-    try {
-      const parsed = JSON.parse(cleaned.slice(start, end + 1));
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
-    } catch {
-      return null;
-    }
-  }
+function looksLikeRefusal(content: unknown): boolean {
+  if (typeof content !== "string") return false;
+  return /(?:抱歉|无法(?:帮助|评价|分析)|不能(?:帮助|评价|分析)|不适合评价|can't\s+(?:help|analy[sz]e)|cannot\s+(?:help|analy[sz]e)|unable\s+to\s+(?:help|analy[sz]e))/i.test(content);
 }
 
 function delay(ms: number): Promise<void> {

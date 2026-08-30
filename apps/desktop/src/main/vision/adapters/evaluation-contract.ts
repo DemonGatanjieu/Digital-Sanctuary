@@ -9,6 +9,55 @@ import {
 
 export const EVALUATION_PROMPT_VERSION = "image_reading_v2";
 
+export function createEvaluationJsonSchema(suite: VisionSuiteDefinition): Record<string, unknown> {
+  const adaptive = suite.kind === "external_adaptive_highlights";
+  const dimensionProperties: Record<string, unknown> = {
+    key: adaptive
+      ? { type: "string", pattern: "^[a-z0-9_]{1,64}$" }
+      : { type: "string", enum: suite.dimensions.map((dimension) => dimension.key) },
+    score: { type: "number", minimum: 0, maximum: 100 },
+    ...(adaptive
+      ? {
+          label: { type: "string", minLength: 1, maxLength: 64 },
+          reason: { type: "string", minLength: 4, maxLength: 300 }
+        }
+      : { explanation: { type: "string", minLength: 4, maxLength: 500 } })
+  };
+  return {
+    type: "object",
+    properties: {
+      observation: { type: "string", minLength: 1, maxLength: 700 },
+      visual_focus: {
+        type: "array",
+        minItems: 1,
+        maxItems: 6,
+        items: { type: "string", minLength: 1, maxLength: 80 }
+      },
+      interpretation: { type: "string", minLength: 1, maxLength: 500 },
+      uncertainty: {
+        type: "array",
+        minItems: 0,
+        maxItems: 4,
+        items: { type: "string", minLength: 1, maxLength: 120 }
+      },
+      dimensions: {
+        type: "array",
+        minItems: 6,
+        maxItems: 6,
+        items: {
+          type: "object",
+          properties: dimensionProperties,
+          required: adaptive ? ["key", "label", "score", "reason"] : ["key", "score", "explanation"],
+          additionalProperties: false
+        }
+      },
+      summary: { type: "string", minLength: 1, maxLength: 600 }
+    },
+    required: ["observation", "visual_focus", "interpretation", "uncertainty", "dimensions", "summary"],
+    additionalProperties: false
+  };
+}
+
 export function createEvaluationPrompt(suite: VisionSuiteDefinition): string {
   if (suite.kind === "external_adaptive_highlights") {
     return `你是一位谨慎、具体而诚实的视觉艺术评论者。先真正观察这张具体图片，再自行选择恰好六个最能解释这张作品特点的画面维度。
@@ -56,6 +105,93 @@ export function normalizeImageReading(raw: unknown): VisionImageReading | undefi
     visualFocus,
     uncertainties
   };
+}
+
+export function parseModelJsonObject(content: unknown): Record<string, unknown> | null {
+  if (content && typeof content === "object") return unwrapModelJson(content);
+  if (typeof content !== "string") return null;
+  const cleaned = content
+    .replace(/^\uFEFF/, "")
+    .replace(/```(?:json)?\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+  const direct = parseJsonCandidate(cleaned);
+  if (direct) return direct;
+  for (const candidate of balancedJsonCandidates(cleaned)) {
+    const parsed = parseJsonCandidate(candidate);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+function parseJsonCandidate(candidate: string): Record<string, unknown> | null {
+  for (const value of [candidate, candidate.replace(/,\s*([}\]])/g, "$1")]) {
+    try {
+      return unwrapModelJson(JSON.parse(value) as unknown);
+    } catch {
+      // Try the next conservative repair candidate.
+    }
+  }
+  return null;
+}
+
+function unwrapModelJson(value: unknown, depth = 0): Record<string, unknown> | null {
+  if (depth > 2) return null;
+  if (typeof value === "string") return parseJsonCandidate(value);
+  if (Array.isArray(value)) {
+    const looksLikeDimensions = value.length > 0 && value.every((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+      const dimension = item as Record<string, unknown>;
+      return "key" in dimension && "score" in dimension;
+    });
+    if (looksLikeDimensions) return { dimensions: value };
+    if (value.length === 1) return unwrapModelJson(value[0], depth + 1);
+    return value.every((item) => item && typeof item === "object") ? { dimensions: value } : null;
+  }
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  if ("dimensions" in record || "observation" in record) return record;
+  for (const key of ["result", "response", "analysis", "output", "data"]) {
+    if (key in record) {
+      const nested = unwrapModelJson(record[key], depth + 1);
+      if (nested) return nested;
+    }
+  }
+  return record;
+}
+
+function balancedJsonCandidates(text: string): string[] {
+  const candidates: string[] = [];
+  for (let start = 0; start < text.length; start++) {
+    if (text[start] !== "{" && text[start] !== "[") continue;
+    const stack: string[] = [];
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < text.length; index++) {
+      const character = text[index]!;
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') {
+        inString = true;
+        continue;
+      }
+      if (character === "{" || character === "[") stack.push(character);
+      else if (character === "}" || character === "]") {
+        const opening = stack.pop();
+        if ((opening === "{" && character !== "}") || (opening === "[" && character !== "]")) break;
+        if (stack.length === 0) {
+          candidates.push(text.slice(start, index + 1));
+          start = index;
+          break;
+        }
+      }
+    }
+  }
+  return candidates;
 }
 
 function boundedText(value: unknown, maxLength: number): string | undefined {
