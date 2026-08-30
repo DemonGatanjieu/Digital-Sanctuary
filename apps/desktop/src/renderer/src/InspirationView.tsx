@@ -3,6 +3,7 @@ import type {
   InspirationCreativity,
   InspirationConversation,
   InspirationGenerationSettings,
+  InspirationMessage,
   InspirationPresetId,
   InspirationResponseLength,
   InstalledModelView,
@@ -40,8 +41,10 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   const [defaultModelId, setDefaultModelId] = useState("");
   const [modelId, setModelId] = useState("");
   const [settings, setSettings] = useState<InspirationGenerationSettings>({ ...DEFAULT_INSPIRATION_SETTINGS });
+  const [pendingTurn, setPendingTurn] = useState<{ conversationId: string | null; userMessage: string | null } | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const selected = conversations.find((item) => item.id === selectedId) ?? null;
+  const pendingVisible = Boolean(requestId) && pendingTurn?.conversationId === (selected?.id ?? null);
 
   useEffect(() => {
     void window.sanctuary.listInspirationConversations()
@@ -118,6 +121,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     if (!message || requestId) return;
     const nextRequestId = crypto.randomUUID();
     setRequestId(nextRequestId);
+    setPendingTurn({ conversationId: selected?.id ?? null, userMessage: message });
     setError("");
     setDraft("");
     try {
@@ -142,6 +146,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
         if (!selectedId && latest[0]) setSelectedId(latest[0].id);
       }
     } finally {
+      setPendingTurn(null);
       setRequestId("");
     }
   }
@@ -150,6 +155,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     if (!selected || requestId) return;
     const nextRequestId = crypto.randomUUID();
     setRequestId(nextRequestId);
+    setPendingTurn({ conversationId: selected.id, userMessage: null });
     setError("");
     try {
       const updated = await window.sanctuary.regenerateInspirationMessage({
@@ -162,6 +168,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     } catch (caught) {
       setError(messageOf(caught));
     } finally {
+      setPendingTurn(null);
       setRequestId("");
     }
   }
@@ -258,13 +265,11 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
             </div>
           )}
           <div className="inspiration-messages">
-            {selected?.messages.map((message) => (
-              <div key={message.id} className={`inspiration-message ${message.role}`}>
-                <span>{message.role === "user" ? "你" : "本地模型"}</span>
-                <div>{message.content}</div>
-              </div>
-            ))}
-            {requestId && <div className="inspiration-message assistant pending"><span>本地模型</span><div>正在认真想……</div></div>}
+            <InspirationMessageTimeline
+              messages={selected?.messages ?? []}
+              pendingUserMessage={pendingVisible ? pendingTurn?.userMessage ?? null : null}
+              thinking={pendingVisible}
+            />
             <div ref={endRef} />
           </div>
           {error && <AppNotice tone="error">{error}</AppNotice>}
@@ -338,6 +343,33 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
         />
       )}
     </section>
+  );
+}
+
+export function InspirationMessageTimeline({ messages, pendingUserMessage, thinking }: {
+  messages: InspirationMessage[];
+  pendingUserMessage: string | null;
+  thinking: boolean;
+}) {
+  return (
+    <>
+      {messages.map((message) => (
+        <div key={message.id} className={`inspiration-message ${message.role}`}>
+          <span>{message.role === "user" ? "你" : "本地模型"}</span>
+          <div>{message.content}</div>
+        </div>
+      ))}
+      {pendingUserMessage && (
+        <div className="inspiration-message user queued" aria-live="polite">
+          <span>你 · 已发送</span><div>{pendingUserMessage}</div>
+        </div>
+      )}
+      {thinking && (
+        <div className="inspiration-message assistant pending" aria-live="polite">
+          <span>本地模型</span><div>正在认真想……</div>
+        </div>
+      )}
+    </>
   );
 }
 

@@ -42,6 +42,7 @@
 .inspiration-message.user > span { text-align: right; }
 .inspiration-message > div { white-space: pre-wrap; line-height: 1.75; padding: 13px 16px; border-radius: 18px 18px 18px 5px; background: color-mix(in srgb, var(--surface-secondary, #edf1f7) 82%, transparent); }
 .inspiration-message.user > div { color: #fff; border-radius: 18px 18px 5px 18px; background: linear-gradient(135deg, #f0699c, #a75ed7); }
+.inspiration-message.user.queued > div { box-shadow: 0 8px 24px rgba(190, 75, 154, .18); }
 .inspiration-message.pending > div { color: var(--text-secondary); animation: inspiration-pulse 1.4s ease-in-out infinite; }
 .inspiration-composer { padding: 12px; border: 1px solid color-mix(in srgb, var(--accent, #ff5d9e) 20%, var(--border)); border-radius: 20px; background: color-mix(in srgb, var(--surface, #fff) 96%, transparent); box-shadow: 0 10px 30px rgba(45, 52, 79, .08); }
 .inspiration-mode-pill { display: inline-flex; padding: 5px 9px; border-radius: 999px; color: #c8427c; background: rgba(255, 95, 155, .1); font-size: 12px; font-weight: 800; }
