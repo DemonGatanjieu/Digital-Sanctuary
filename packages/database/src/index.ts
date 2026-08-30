@@ -1549,6 +1549,10 @@ export class LibraryDatabase {
           dim.explanation ?? null
         );
       }
+      this.#database.prepare(
+        `DELETE FROM vision_evaluation_results
+          WHERE work_id = ? AND suite_id = ? AND id <> ?`
+      ).run(result.workId, result.suiteId, result.id);
       this.#database.exec("COMMIT");
     } catch (error) {
       this.#database.exec("ROLLBACK");
@@ -1586,9 +1590,16 @@ export class LibraryDatabase {
 
   listVisionEvaluationsForWork(workId: string): VisionEvaluationResult[] {
     const rows = this.#database.prepare(
-      `SELECT * FROM vision_evaluation_results
-        WHERE work_id = ?
-        ORDER BY created_at DESC`
+      `SELECT * FROM (
+         SELECT result.*, ROW_NUMBER() OVER (
+           PARTITION BY result.suite_id
+           ORDER BY result.updated_at DESC, result.created_at DESC, result.rowid DESC
+         ) AS suite_rank
+         FROM vision_evaluation_results result
+         WHERE result.work_id = ?
+       ) ranked
+       WHERE suite_rank = 1
+       ORDER BY updated_at DESC, created_at DESC`
     ).all(workId) as unknown as VisionEvaluationResultRow[];
     return rows.map((row) => this.#mapVisionEvaluationResult(row));
   }

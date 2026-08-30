@@ -830,6 +830,27 @@ describe("LibraryDatabase", () => {
         latencyMs: 340
       });
 
+      // A newer result replaces the same radar suite instead of accumulating cards forever.
+      database.saveVisionEvaluationResult({
+        id: "eval-1-new",
+        workId: work1!.id,
+        assetId: asset1.id,
+        scope: "cover_asset",
+        kind: "local_technical_profile",
+        suiteId: "technical_visual_v1",
+        suiteVersion: 1,
+        status: "success",
+        dimensions: [{ key: "colorfulness", label: "色彩丰富度", score: 72 }],
+        evaluatorVersion: "0.2.0",
+        preprocessingFingerprint: "new-profile",
+        assetVersion: asset1.updatedAt,
+        createdAt: "2026-01-02T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z"
+      });
+      expect(database.listVisionEvaluationsForWork(work1!.id).map((evaluation) => evaluation.id))
+        .toEqual(["eval-1-new"]);
+      expect(database.getVisionEvaluationResult(work1!.id, "technical_visual_v1")?.id).toBe("eval-1-new");
+
       // 7. Query works by tags for triage
       const triageJob = database.createAnalysisJob({ type: "all" }, "test-tagger");
       const nextItem = database.claimNextAnalysisItem(triageJob.id);
