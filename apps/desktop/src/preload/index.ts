@@ -44,7 +44,8 @@ import type {
   ModelDownloadProgress,
   InspirationConversation,
   InspirationSendRequest,
-  InspirationRegenerateRequest
+  InspirationRegenerateRequest,
+  InspirationSourceUpdateRequest
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -130,6 +131,7 @@ export interface SanctuaryApi {
   listInspirationConversations(): Promise<InspirationConversation[]>;
   sendInspirationMessage(request: InspirationSendRequest): Promise<InspirationConversation>;
   regenerateInspirationMessage(request: InspirationRegenerateRequest): Promise<InspirationConversation>;
+  updateInspirationSource(request: InspirationSourceUpdateRequest): Promise<InspirationConversation>;
   cancelInspirationMessage(requestId: string): Promise<boolean>;
   deleteInspirationConversation(conversationId: string): Promise<boolean>;
   generateThumbnails(): Promise<ThumbnailBatchResult>;
@@ -244,6 +246,8 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("inspiration:send", request) as Promise<InspirationConversation>,
   regenerateInspirationMessage: (request) =>
     ipcRenderer.invoke("inspiration:regenerate", request) as Promise<InspirationConversation>,
+  updateInspirationSource: (request) =>
+    ipcRenderer.invoke("inspiration:update-source", request) as Promise<InspirationConversation>,
   cancelInspirationMessage: (requestId) =>
     ipcRenderer.invoke("inspiration:cancel", requestId) as Promise<boolean>,
   deleteInspirationConversation: (conversationId) =>

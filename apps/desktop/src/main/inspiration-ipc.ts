@@ -7,7 +7,9 @@ import {
   type InspirationMessage,
   type InspirationPresetId,
   type InspirationRegenerateRequest,
-  type InspirationSendRequest
+  type InspirationSendRequest,
+  type InspirationSourceUpdateRequest,
+  type InspirationSourceWork
 } from "@sanctuary/domain";
 import type { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 import { prepareVisionImage } from "./vision/vision-image-preprocessor.js";
@@ -78,6 +80,19 @@ export function registerInspirationIpc(
     controller.abort();
     return true;
   });
+  ipc.handle("inspiration:update-source", (_event, raw: InspirationSourceUpdateRequest) => {
+    if (!raw || typeof raw !== "object") throw new Error("参考图请求格式不正确");
+    const conversationId = requireId(raw.conversationId, "会话 ID");
+    const conversations = loadConversations(database);
+    const conversation = conversations.find((item) => item.id === conversationId);
+    if (!conversation) throw new Error("找不到这段对话");
+    conversation.source = raw.sourceWorkId === null
+      ? null
+      : resolveSource(database, requireId(raw.sourceWorkId, "作品 ID"), raw.sourcePageIndex);
+    conversation.updatedAt = new Date().toISOString();
+    persistConversations(database, conversations);
+    return conversation;
+  });
   ipc.handle("inspiration:delete", (_event, conversationId: unknown) => {
     const id = requireId(conversationId, "会话 ID");
     const current = loadConversations(database);
@@ -96,7 +111,9 @@ async function generateReply(
 ): Promise<InspirationConversation> {
   const source = conversation.source;
   const work = source ? database.getWork(source.workId) : null;
-  const asset = work?.assets[source?.pageIndex ?? 0] ?? work?.assets[0];
+  const asset = source
+    ? work?.assets.find((item) => item.pageIndex === source.pageIndex) ?? work?.assets[0]
+    : undefined;
   const prepared = asset ? await prepareVisionImage(asset.path, { maxLongEdge: 1344 }) : undefined;
   try {
     const result = await localModel.chat({
@@ -118,26 +135,35 @@ async function generateReply(
 
 function createConversation(database: LibraryDatabase, request: InspirationSendRequest): InspirationConversation {
   const now = new Date().toISOString();
-  const work = request.sourceWorkId ? database.getWork(request.sourceWorkId) : null;
-  const pageIndex = work
-    ? Math.max(0, Math.min(work.assets.length - 1, Math.trunc(request.sourcePageIndex ?? 0)))
-    : 0;
-  const asset = work?.assets[pageIndex];
   return {
     id: randomUUID(),
     title: titleFromMessage(request.message),
     presetId: request.presetId,
-    source: work && asset ? {
-      workId: work.id,
-      title: work.title,
-      artistName: work.artistName,
-      pageIndex,
-      imageUrl: `sanctuary-image://local/${encodeURIComponent(asset.path)}`
-    } : null,
+    source: request.sourceWorkId ? resolveSource(database, request.sourceWorkId, request.sourcePageIndex) : null,
     modelId: null,
     messages: [],
     createdAt: now,
     updatedAt: now
+  };
+}
+
+function resolveSource(
+  database: LibraryDatabase,
+  workId: string,
+  requestedPageIndex: number | undefined
+): InspirationSourceWork {
+  const work = database.getWork(workId);
+  if (!work) throw new Error("这张画廊作品已经不存在");
+  const available = work.assets.filter((asset) => asset.mediaType === "image" && asset.fileState === "available");
+  if (available.length === 0) throw new Error("这件作品没有可用的本地图片");
+  const wantedPage = Number.isInteger(requestedPageIndex) ? Math.max(0, Math.trunc(requestedPageIndex!)) : 0;
+  const asset = available.find((item) => item.pageIndex === wantedPage) ?? available[0]!;
+  return {
+    workId: work.id,
+    title: work.title,
+    artistName: work.artistName,
+    pageIndex: asset.pageIndex,
+    imageUrl: `sanctuary-image://local/${encodeURIComponent(asset.path)}`
   };
 }
 

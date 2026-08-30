@@ -50,6 +50,12 @@ export interface InspirationRegenerateRequest {
   requestId: string;
 }
 
+export interface InspirationSourceUpdateRequest {
+  conversationId: string;
+  sourceWorkId: string | null;
+  sourcePageIndex?: number;
+}
+
 export function isInspirationPresetId(value: unknown): value is InspirationPresetId {
   return typeof value === "string" && (INSPIRATION_PRESET_IDS as readonly string[]).includes(value);
 }
