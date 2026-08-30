@@ -65,7 +65,7 @@
 | **local-critic-json-schema-repair** | `5863d98` | 2026-08-30 | 本地 llama.cpp 画评加入套件专属 JSON Schema、常见包装兼容解析与截断/拒答错误分类；Gemma 4 E2B 使用问题原图实测 HTTP 200 并返回可解析画面描述和六维对象。 |
 | **bounded-radar-results-per-suite** | `a722185` | 2026-08-30 | 每件作品的技术画像、标准六维和 AI 自选六维各只呈现最新一项；新分析替换同类旧结果，历史数据库重复项也在读取时收敛，避免雷达侧栏无限增长。 |
 | **bounded-local-inspiration-studio-p1** | `267268f` | 2026-08-30 | 本地灵感台第一阶段：复用当前 Gemma/Qwen 串行运行时，支持自由/携图对话、六种创作预设、停止与重新生成；会话、消息和模型上下文均有界。 |
-
+| **inspiration-gallery-attachment-picker** | `ca8d79c` | 2026-08-30 | 灵感台内新增可搜索画廊选择器，多页作品可选具体页；新会话和已有对话均可加入、更换或移除参考图，主进程继续按作品 ID 安全解析路径。 |
 
 
 
