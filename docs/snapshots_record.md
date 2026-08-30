@@ -62,7 +62,7 @@
 | **adaptive-radar-contract-repair** | `25fa758` | 2026-08-30 | 兼容轻量视觉模型返回中文内部 key、理由字段别名和少量多选维度；保留严格内容门禁并将内部校验串改为用户可理解的提示。 |
 | **gemma-art-critic-model-tiers** | `c95ea8d` | 2026-08-30 | 模型中心加入锁定完整 revision、精确大小与 SHA256 的 Gemma 4 E2B 流畅档和 E4B 推荐档；同步升级画评分数锚点、具体画面证据与模型专属采样配置。 |
 | **structured-image-reading-v2** | `3587ef3` | 2026-08-30 | AI 画评新增“模型眼中的画面”：客观观察、视觉落点、主观解读与不确定项分层输出、持久化和雷达侧栏呈现；提示词版本进入缓存指纹并兼容历史结果。 |
-
+| **local-critic-json-schema-repair** | `5863d98` | 2026-08-30 | 本地 llama.cpp 画评加入套件专属 JSON Schema、常见包装兼容解析与截断/拒答错误分类；Gemma 4 E2B 使用问题原图实测 HTTP 200 并返回可解析画面描述和六维对象。 |
 
 
 
