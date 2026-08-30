@@ -2,7 +2,7 @@ import type { IpcMain } from "electron";
 import type { LibraryDatabase } from "@sanctuary/database";
 import type { InspirationConversation, WorkRecord } from "@sanctuary/domain";
 import { describe, expect, it } from "vitest";
-import { presetSystemPrompt, registerInspirationIpc } from "./inspiration-ipc.js";
+import { inspirationGenerationProfile, presetSystemPrompt, registerInspirationIpc } from "./inspiration-ipc.js";
 
 describe("local inspiration prompt presets", () => {
   it("keeps image-grounded conversation honest when no image is attached", () => {
@@ -23,6 +23,7 @@ describe("local inspiration prompt presets", () => {
       presetId: "image_chat",
       source: null,
       modelId: null,
+      settings: { creativity: "balanced", responseLength: "standard" },
       messages: [],
       createdAt: "2026-08-30T00:00:00.000Z",
       updatedAt: "2026-08-30T00:00:00.000Z"
@@ -54,5 +55,16 @@ describe("local inspiration prompt presets", () => {
     }) as InspirationConversation;
     expect(updated.source).toMatchObject({ workId: "work-1", pageIndex: 2, title: "多页作品" });
     expect(updated.source?.imageUrl).toContain("p2.png");
+  });
+
+  it("maps friendly controls to bounded generation parameters", () => {
+    expect(inspirationGenerationProfile({ creativity: "precise", responseLength: "brief" })).toMatchObject({
+      temperature: 0.35,
+      maxTokens: 600
+    });
+    expect(inspirationGenerationProfile({ creativity: "imaginative", responseLength: "detailed" })).toMatchObject({
+      temperature: 1,
+      maxTokens: 2200
+    });
   });
 });

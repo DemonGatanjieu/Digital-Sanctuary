@@ -2,8 +2,12 @@ import { randomUUID } from "node:crypto";
 import type { IpcMain } from "electron";
 import type { LibraryDatabase } from "@sanctuary/database";
 import {
+  DEFAULT_INSPIRATION_SETTINGS,
+  isInspirationGenerationSettings,
   isInspirationPresetId,
+  isSafeModelId,
   type InspirationConversation,
+  type InspirationGenerationSettings,
   type InspirationMessage,
   type InspirationPresetId,
   type InspirationRegenerateRequest,
@@ -44,6 +48,8 @@ export function registerInspirationIpc(
     const userMessage = makeMessage("user", request.message);
     conversation.messages.push(userMessage);
     conversation.presetId = request.presetId;
+    if (request.modelId) conversation.modelId = request.modelId;
+    conversation.settings = normalizeSettings(request.settings ?? conversation.settings);
     conversation.updatedAt = userMessage.createdAt;
     if (conversation.messages.filter((item) => item.role === "user").length === 1) {
       conversation.title = titleFromMessage(request.message);
@@ -65,6 +71,8 @@ export function registerInspirationIpc(
     if (!conversation) throw new Error("找不到这段对话");
     while (conversation.messages.at(-1)?.role === "assistant") conversation.messages.pop();
     if (!conversation.messages.some((item) => item.role === "user")) throw new Error("还没有可以重新生成的提问");
+    if (raw.modelId !== undefined) conversation.modelId = parseOptionalModelId(raw.modelId);
+    conversation.settings = normalizeSettings(raw.settings ?? conversation.settings);
     const controller = new AbortController();
     activeRequests.set(requestId, controller);
     persistConversations(database, conversations);
@@ -116,11 +124,16 @@ async function generateReply(
     : undefined;
   const prepared = asset ? await prepareVisionImage(asset.path, { maxLongEdge: 1344 }) : undefined;
   try {
+    const profile = inspirationGenerationProfile(conversation.settings);
     const result = await localModel.chat({
-      systemPrompt: presetSystemPrompt(conversation.presetId, Boolean(prepared)),
+      systemPrompt: `${presetSystemPrompt(conversation.presetId, Boolean(prepared))}\n\n${profile.instruction}`,
       messages: boundedContext(conversation.messages),
       ...(prepared ? { image: prepared } : {}),
-      creative: ["story_scene", "character_profile", "world_building"].includes(conversation.presetId)
+      ...(conversation.modelId ? { modelId: conversation.modelId } : {}),
+      temperature: profile.temperature,
+      topP: profile.topP,
+      topK: profile.topK,
+      maxTokens: profile.maxTokens
     }, signal);
     const assistantMessage = makeMessage("assistant", result.content);
     conversation.messages.push(assistantMessage);
@@ -140,7 +153,8 @@ function createConversation(database: LibraryDatabase, request: InspirationSendR
     title: titleFromMessage(request.message),
     presetId: request.presetId,
     source: request.sourceWorkId ? resolveSource(database, request.sourceWorkId, request.sourcePageIndex) : null,
-    modelId: null,
+    modelId: request.modelId ?? null,
+    settings: normalizeSettings(request.settings),
     messages: [],
     createdAt: now,
     updatedAt: now
@@ -177,6 +191,8 @@ function parseSendRequest(raw: InspirationSendRequest): InspirationSendRequest {
     requestId: requireId(raw.requestId, "请求 ID"),
     presetId: raw.presetId,
     message,
+    ...(raw.modelId ? { modelId: parseOptionalModelId(raw.modelId) } : {}),
+    ...(raw.settings ? { settings: normalizeSettings(raw.settings) } : {}),
     ...(raw.conversationId ? { conversationId: requireId(raw.conversationId, "会话 ID") } : {}),
     ...(raw.sourceWorkId ? { sourceWorkId: requireId(raw.sourceWorkId, "作品 ID") } : {}),
     ...(Number.isInteger(raw.sourcePageIndex) ? { sourcePageIndex: raw.sourcePageIndex } : {})
@@ -186,7 +202,10 @@ function parseSendRequest(raw: InspirationSendRequest): InspirationSendRequest {
 function loadConversations(database: LibraryDatabase): InspirationConversation[] {
   const stored = database.getPreference<unknown>(STORE_KEY);
   if (!Array.isArray(stored)) return [];
-  return stored.filter(isConversation).slice(0, MAX_CONVERSATIONS);
+  return stored.filter(isConversation).slice(0, MAX_CONVERSATIONS).map((conversation) => ({
+    ...conversation,
+    settings: normalizeSettings(conversation.settings)
+  }));
 }
 
 function persistConversations(database: LibraryDatabase, conversations: InspirationConversation[]): void {
@@ -228,6 +247,35 @@ function titleFromMessage(message: string): string {
 function requireId(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim() || value.length > 100) throw new Error(`${label}格式不正确`);
   return value.trim();
+}
+
+function parseOptionalModelId(value: unknown): string {
+  if (!isSafeModelId(value)) throw new Error("所选模型 ID 格式不正确");
+  return value;
+}
+
+function normalizeSettings(value: unknown): InspirationGenerationSettings {
+  return isInspirationGenerationSettings(value) ? value : { ...DEFAULT_INSPIRATION_SETTINGS };
+}
+
+export function inspirationGenerationProfile(settings: InspirationGenerationSettings): {
+  temperature: number;
+  topP: number;
+  topK: number;
+  maxTokens: number;
+  instruction: string;
+} {
+  const creativity = {
+    precise: { temperature: 0.35, topP: 0.82, topK: 32, text: "回答应更克制、准确，少做无依据的发挥。" },
+    balanced: { temperature: 0.65, topP: 0.9, topK: 40, text: "在准确理解和有趣发挥之间保持平衡。" },
+    imaginative: { temperature: 1, topP: 0.95, topK: 64, text: "可以大胆联想并提供更有个性的创作选择，但仍要遵守用户给定事实。" }
+  }[settings.creativity];
+  const length = {
+    brief: { maxTokens: 600, text: "回答保持简短，优先给出最有用的核心内容。" },
+    standard: { maxTokens: 1400, text: "回答采用适中的完整篇幅，不故意凑字数。" },
+    detailed: { maxTokens: 2200, text: "可以充分展开细节和结构，但避免重复同一观点。" }
+  }[settings.responseLength];
+  return { ...creativity, maxTokens: length.maxTokens, instruction: `${creativity.text}${length.text}` };
 }
 
 export function presetSystemPrompt(preset: InspirationPresetId, hasImage: boolean): string {

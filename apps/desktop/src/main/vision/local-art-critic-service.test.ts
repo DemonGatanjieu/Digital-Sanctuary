@@ -105,6 +105,37 @@ describe("LocalArtCriticService", () => {
     }
   });
 
+  it("can resolve a conversation-specific installed model without changing the active critic", async () => {
+    const selectedRuntime: ResolvedRuntimeModel = {
+      ...runtime,
+      entry: { ...entry, id: "conversation-critic" }
+    };
+    let requestedModelId = "";
+    const service = new LocalArtCriticService({
+      resolveActiveModel: async () => runtime,
+      resolveModel: async (modelId) => {
+        requestedModelId = modelId;
+        return modelId === selectedRuntime.entry.id ? selectedRuntime : null;
+      },
+      startupTimeoutMs: 5_000,
+      idleTimeoutMs: 30_000,
+      buildCommand: buildFixtureCommand
+    });
+    try {
+      const reply = await service.chat({
+        systemPrompt: "简短回答。",
+        messages: [{ role: "user", content: "你好" }],
+        modelId: selectedRuntime.entry.id,
+        temperature: 0.35,
+        maxTokens: 600
+      });
+      expect(requestedModelId).toBe("conversation-critic");
+      expect(reply.identity.modelId).toBe("conversation-critic");
+    } finally {
+      service.close();
+    }
+  });
+
   it("stops the runtime and returns a timeout instead of hanging forever", async () => {
     const fetchImpl: typeof fetch = async (input, init) => {
       if (!String(input).endsWith("/v1/chat/completions")) return fetch(input, init);

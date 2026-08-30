@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  InspirationCreativity,
   InspirationConversation,
+  InspirationGenerationSettings,
   InspirationPresetId,
+  InspirationResponseLength,
+  InstalledModelView,
   WorkListItem,
   WorkRecord
 } from "@sanctuary/domain";
+import { DEFAULT_INSPIRATION_SETTINGS } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { DialogOverlay } from "./DialogOverlay";
 
@@ -17,9 +22,10 @@ const PRESETS: Array<{ id: InspirationPresetId; label: string; hint: string; sta
   { id: "prompt_notes", label: "整理提示词", hint: "转成结构清楚的生成提示词笔记", starter: "请把画面和我的要求整理成生成提示词笔记，分开主体、环境、构图、光色、材质与负向约束。" }
 ];
 
-export function InspirationView({ launch, onLaunchConsumed }: {
+export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }: {
   launch: { workId: string; pageIndex: number } | null;
   onLaunchConsumed: () => void;
+  onOpenModelCenter: () => void;
 }) {
   const [conversations, setConversations] = useState<InspirationConversation[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -30,6 +36,10 @@ export function InspirationView({ launch, onLaunchConsumed }: {
   const [requestId, setRequestId] = useState("");
   const [error, setError] = useState("");
   const [galleryPickerOpen, setGalleryPickerOpen] = useState(false);
+  const [models, setModels] = useState<InstalledModelView[]>([]);
+  const [defaultModelId, setDefaultModelId] = useState("");
+  const [modelId, setModelId] = useState("");
+  const [settings, setSettings] = useState<InspirationGenerationSettings>({ ...DEFAULT_INSPIRATION_SETTINGS });
   const endRef = useRef<HTMLDivElement>(null);
   const selected = conversations.find((item) => item.id === selectedId) ?? null;
 
@@ -37,7 +47,20 @@ export function InspirationView({ launch, onLaunchConsumed }: {
     void window.sanctuary.listInspirationConversations()
       .then((items) => {
         setConversations(items);
-        if (!launch && items[0]) setSelectedId(items[0].id);
+        if (!launch && items[0]) {
+          setSelectedId(items[0].id);
+          setModelId(items[0].modelId ?? "");
+          setSettings(items[0].settings ?? { ...DEFAULT_INSPIRATION_SETTINGS });
+        }
+      })
+      .catch((caught) => setError(messageOf(caught)));
+    void window.sanctuary.getModelCenterSnapshot()
+      .then((snapshot) => {
+        const installed = snapshot.models.filter((model) => model.capability === "art_critic" && model.installed && model.availability === "ready");
+        const preferred = snapshot.activeByCapability.art_critic ?? installed[0]?.id ?? "";
+        setModels(installed);
+        setDefaultModelId(preferred);
+        setModelId((current) => current || preferred);
       })
       .catch((caught) => setError(messageOf(caught)));
   }, []);
@@ -46,6 +69,8 @@ export function InspirationView({ launch, onLaunchConsumed }: {
     if (!launch) return;
     setSelectedId("");
     setPresetId("image_chat");
+    setModelId(defaultModelId);
+    setSettings({ ...DEFAULT_INSPIRATION_SETTINGS });
     setDraft(PRESETS.find((item) => item.id === "image_chat")!.starter);
     setSourcePageIndex(launch.pageIndex);
     void window.sanctuary.getWork(launch.workId)
@@ -68,7 +93,17 @@ export function InspirationView({ launch, onLaunchConsumed }: {
     setSourceWork(null);
     setSourcePageIndex(0);
     setPresetId("chat");
+    setModelId(defaultModelId);
+    setSettings({ ...DEFAULT_INSPIRATION_SETTINGS });
     setDraft("");
+    setError("");
+  }
+
+  function selectConversation(conversation: InspirationConversation) {
+    setSelectedId(conversation.id);
+    setSourceWork(null);
+    setModelId(conversation.modelId ?? defaultModelId);
+    setSettings(conversation.settings ?? { ...DEFAULT_INSPIRATION_SETTINGS });
     setError("");
   }
 
@@ -90,6 +125,8 @@ export function InspirationView({ launch, onLaunchConsumed }: {
         requestId: nextRequestId,
         presetId: selected?.presetId ?? presetId,
         message,
+        ...(modelId ? { modelId } : {}),
+        settings,
         ...(selected ? { conversationId: selected.id } : {}),
         ...(!selected && sourceWork ? { sourceWorkId: sourceWork.id, sourcePageIndex } : {})
       });
@@ -115,7 +152,12 @@ export function InspirationView({ launch, onLaunchConsumed }: {
     setRequestId(nextRequestId);
     setError("");
     try {
-      const updated = await window.sanctuary.regenerateInspirationMessage({ conversationId: selected.id, requestId: nextRequestId });
+      const updated = await window.sanctuary.regenerateInspirationMessage({
+        conversationId: selected.id,
+        requestId: nextRequestId,
+        ...(modelId ? { modelId } : {}),
+        settings
+      });
       setConversations((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
     } catch (caught) {
       setError(messageOf(caught));
@@ -185,7 +227,7 @@ export function InspirationView({ launch, onLaunchConsumed }: {
           {conversations.length === 0 && <p className="inspiration-muted">还没有对话。选一种方式开始就好。</p>}
           {conversations.map((item) => (
             <div key={item.id} className={`inspiration-session ${item.id === selectedId ? "active" : ""}`}>
-              <button type="button" onClick={() => { setSelectedId(item.id); setSourceWork(null); setError(""); }}>
+              <button type="button" onClick={() => selectConversation(item)}>
                 <strong>{item.title}</strong><small>{PRESETS.find((preset) => preset.id === item.presetId)?.label} · {formatTime(item.updatedAt)}</small>
               </button>
               <button type="button" className="inspiration-delete" aria-label={`删除 ${item.title}`} onClick={() => void removeConversation(item.id)}>×</button>
@@ -251,6 +293,35 @@ export function InspirationView({ launch, onLaunchConsumed }: {
         </article>
 
         <aside className="inspiration-presets">
+          <div className="inspiration-model-controls">
+            <div className="inspiration-panel-title"><strong>本次模型</strong><small>仅影响灵感台</small></div>
+            {models.length > 0 ? (
+              <>
+                <select value={modelId} disabled={Boolean(requestId)} onChange={(event) => setModelId(event.target.value)} aria-label="选择灵感台本地模型">
+                  {modelId && !models.some((model) => model.id === modelId) && <option value={modelId}>原模型已不可用</option>}
+                  {models.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
+                </select>
+                <small className="inspiration-model-hint">{modelHint(models.find((model) => model.id === modelId))}</small>
+              </>
+            ) : (
+              <div className="inspiration-no-model"><p>还没有安装可对话的视觉模型。</p><button type="button" onClick={onOpenModelCenter}>前往模型中心</button></div>
+            )}
+            <ModelSettingControl<InspirationCreativity>
+              label="回答气质"
+              value={settings.creativity}
+              disabled={Boolean(requestId)}
+              options={[{ value: "precise", label: "严谨" }, { value: "balanced", label: "均衡" }, { value: "imaginative", label: "放飞" }]}
+              onChange={(creativity) => setSettings((current) => ({ ...current, creativity }))}
+            />
+            <ModelSettingControl<InspirationResponseLength>
+              label="回答篇幅"
+              value={settings.responseLength}
+              disabled={Boolean(requestId)}
+              options={[{ value: "brief", label: "简短" }, { value: "standard", label: "标准" }, { value: "detailed", label: "详细" }]}
+              onChange={(responseLength) => setSettings((current) => ({ ...current, responseLength }))}
+            />
+            <p className="inspiration-next-answer-note">调整会从下一次回答开始生效。</p>
+          </div>
           <div className="inspiration-panel-title"><strong>创作方式</strong><small>每次新对话选一种</small></div>
           {PRESETS.map((preset) => (
             <button key={preset.id} type="button" className={(selected?.presetId ?? presetId) === preset.id ? "active" : ""} onClick={() => choosePreset(preset)}>
@@ -268,6 +339,29 @@ export function InspirationView({ launch, onLaunchConsumed }: {
       )}
     </section>
   );
+}
+
+function ModelSettingControl<T extends string>({ label, value, options, disabled, onChange }: {
+  label: string;
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  disabled: boolean;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="inspiration-setting-control">
+      <span>{label}</span>
+      <div>{options.map((option) => (
+        <button key={option.value} type="button" disabled={disabled} className={value === option.value ? "active" : ""} onClick={() => onChange(option.value)}>{option.label}</button>
+      ))}</div>
+    </div>
+  );
+}
+
+function modelHint(model: InstalledModelView | undefined): string {
+  if (!model) return "选择一个已安装模型";
+  const tier = model.tier === "light" ? "更流畅" : model.tier === "advanced" ? "更细致" : "平衡档";
+  return `${tier} · 建议显存 ${model.recommendedVramGb} GB`;
 }
 
 function InspirationGalleryPicker({ onClose, onSelect }: {

@@ -17,6 +17,7 @@ import {
 
 interface LocalArtCriticServiceOptions {
   resolveActiveModel: () => Promise<ResolvedRuntimeModel | null>;
+  resolveModel?: (modelId: string) => Promise<ResolvedRuntimeModel | null>;
   fetchImpl?: typeof fetch;
   startupTimeoutMs?: number;
   inferenceTimeoutMs?: number;
@@ -38,11 +39,16 @@ export interface LocalInspirationChatInput {
   systemPrompt: string;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   image?: PreparedVisionImage;
-  creative?: boolean;
+  modelId?: string;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxTokens?: number;
 }
 
 export class LocalArtCriticService {
   readonly #resolveActiveModel: LocalArtCriticServiceOptions["resolveActiveModel"];
+  readonly #resolveModel: LocalArtCriticServiceOptions["resolveModel"];
   readonly #fetch: typeof fetch;
   readonly #startupTimeoutMs: number;
   readonly #inferenceTimeoutMs: number;
@@ -57,6 +63,7 @@ export class LocalArtCriticService {
 
   constructor(options: LocalArtCriticServiceOptions) {
     this.#resolveActiveModel = options.resolveActiveModel;
+    this.#resolveModel = options.resolveModel;
     this.#fetch = options.fetchImpl ?? fetch;
     this.#startupTimeoutMs = options.startupTimeoutMs ?? 120_000;
     this.#inferenceTimeoutMs = options.inferenceTimeoutMs ?? 90_000;
@@ -213,7 +220,9 @@ export class LocalArtCriticService {
   ): Promise<{ identity: LocalArtCriticIdentity; content: string }> {
     const task: Promise<{ identity: LocalArtCriticIdentity; content: string }> = this.#queue.then(async () => {
       if (signal?.aborted) throw new Error("已停止生成");
-      const runtime = await this.#resolveActiveModel();
+      const runtime = input.modelId && this.#resolveModel
+        ? await this.#resolveModel(input.modelId)
+        : await this.#resolveActiveModel();
       if (!runtime || runtime.entry.capability !== "art_critic") {
         throw new Error("请先在模型中心安装并启用一个本地视觉对话模型");
       }
@@ -253,10 +262,10 @@ export class LocalArtCriticService {
             model: runtime.entry.id,
             messages,
             chat_template_kwargs: { enable_thinking: false },
-            temperature: input.creative ? Math.max(0.8, requestProfile.temperature) : 0.55,
-            top_p: input.creative ? 0.95 : 0.9,
-            top_k: input.creative ? 64 : 40,
-            max_tokens: input.creative ? 2200 : 1400,
+            temperature: input.temperature ?? 0.55,
+            top_p: input.topP ?? 0.9,
+            top_k: input.topK ?? 40,
+            max_tokens: input.maxTokens ?? 1400,
             stream: false
           }),
           signal: requestSignal

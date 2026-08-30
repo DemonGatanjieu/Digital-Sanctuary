@@ -500,7 +500,11 @@ export function App() {
         ) : activeView === "models" ? (
           <ModelCenterView onError={showError} />
         ) : activeView === "inspiration" ? (
-          <InspirationView launch={inspirationLaunch} onLaunchConsumed={() => setInspirationLaunch(null)} />
+          <InspirationView
+            launch={inspirationLaunch}
+            onLaunchConsumed={() => setInspirationLaunch(null)}
+            onOpenModelCenter={() => setActiveView("models")}
+          />
         ) : activeView === "settings" ? (
           <SettingsView
             settings={filterSettings}

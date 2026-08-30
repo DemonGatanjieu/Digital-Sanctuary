@@ -9,6 +9,18 @@ export const INSPIRATION_PRESET_IDS = [
 
 export type InspirationPresetId = typeof INSPIRATION_PRESET_IDS[number];
 export type InspirationRole = "user" | "assistant";
+export type InspirationCreativity = "precise" | "balanced" | "imaginative";
+export type InspirationResponseLength = "brief" | "standard" | "detailed";
+
+export interface InspirationGenerationSettings {
+  creativity: InspirationCreativity;
+  responseLength: InspirationResponseLength;
+}
+
+export const DEFAULT_INSPIRATION_SETTINGS: InspirationGenerationSettings = {
+  creativity: "balanced",
+  responseLength: "standard"
+};
 
 export interface InspirationSourceWork {
   workId: string;
@@ -31,6 +43,7 @@ export interface InspirationConversation {
   presetId: InspirationPresetId;
   source: InspirationSourceWork | null;
   modelId: string | null;
+  settings: InspirationGenerationSettings;
   messages: InspirationMessage[];
   createdAt: string;
   updatedAt: string;
@@ -41,6 +54,8 @@ export interface InspirationSendRequest {
   requestId: string;
   presetId: InspirationPresetId;
   message: string;
+  modelId?: string;
+  settings?: InspirationGenerationSettings;
   sourceWorkId?: string;
   sourcePageIndex?: number;
 }
@@ -48,6 +63,8 @@ export interface InspirationSendRequest {
 export interface InspirationRegenerateRequest {
   conversationId: string;
   requestId: string;
+  modelId?: string;
+  settings?: InspirationGenerationSettings;
 }
 
 export interface InspirationSourceUpdateRequest {
@@ -58,4 +75,11 @@ export interface InspirationSourceUpdateRequest {
 
 export function isInspirationPresetId(value: unknown): value is InspirationPresetId {
   return typeof value === "string" && (INSPIRATION_PRESET_IDS as readonly string[]).includes(value);
+}
+
+export function isInspirationGenerationSettings(value: unknown): value is InspirationGenerationSettings {
+  if (!value || typeof value !== "object") return false;
+  const settings = value as Partial<InspirationGenerationSettings>;
+  return ["precise", "balanced", "imaginative"].includes(settings.creativity ?? "") &&
+    ["brief", "standard", "detailed"].includes(settings.responseLength ?? "");
 }

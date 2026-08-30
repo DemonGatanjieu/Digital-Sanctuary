@@ -270,7 +270,8 @@ if (!hasSingleInstanceLock) {
     });
     const activeTagger = await modelCenter.resolveActiveRuntimeModel("element_tagging");
     localArtCriticService = new LocalArtCriticService({
-      resolveActiveModel: () => modelCenter?.resolveActiveRuntimeModel("art_critic") ?? Promise.resolve(null)
+      resolveActiveModel: () => modelCenter?.resolveActiveRuntimeModel("art_critic") ?? Promise.resolve(null),
+      resolveModel: (modelId) => modelCenter?.resolveRuntimeModel(modelId) ?? Promise.resolve(null)
     });
     vision = new VisionClient({ ...resolveVisionProcess(activeTagger), startupProbeImage });
     vision.onStateChange((snapshot) => {
