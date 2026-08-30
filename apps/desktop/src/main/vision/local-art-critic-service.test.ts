@@ -77,6 +77,34 @@ describe("LocalArtCriticService", () => {
     }
   });
 
+  it("reuses the same local runtime for bounded free-form image chat", async () => {
+    const service = new LocalArtCriticService({
+      resolveActiveModel: async () => runtime,
+      startupTimeoutMs: 5_000,
+      idleTimeoutMs: 30_000,
+      buildCommand: buildFixtureCommand
+    });
+    try {
+      const reply = await service.chat({
+        systemPrompt: "自然地谈谈画面。",
+        messages: [{ role: "user", content: "你看到了什么？" }],
+        image: {
+          buffer: Buffer.from("image"),
+          mimeType: "image/png",
+          width: 1,
+          height: 1,
+          byteLength: 5,
+          fingerprint: "chat-fixture",
+          cleanup: () => {}
+        }
+      });
+      expect(reply.identity.modelId).toBe("local-critic-fixture");
+      expect(reply.content).toContain("参考图");
+    } finally {
+      service.close();
+    }
+  });
+
   it("stops the runtime and returns a timeout instead of hanging forever", async () => {
     const fetchImpl: typeof fetch = async (input, init) => {
       if (!String(input).endsWith("/v1/chat/completions")) return fetch(input, init);

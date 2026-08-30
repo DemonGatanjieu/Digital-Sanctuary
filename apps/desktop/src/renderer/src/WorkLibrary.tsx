@@ -30,6 +30,7 @@ export function WorkLibrary({
   onAssignCollection,
   onLibraryChanged,
   onAnalyzeWorks,
+  onOpenInspiration,
   onError
 }: {
   result: WorkQueryResult;
@@ -42,6 +43,7 @@ export function WorkLibrary({
   onAssignCollection: (workId: string, collectionId: string) => Promise<void>;
   onLibraryChanged: () => Promise<void>;
   onAnalyzeWorks: (workIds: string[]) => void;
+  onOpenInspiration: (workId: string, pageIndex: number) => void;
   onError: (error: unknown) => void;
 }) {
   const [selectedWork, setSelectedWork] = useState<WorkRecord | null>(null);
@@ -426,7 +428,7 @@ export function WorkLibrary({
       )}
 
       {selectedWork && (
-        <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} />
+        <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} onOpenInspiration={onOpenInspiration} />
       )}
       {deletionPreview && (
         <DialogOverlay busy={deleting} onClose={() => setDeletionPreview(null)}>
@@ -562,7 +564,7 @@ function LazyWorkImage({ path }: { path: string }) {
   );
 }
 
-function WorkLightbox({ work, onClose, onGenerated }: { work: WorkRecord; onClose: () => void; onGenerated: () => Promise<void> | void }) {
+function WorkLightbox({ work, onClose, onGenerated, onOpenInspiration }: { work: WorkRecord; onClose: () => void; onGenerated: () => Promise<void> | void; onOpenInspiration: (workId: string, pageIndex: number) => void }) {
   const [pageIndex, setPageIndex] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -711,6 +713,14 @@ function WorkLightbox({ work, onClose, onGenerated }: { work: WorkRecord; onClos
             onClick={() => { setShowInspector((value) => !value); setShowRadar(false); setShowProvenance(false); }}
           >
             ◇ 元素透视
+          </button>
+          <button
+            type="button"
+            className="cinema-btn-fit"
+            title="把当前图片带到本地灵感台"
+            onClick={() => { onClose(); onOpenInspiration(work.id, pageIndex); }}
+          >
+            ✦ 一起创作
           </button>
           {provenance && (
             <button type="button" className={`cinema-btn-fit ${showProvenance ? "active" : ""}`} title="查看 ComfyUI 生成来源" onClick={() => { setShowProvenance((value) => !value); setShowRadar(false); }}>

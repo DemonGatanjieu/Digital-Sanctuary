@@ -10,12 +10,14 @@ export function ArtworkLightbox({
   artwork,
   pages,
   onClose,
-  onSelect
+  onSelect,
+  onOpenInspiration
 }: {
   artwork: ArtworkRecord;
   pages: ArtworkRecord[];
   onClose: () => void;
   onSelect: (artwork: ArtworkRecord) => void;
+  onOpenInspiration: (workId: string, pageIndex: number) => void;
 }) {
   const currentIndex = Math.max(0, pages.findIndex((page) => page.id === artwork.id));
   const previous = pages[currentIndex - 1];
@@ -228,6 +230,15 @@ export function ArtworkLightbox({
             onClick={() => { setShowInspector((prev) => !prev); if (!showInspector) setShowRadar(false); }}
           >
             🔍 元素透视
+          </button>
+
+          <button
+            type="button"
+            className="cinema-btn-fit"
+            title="把当前图片带到本地灵感台"
+            onClick={() => onOpenInspiration(libraryWorkId, sourcePageIndex)}
+          >
+            ✦ 一起创作
           </button>
 
           <button

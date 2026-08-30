@@ -34,6 +34,13 @@ export interface LocalArtCriticIdentity {
   evaluatorVersion: string;
 }
 
+export interface LocalInspirationChatInput {
+  systemPrompt: string;
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  image?: PreparedVisionImage;
+  creative?: boolean;
+}
+
 export class LocalArtCriticService {
   readonly #resolveActiveModel: LocalArtCriticServiceOptions["resolveActiveModel"];
   readonly #fetch: typeof fetch;
@@ -192,6 +199,83 @@ export class LocalArtCriticService {
             summary: error instanceof Error ? error.message : "本地评论模型请求失败"
           }
         };
+      } finally {
+        if (this.#process) this.#scheduleIdleShutdown();
+      }
+    });
+    this.#queue = task.catch(() => undefined);
+    return task;
+  }
+
+  async chat(
+    input: LocalInspirationChatInput,
+    signal?: AbortSignal
+  ): Promise<{ identity: LocalArtCriticIdentity; content: string }> {
+    const task: Promise<{ identity: LocalArtCriticIdentity; content: string }> = this.#queue.then(async () => {
+      if (signal?.aborted) throw new Error("已停止生成");
+      const runtime = await this.#resolveActiveModel();
+      if (!runtime || runtime.entry.capability !== "art_critic") {
+        throw new Error("请先在模型中心安装并启用一个本地视觉对话模型");
+      }
+      await this.#ensureStarted(runtime);
+      this.#clearIdleTimer();
+      const timeoutSignal = AbortSignal.timeout(Math.max(this.#inferenceTimeoutMs, 150_000));
+      const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+      const requestProfile = localCriticRequestProfile(runtime.entry.id);
+      const messages: Array<{ role: string; content: unknown }> = [
+        { role: "system", content: input.systemPrompt },
+        ...input.messages.map((message) => ({ role: message.role, content: message.content }))
+      ];
+      if (input.image) {
+        const lastUserIndex = messages.findLastIndex((message) => message.role === "user");
+        if (lastUserIndex >= 0) {
+          const imageContent = {
+            type: "image_url",
+            image_url: { url: `data:${input.image.mimeType};base64,${input.image.buffer.toString("base64")}` }
+          };
+          const textContent = { type: "text", text: String(messages[lastUserIndex]!.content) };
+          messages[lastUserIndex] = {
+            role: "user",
+            content: requestProfile.imageFirst
+              ? [imageContent, textContent]
+              : [textContent, imageContent]
+          };
+        }
+      }
+      try {
+        const response = await this.#fetch(`${this.#endpoint}/v1/chat/completions`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.#apiKey}`
+          },
+          body: JSON.stringify({
+            model: runtime.entry.id,
+            messages,
+            chat_template_kwargs: { enable_thinking: false },
+            temperature: input.creative ? Math.max(0.8, requestProfile.temperature) : 0.55,
+            top_p: input.creative ? 0.95 : 0.9,
+            top_k: input.creative ? 64 : 40,
+            max_tokens: input.creative ? 2200 : 1400,
+            stream: false
+          }),
+          signal: requestSignal
+        });
+        if (!response.ok) {
+          const detail = (await response.text().catch(() => "")).slice(0, 300);
+          throw new Error(detail || `本地模型返回 HTTP ${response.status}`);
+        }
+        const payload = await response.json() as { choices?: Array<{ message?: { content?: unknown } }> };
+        const content = payload.choices?.[0]?.message?.content;
+        if (typeof content !== "string" || !content.trim()) throw new Error("本地模型没有返回可读内容");
+        return { identity: identityOf(runtime), content: content.trim() };
+      } catch (error) {
+        if (signal?.aborted) throw new Error("已停止生成");
+        if (timeoutSignal.aborted) {
+          this.close();
+          throw new Error("本地模型生成超过 150 秒，已停止并释放资源");
+        }
+        throw error;
       } finally {
         if (this.#process) this.#scheduleIdleShutdown();
       }

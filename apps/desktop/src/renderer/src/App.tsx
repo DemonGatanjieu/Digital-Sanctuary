@@ -21,6 +21,7 @@ import { SettingsView } from "./SettingsView";
 import { AnalysisView } from "./AnalysisView";
 import { ModelCenterView } from "./ModelCenterView";
 import { ExploreView, initialExploreState } from "./ExploreView";
+import { InspirationView } from "./InspirationView";
 import { AppSidebar, type ActiveView, type AppStatus } from "./AppSidebar";
 import { GalleryView, type GalleryMode } from "./GalleryView";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
@@ -72,6 +73,7 @@ export function App() {
   const [galleryMode, setGalleryMode] = useState<GalleryMode>("flat");
   const [analysisWorkIds, setAnalysisWorkIds] = useState<string[]>([]);
   const [inspectorTarget, setInspectorTarget] = useState<ElementInspectorTarget | null>(null);
+  const [inspirationLaunch, setInspirationLaunch] = useState<{ workId: string; pageIndex: number } | null>(null);
   const showError = useCallback((caught: unknown) => {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
@@ -470,6 +472,10 @@ export function App() {
               setAnalysisWorkIds(workIds);
               setActiveView("organize");
             }}
+            onOpenInspiration={(workId, pageIndex) => {
+              setInspirationLaunch({ workId, pageIndex });
+              setActiveView("inspiration");
+            }}
             onOpenPixivArtist={(artistId) => {
               setActiveView("explore");
               void window.sanctuary.openPixivArtist(artistId)
@@ -493,6 +499,8 @@ export function App() {
           />
         ) : activeView === "models" ? (
           <ModelCenterView onError={showError} />
+        ) : activeView === "inspiration" ? (
+          <InspirationView launch={inspirationLaunch} onLaunchConsumed={() => setInspirationLaunch(null)} />
         ) : activeView === "settings" ? (
           <SettingsView
             settings={filterSettings}

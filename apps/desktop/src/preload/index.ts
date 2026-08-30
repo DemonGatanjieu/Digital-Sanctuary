@@ -41,7 +41,10 @@ import type {
   GenerationProvenance,
   ModelActivationResult,
   ModelCenterSnapshot,
-  ModelDownloadProgress
+  ModelDownloadProgress,
+  InspirationConversation,
+  InspirationSendRequest,
+  InspirationRegenerateRequest
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -124,6 +127,11 @@ export interface SanctuaryApi {
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
   getWork(workId: string): Promise<WorkRecord | null>;
   getGenerationProvenance(workId: string): Promise<GenerationProvenance | null>;
+  listInspirationConversations(): Promise<InspirationConversation[]>;
+  sendInspirationMessage(request: InspirationSendRequest): Promise<InspirationConversation>;
+  regenerateInspirationMessage(request: InspirationRegenerateRequest): Promise<InspirationConversation>;
+  cancelInspirationMessage(requestId: string): Promise<boolean>;
+  deleteInspirationConversation(conversationId: string): Promise<boolean>;
   generateThumbnails(): Promise<ThumbnailBatchResult>;
   createLibraryBackup(): Promise<string | null>;
   previewWorkDeletion(workIds: string[]): Promise<WorkDeletionPreview>;
@@ -230,6 +238,16 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
   getGenerationProvenance: (workId) =>
     ipcRenderer.invoke("library:get-generation-provenance", workId) as Promise<GenerationProvenance | null>,
+  listInspirationConversations: () =>
+    ipcRenderer.invoke("inspiration:list") as Promise<InspirationConversation[]>,
+  sendInspirationMessage: (request) =>
+    ipcRenderer.invoke("inspiration:send", request) as Promise<InspirationConversation>,
+  regenerateInspirationMessage: (request) =>
+    ipcRenderer.invoke("inspiration:regenerate", request) as Promise<InspirationConversation>,
+  cancelInspirationMessage: (requestId) =>
+    ipcRenderer.invoke("inspiration:cancel", requestId) as Promise<boolean>,
+  deleteInspirationConversation: (conversationId) =>
+    ipcRenderer.invoke("inspiration:delete", conversationId) as Promise<boolean>,
   inspectArtwork: (params) =>
     ipcRenderer.invoke("vision:inspect-artwork", params) as Promise<InspectArtworkResponse | null>,
   addCustomBlacklistTag: (payload) =>

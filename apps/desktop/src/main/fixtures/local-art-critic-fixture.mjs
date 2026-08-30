@@ -12,7 +12,12 @@ const server = http.createServer((request, response) => {
     request.on("data", (chunk) => { body += chunk; });
     request.on("end", () => {
       const requestBody = JSON.parse(body);
-      if (requestBody?.response_format?.type !== "json_object" || !requestBody?.response_format?.schema) {
+      if (!requestBody?.response_format) {
+        response.writeHead(200, { "Content-Type": "application/json" });
+        response.end(JSON.stringify({ choices: [{ message: { content: "我看到了参考图，也收到了你的创作要求。" } }] }));
+        return;
+      }
+      if (requestBody.response_format?.type !== "json_object" || !requestBody.response_format?.schema) {
         response.writeHead(400, { "Content-Type": "application/json" });
         response.end('{"error":"missing structured schema"}');
         return;

@@ -50,6 +50,7 @@ export function GalleryView({
   onLoadMoreWorks,
   onWorkLibraryChanged,
   onAnalyzeWorks,
+  onOpenInspiration,
   onOpenPixivArtist,
   onError
 }: {
@@ -80,6 +81,7 @@ export function GalleryView({
   onLoadMoreWorks: () => void;
   onWorkLibraryChanged: () => Promise<void>;
   onAnalyzeWorks: (workIds: string[]) => void;
+  onOpenInspiration: (workId: string, pageIndex: number) => void;
   onOpenPixivArtist: (artistId: string) => void;
   onError: (error: unknown) => void;
 }) {
@@ -299,6 +301,7 @@ export function GalleryView({
           onAssignCollection={onAssignWorkCollection}
           onLibraryChanged={onWorkLibraryChanged}
           onAnalyzeWorks={onAnalyzeWorks}
+          onOpenInspiration={onOpenInspiration}
           onError={onError}
         />
       ) : (
@@ -333,6 +336,10 @@ export function GalleryView({
           pages={lightboxPages}
           onClose={() => setSelectedArtworkId("")}
           onSelect={(artwork) => setSelectedArtworkId(artwork.id)}
+          onOpenInspiration={(workId, pageIndex) => {
+            setSelectedArtworkId("");
+            onOpenInspiration(workId, pageIndex);
+          }}
         />
       )}
 

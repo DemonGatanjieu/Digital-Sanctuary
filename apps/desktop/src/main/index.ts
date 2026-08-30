@@ -132,6 +132,7 @@ import { registerComfyUiIpc } from "./comfyui/ipc.js";
 import { ModelCenterService, type ResolvedRuntimeModel } from "./model-center/model-center-service.js";
 import { registerModelCenterIpc } from "./model-center/model-center-ipc.js";
 import { LocalArtCriticService } from "./vision/local-art-critic-service.js";
+import { registerInspirationIpc } from "./inspiration-ipc.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -579,6 +580,7 @@ function localImageUrl(imagePath: string): string {
 function registerIpc(): void {
   if (!database || !vision || !themeManager || !themeStore || !comfyUiService || !modelCenter) throw new Error("Application services are unavailable");
   registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService, localArtCriticService);
+  registerInspirationIpc(ipcMain, database, localArtCriticService);
   registerModelCenterIpc({
     ipc: ipcMain,
     service: modelCenter,
