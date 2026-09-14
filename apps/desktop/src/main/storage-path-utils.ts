@@ -68,6 +68,12 @@ export function resolveTargetGalleryDirectory(chosenPath: string): string {
     return join(resolved, "Pixiv");
   }
 
+  // Guardrail: if user selected the software source repository directory (contains package.json & apps)
+  // NEVER dump pictures directly into the code repository; redirect to a clean Digital Sanctuary/Pixiv instead!
+  if (existsSync(join(resolved, "package.json")) && existsSync(join(resolved, "apps"))) {
+    return join(parsed.root || resolved, "Digital Sanctuary", "Pixiv");
+  }
+
   return resolved;
 }
 

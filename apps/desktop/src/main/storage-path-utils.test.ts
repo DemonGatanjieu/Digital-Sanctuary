@@ -87,6 +87,12 @@ describe("storage-path-utils", () => {
       const customDir = resolve("D:\\ArtGallery");
       expect(resolveTargetGalleryDirectory(customDir)).toBe(customDir);
     });
+
+    it("redirects project codebase directory to Digital Sanctuary/Pixiv to prevent polluting source tree", () => {
+      const projectRoot = resolve(".");
+      const redirected = resolveTargetGalleryDirectory(projectRoot);
+      expect(redirected).toBe(join(resolve("/"), "Digital Sanctuary", "Pixiv"));
+    });
   });
 
   describe("getStandardStorageDirectories", () => {
