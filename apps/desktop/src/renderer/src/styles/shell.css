@@ -241,6 +241,73 @@ nav {
   line-height: 1.4;
 }
 
+.download-storage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 4px 2px 0;
+  padding: 5px 8px;
+  background: var(--ds-bg-card-subtle);
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-md);
+  font-size: 10px;
+}
+
+.storage-bar-text {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.storage-drive-tag {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--ds-primary-subtle);
+  color: var(--ds-primary);
+  border: 1px solid var(--ds-primary-border);
+}
+
+.storage-path-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ds-text-muted);
+  font-size: 9px;
+  direction: rtl;
+  text-align: left;
+}
+
+.storage-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.storage-bar-btn {
+  background: transparent;
+  border: 1px solid var(--ds-border-light);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--ds-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.storage-bar-btn:hover {
+  color: var(--ds-primary);
+  border-color: var(--ds-primary);
+  background: var(--ds-primary-subtle);
+}
+
 .download-progress {
   display: grid;
   gap: 6px;

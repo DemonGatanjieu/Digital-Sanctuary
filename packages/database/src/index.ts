@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
-import { basename, extname } from "node:path";
+import { basename, extname, isAbsolute, relative, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   ArtworkRecord,
@@ -16,6 +16,7 @@ import type {
   ArtworkSource,
   SavedCollectionView,
   SavedCollectionViewDraft,
+  StorageMigrationResult,
   VisionAssessment,
   WorkAssetRecord,
   WorkListItem,
@@ -984,6 +985,120 @@ export class LibraryDatabase {
     return Boolean(
       this.#database.prepare("SELECT 1 AS found FROM artists WHERE avatar_local_path = ?").get(path)
     );
+  }
+
+  migrateArtworkStoragePaths(oldDirectory: string, newDirectory: string): StorageMigrationResult {
+    const normOld = resolve(oldDirectory);
+    const normNew = resolve(newDirectory);
+    const normOldAvatarDir = resolve(normOld, "..", "avatars");
+    const normNewAvatarDir = resolve(normNew, "..", "avatars");
+
+    let migratedArtworks = 0;
+    let migratedAssets = 0;
+    let migratedAvatars = 0;
+
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const artworks = this.#database
+        .prepare("SELECT id, path FROM artworks")
+        .all() as unknown as { id: string; path: string }[];
+
+      const updateArtworkStmt = this.#database.prepare(
+        "UPDATE artworks SET path = ?, file_name = ? WHERE id = ?"
+      );
+      for (const artwork of artworks) {
+        const rel = relative(normOld, resolve(artwork.path));
+        if (!rel.startsWith("..") && !isAbsolute(rel)) {
+          const nextPath = resolve(normNew, rel);
+          updateArtworkStmt.run(nextPath, basename(nextPath), artwork.id);
+          migratedArtworks += 1;
+        }
+      }
+
+      const assets = this.#database
+        .prepare("SELECT id, path, thumbnail_path FROM assets")
+        .all() as unknown as { id: string; path: string; thumbnail_path: string | null }[];
+
+      const updateAssetStmt = this.#database.prepare(
+        "UPDATE assets SET path = ?, thumbnail_path = ? WHERE id = ?"
+      );
+      for (const asset of assets) {
+        let changed = false;
+        let nextPath = asset.path;
+        let nextThumb = asset.thumbnail_path;
+
+        const relPath = relative(normOld, resolve(asset.path));
+        if (!relPath.startsWith("..") && !isAbsolute(relPath)) {
+          nextPath = resolve(normNew, relPath);
+          changed = true;
+          migratedAssets += 1;
+        }
+
+        if (asset.thumbnail_path) {
+          const relThumb = relative(normOld, resolve(asset.thumbnail_path));
+          if (!relThumb.startsWith("..") && !isAbsolute(relThumb)) {
+            nextThumb = resolve(normNew, relThumb);
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          updateAssetStmt.run(nextPath, nextThumb, asset.id);
+        }
+      }
+
+      const artists = this.#database
+        .prepare("SELECT id, avatar_local_path FROM artists WHERE avatar_local_path IS NOT NULL")
+        .all() as unknown as { id: string; avatar_local_path: string }[];
+
+      const updateArtistStmt = this.#database.prepare(
+        "UPDATE artists SET avatar_local_path = ? WHERE id = ?"
+      );
+      for (const artist of artists) {
+        const resolvedAvatar = resolve(artist.avatar_local_path);
+        const relToAvatars = relative(normOldAvatarDir, resolvedAvatar);
+        if (!relToAvatars.startsWith("..") && !isAbsolute(relToAvatars)) {
+          const nextAvatar = resolve(normNewAvatarDir, relToAvatars);
+          updateArtistStmt.run(nextAvatar, artist.id);
+          migratedAvatars += 1;
+          continue;
+        }
+        const relToOld = relative(normOld, resolvedAvatar);
+        if (!relToOld.startsWith("..") && !isAbsolute(relToOld)) {
+          const nextAvatar = resolve(normNew, relToOld);
+          updateArtistStmt.run(nextAvatar, artist.id);
+          migratedAvatars += 1;
+        }
+      }
+
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+
+    return {
+      migratedArtworks,
+      migratedAssets,
+      migratedAvatars,
+      sourceDirectory: normOld,
+      targetDirectory: normNew
+    };
+  }
+
+  countArtworksOutsideDirectory(directory: string): number {
+    const norm = resolve(directory);
+    const artworks = this.#database
+      .prepare("SELECT path FROM artworks")
+      .all() as unknown as { path: string }[];
+    let count = 0;
+    for (const item of artworks) {
+      const rel = relative(norm, resolve(item.path));
+      if (rel.startsWith("..") || isAbsolute(rel)) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   createCollection(name: string, description = ""): CollectionRecord {

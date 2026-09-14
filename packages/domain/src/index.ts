@@ -160,6 +160,24 @@ export const DEFAULT_LIBRARY_PREFERENCES: LibraryPreferences = {
   downloadDirectory: null
 };
 
+export interface StorageLocationInfo {
+  configuredPath: string | null;
+  effectivePath: string;
+  driveRoot: string;
+  freeBytes: number | null;
+  totalBytes: number | null;
+  artworkCount: number;
+  migratableArtworkCount: number;
+}
+
+export interface StorageMigrationResult {
+  migratedArtworks: number;
+  migratedAssets: number;
+  migratedAvatars: number;
+  sourceDirectory: string;
+  targetDirectory: string;
+}
+
 /**
  * A user-visible work. Multi-page Pixiv works have one WorkRecord and many
  * WorkAssetRecords; ArtworkRecord remains the page-level compatibility model.

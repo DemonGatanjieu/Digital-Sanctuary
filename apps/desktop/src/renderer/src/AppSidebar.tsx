@@ -1,4 +1,4 @@
-import type { AppearancePreferences } from "@sanctuary/domain";
+import type { AppearancePreferences, StorageLocationInfo } from "@sanctuary/domain";
 import type { ExploreState } from "../../preload/index";
 import { downloadPhaseLabel } from "./ExploreView";
 import { SegmentedControl } from "./SegmentedControl";
@@ -20,22 +20,28 @@ export function AppSidebar({
   downloadBusy,
   appearance,
   status,
+  storageLocation,
   onOpenGallery,
   onViewChange,
   onDownloadCurrentArtwork,
   onPreviewBookmarks,
-  onAppearanceChange
+  onAppearanceChange,
+  onChooseDownloadDirectory,
+  onOpenStorageDirectory
 }: {
   activeView: ActiveView;
   exploreState: ExploreState;
   downloadBusy: boolean;
   appearance: AppearancePreferences;
   status: AppStatus | null;
+  storageLocation?: StorageLocationInfo | null;
   onOpenGallery: () => void | Promise<void>;
   onViewChange: (view: ActiveView) => void;
   onDownloadCurrentArtwork: () => void | Promise<void>;
   onPreviewBookmarks: () => void | Promise<void>;
   onAppearanceChange: (appearance: AppearancePreferences) => void | Promise<void>;
+  onChooseDownloadDirectory?: () => void | Promise<unknown>;
+  onOpenStorageDirectory?: () => void | Promise<unknown>;
 }) {
   return (
     <aside className="sidebar">
@@ -107,7 +113,32 @@ export function AppSidebar({
                 : "进入收藏作品页后可用"}
             </small>
           </button>
-          <p className="download-location">图片 → Digital Sanctuary → Pixiv</p>
+          <div className="download-storage-bar" title={storageLocation?.effectivePath ?? "图片 → Digital Sanctuary → Pixiv"}>
+            <div className="storage-bar-text">
+              <span className="storage-drive-tag">{storageLocation?.driveRoot ? `${storageLocation.driveRoot}` : "默认"}</span>
+              <span className="storage-path-summary">
+                {storageLocation?.effectivePath ? storageLocation.effectivePath : "图片 → Digital Sanctuary → Pixiv"}
+              </span>
+            </div>
+            <div className="storage-bar-actions">
+              <button
+                type="button"
+                className="storage-bar-btn"
+                title="在系统文件管理器中打开保存文件夹"
+                onClick={() => void onOpenStorageDirectory?.()}
+              >
+                打开
+              </button>
+              <button
+                type="button"
+                className="storage-bar-btn"
+                title="更改保存盘符或目录"
+                onClick={() => void onChooseDownloadDirectory?.()}
+              >
+                更改
+              </button>
+            </div>
+          </div>
           {exploreState.download.phase !== "idle" && (
             <div className={`download-progress ${exploreState.download.phase}`}>
               <strong>{downloadPhaseLabel(exploreState.download.phase)}</strong>

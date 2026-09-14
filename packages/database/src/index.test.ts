@@ -884,4 +884,52 @@ describe("LibraryDatabase", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it("migrates artwork, asset, and artist storage paths atomically across directories", () => {
+    const oldDir = "E:\\Pictures\\Digital Sanctuary\\Pixiv";
+    const newDir = "F:\\Sanctuary\\Pixiv";
+    const oldAvatarDir = "E:\\Pictures\\Digital Sanctuary\\avatars";
+    const newAvatarDir = "F:\\Sanctuary\\avatars";
+
+    const database = new LibraryDatabase(":memory:");
+    try {
+      const art1 = database.importArtwork(`${oldDir}\\1001\\1001_p0.jpg`);
+      const art2 = database.importArtwork(`${oldDir}\\1002\\1002_p0.png`);
+      const artOther = database.importArtwork("D:\\Other\\2001_p0.jpg");
+
+      database.importArtist({
+        id: "artist-1",
+        name: "Test Artist",
+        avatarUrl: "https://example.com/avatar.jpg",
+        avatarLocalPath: `${oldAvatarDir}\\artist-1.jpg`,
+        updatedAt: new Date().toISOString()
+      });
+
+      expect(database.countArtworksOutsideDirectory(oldDir)).toBe(1);
+
+      const result = database.migrateArtworkStoragePaths(oldDir, newDir);
+      expect(result.migratedArtworks).toBe(2);
+      expect(result.migratedAssets).toBe(2);
+      expect(result.migratedAvatars).toBe(1);
+
+      const updated1 = database.listArtworks().find((a) => a.id === art1.id)!;
+      const updated2 = database.listArtworks().find((a) => a.id === art2.id)!;
+      const untouched = database.listArtworks().find((a) => a.id === artOther.id)!;
+      const updatedArtist = database.listArtists().find((a) => a.id === "artist-1")!;
+
+      expect(updated1.path).toBe(`${newDir}\\1001\\1001_p0.jpg`);
+      expect(updated2.path).toBe(`${newDir}\\1002\\1002_p0.png`);
+      expect(untouched.path).toBe("D:\\Other\\2001_p0.jpg");
+      expect(updatedArtist.avatarLocalPath).toBe(`${newAvatarDir}\\artist-1.jpg`);
+
+      expect(database.hasArtworkPath(`${newDir}\\1001\\1001_p0.jpg`)).toBe(true);
+      expect(database.hasArtworkPath(`${oldDir}\\1001\\1001_p0.jpg`)).toBe(false);
+      expect(database.hasAvatarPath(`${newAvatarDir}\\artist-1.jpg`)).toBe(true);
+      expect(database.hasAvatarPath(`${oldAvatarDir}\\artist-1.jpg`)).toBe(false);
+
+      expect(database.countArtworksOutsideDirectory(newDir)).toBe(1);
+    } finally {
+      database.close();
+    }
+  });
 });

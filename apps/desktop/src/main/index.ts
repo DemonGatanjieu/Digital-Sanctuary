@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream, existsSync } from "node:fs";
-import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { mkdir, rename, unlink, writeFile, cp, rm, statfs } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, parse, relative, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -35,6 +35,8 @@ import {
   type CustomElementGroup,
   type LibraryPreferences,
   type RuleSandboxResult,
+  type StorageLocationInfo,
+  type StorageMigrationResult,
   type VisionAssessment,
   type WorkDeletionPreview,
   type WorkDeletionResult,
@@ -241,7 +243,7 @@ if (!hasSingleInstanceLock) {
     database.recoverInterruptedComfyUiJobs();
     comfyUiService = new ComfyUiService(
       database,
-      join(app.getPath("pictures"), "Digital Sanctuary", "Generated", "ComfyUI")
+      () => comfyUiOutputDirectory()
     );
     if (process.env.SANCTUARY_BENCHMARK_LIBRARY === "1") {
       database.seedBenchmarkWorks(Number(process.env.SANCTUARY_BENCHMARK_WORKS ?? 10_000));
@@ -564,13 +566,19 @@ async function deleteConfirmedWorks(workIds: readonly string[]): Promise<WorkDel
 
 function registerImageProtocol(): void {
   protocol.handle("sanctuary-image", (request) => {
-    const imagePath = decodeURIComponent(new URL(request.url).pathname.slice(1));
-    const isArtwork = database?.hasArtworkPath(imagePath) ?? false;
-    const isAvatar = database?.hasAvatarPath(imagePath) ?? false;
-    if ((!isArtwork && !isAvatar) || !existsSync(imagePath)) {
+    const rawPath = decodeURIComponent(new URL(request.url).pathname.slice(1));
+    const imagePath = resolve(rawPath);
+    const isArtwork =
+      (database?.hasArtworkPath(imagePath) ?? false) ||
+      (database?.hasArtworkPath(rawPath) ?? false);
+    const isAvatar =
+      (database?.hasAvatarPath(imagePath) ?? false) ||
+      (database?.hasAvatarPath(rawPath) ?? false);
+    if ((!isArtwork && !isAvatar) || (!existsSync(imagePath) && !existsSync(rawPath))) {
       return new Response("Not found", { status: 404 });
     }
-    return net.fetch(pathToFileURL(imagePath).toString());
+    const finalPath = existsSync(imagePath) ? imagePath : rawPath;
+    return net.fetch(pathToFileURL(finalPath).toString());
   });
 }
 
@@ -1660,16 +1668,88 @@ function registerIpc(): void {
     database.setPreference("library.preferences", value);
     return value;
   });
-  ipcMain.handle("preferences:library:choose-download-directory", async (): Promise<LibraryPreferences> => {
+  ipcMain.handle("preferences:library:get-storage-location", async (): Promise<StorageLocationInfo> => {
+    return await getStorageLocationInfo();
+  });
+
+  ipcMain.handle("preferences:library:open-storage-directory", async (): Promise<boolean> => {
+    const dir = pixivGalleryDirectory();
+    await mkdir(dir, { recursive: true });
+    const err = await shell.openPath(dir);
+    return err === "";
+  });
+
+  ipcMain.handle("preferences:library:migrate-storage", async (): Promise<StorageMigrationResult> => {
+    if (!database) throw new Error("本地画廊尚未准备好");
+    const currentEffective = pixivGalleryDirectory();
+    const defaultDir = defaultPixivGalleryDirectory();
+    const sourceDir = currentEffective.toLowerCase() === defaultDir.toLowerCase()
+      ? defaultDir
+      : defaultDir;
+    return await migrateDiskFiles(sourceDir, currentEffective);
+  });
+
+  ipcMain.handle("preferences:library:choose-download-directory", async () => {
     if (!database || !mainWindow) throw new Error("Application window is unavailable");
+    const previousEffective = pixivGalleryDirectory();
     const selected = await dialog.showOpenDialog(mainWindow, {
-      title: "选择 Pixiv 作品保存目录",
+      title: "选择 Pixiv 作品保存目录（支持任意磁盘与文件夹）",
       properties: ["openDirectory", "createDirectory"]
     });
-    if (selected.canceled || !selected.filePaths[0]) return libraryPreferences();
-    const next = { ...libraryPreferences(), downloadDirectory: resolve(selected.filePaths[0]) };
+    if (selected.canceled || !selected.filePaths[0]) {
+      return {
+        preferences: libraryPreferences(),
+        location: await getStorageLocationInfo()
+      };
+    }
+
+    const selectedDirectory = resolve(selected.filePaths[0]);
+    if (selectedDirectory.toLowerCase() === previousEffective.toLowerCase()) {
+      return {
+        preferences: libraryPreferences(),
+        location: await getStorageLocationInfo()
+      };
+    }
+
+    const currentArtworks = database.listArtworks();
+    const hasExistingInOld = currentArtworks.some((a) => {
+      const rel = relative(previousEffective, resolve(a.path));
+      return !rel.startsWith("..") && !isAbsolute(rel);
+    });
+
+    let migrationResult: StorageMigrationResult | undefined;
+
+    if (hasExistingInOld && currentArtworks.length > 0) {
+      const choice = await dialog.showMessageBox(mainWindow, {
+        type: "question",
+        buttons: ["迁移已有照片并切换", "仅切换新下载目录", "取消"],
+        defaultId: 0,
+        cancelId: 2,
+        title: "迁移已有照片",
+        message: `已选择新存储位置：\n${selectedDirectory}`,
+        detail: `检测到原目录中已有 ${currentArtworks.length} 部保存的作品。\n\n• 迁移已有照片并切换：将已下载照片复制移动到新磁盘/目录，同步更新图库记录，释放原盘空间。\n• 仅切换新下载目录：已有照片保留在原处，仅后续新下载保存到新目录。\n• 取消：保持当前存储位置不变。`
+      });
+
+      if (choice.response === 2) {
+        return {
+          preferences: libraryPreferences(),
+          location: await getStorageLocationInfo()
+        };
+      }
+
+      if (choice.response === 0) {
+        migrationResult = await migrateDiskFiles(previousEffective, selectedDirectory);
+      }
+    }
+
+    const next = { ...libraryPreferences(), downloadDirectory: selectedDirectory };
     database.setPreference("library.preferences", next);
-    return next;
+
+    return {
+      preferences: next,
+      location: await getStorageLocationInfo(),
+      migrationResult
+    };
   });
 
   ipcMain.handle("app:status", () => currentApplicationStatus());
@@ -2108,8 +2188,117 @@ function requireExploreSession(): Session {
   return contents.session;
 }
 
+function defaultPixivGalleryDirectory(): string {
+  return join(app.getPath("pictures"), "Digital Sanctuary", "Pixiv");
+}
+
 function pixivGalleryDirectory(): string {
-  return libraryPreferences().downloadDirectory ?? join(app.getPath("pictures"), "Digital Sanctuary", "Pixiv");
+  return libraryPreferences().downloadDirectory ?? defaultPixivGalleryDirectory();
+}
+
+function comfyUiOutputDirectory(): string {
+  const custom = libraryPreferences().downloadDirectory;
+  if (custom) {
+    return join(custom, "..", "Generated", "ComfyUI");
+  }
+  return join(app.getPath("pictures"), "Digital Sanctuary", "Generated", "ComfyUI");
+}
+
+async function getStorageLocationInfo(): Promise<StorageLocationInfo> {
+  const configured = libraryPreferences().downloadDirectory;
+  const effective = pixivGalleryDirectory();
+  const driveRoot = parse(effective).root || effective;
+  let freeBytes: number | null = null;
+  let totalBytes: number | null = null;
+  try {
+    const stats = await statfs(effective);
+    freeBytes = Number(stats.bavail) * Number(stats.bsize);
+    totalBytes = Number(stats.blocks) * Number(stats.bsize);
+  } catch {
+    try {
+      const stats = await statfs(driveRoot);
+      freeBytes = Number(stats.bavail) * Number(stats.bsize);
+      totalBytes = Number(stats.blocks) * Number(stats.bsize);
+    } catch {
+      // statfs may fail on special paths
+    }
+  }
+
+  const artworkCount = database?.listArtworks().length ?? 0;
+  const migratableArtworkCount = database?.countArtworksOutsideDirectory(effective) ?? 0;
+
+  return {
+    configuredPath: configured,
+    effectivePath: effective,
+    driveRoot,
+    freeBytes,
+    totalBytes,
+    artworkCount,
+    migratableArtworkCount
+  };
+}
+
+async function migrateDiskFiles(
+  sourceDir: string,
+  targetDir: string
+): Promise<StorageMigrationResult> {
+  if (!database) throw new Error("本地画廊尚未准备好");
+  const normSource = resolve(sourceDir);
+  const normTarget = resolve(targetDir);
+  if (normSource.toLowerCase() === normTarget.toLowerCase()) {
+    return {
+      migratedArtworks: 0,
+      migratedAssets: 0,
+      migratedAvatars: 0,
+      sourceDirectory: normSource,
+      targetDirectory: normTarget
+    };
+  }
+
+  await mkdir(normTarget, { recursive: true });
+
+  if (existsSync(normSource)) {
+    try {
+      await cp(normSource, normTarget, { recursive: true, force: true });
+    } catch (err) {
+      console.error("[storage-migration] Error copying files:", err);
+      throw new Error(`移动文件失败: ${errorMessage(err)}`);
+    }
+  }
+
+  const oldAvatarDir = resolve(normSource, "..", "avatars");
+  const newAvatarDir = resolve(normTarget, "..", "avatars");
+  if (existsSync(oldAvatarDir) && oldAvatarDir.toLowerCase() !== newAvatarDir.toLowerCase()) {
+    try {
+      await mkdir(newAvatarDir, { recursive: true });
+      await cp(oldAvatarDir, newAvatarDir, { recursive: true, force: true });
+    } catch (err) {
+      console.warn("[storage-migration] Error copying avatars:", err);
+    }
+  }
+
+  const dbResult = database.migrateArtworkStoragePaths(normSource, normTarget);
+
+  if (existsSync(normSource)) {
+    try {
+      if (parse(normSource).root.toLowerCase() !== normSource.toLowerCase()) {
+        await rm(normSource, { recursive: true, force: true });
+      }
+    } catch (err) {
+      console.warn("[storage-migration] Could not delete old directory:", err);
+    }
+  }
+  if (existsSync(oldAvatarDir) && oldAvatarDir.toLowerCase() !== newAvatarDir.toLowerCase()) {
+    try {
+      if (parse(oldAvatarDir).root.toLowerCase() !== oldAvatarDir.toLowerCase()) {
+        await rm(oldAvatarDir, { recursive: true, force: true });
+      }
+    } catch (err) {
+      console.warn("[storage-migration] Could not delete old avatars directory:", err);
+    }
+  }
+
+  return dbResult;
 }
 
 function repairMissingArtistAvatars(): Promise<ArtistAvatarRepairResult> {

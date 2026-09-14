@@ -6,7 +6,9 @@ import {
   type CustomElementGroup,
   type ElementFilterSetting,
   type LibraryPreferences,
-  type RuleSandboxResult
+  type RuleSandboxResult,
+  type StorageLocationInfo,
+  type StorageMigrationResult
 } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import type { AppStatus } from "./AppSidebar";
@@ -25,11 +27,14 @@ interface SettingsViewProps {
   status: AppStatus | null;
   savingGroupId: string;
   error: string;
+  storageLocation?: StorageLocationInfo | null;
   onEdit: (setting: ElementFilterSetting) => void;
   onSave: (setting: ElementFilterSetting) => void;
   onAppearanceChange: (preferences: AppearancePreferences) => Promise<void>;
   onLibraryPreferencesChange: (preferences: LibraryPreferences) => Promise<void>;
-  onChooseDownloadDirectory: () => Promise<void>;
+  onChooseDownloadDirectory: () => Promise<unknown>;
+  onOpenStorageDirectory?: () => Promise<boolean>;
+  onMigrateStorage?: () => Promise<StorageMigrationResult>;
   onCreateBackup: () => Promise<string | null>;
   onCustomGroupsChange: (groups: CustomElementGroup[]) => Promise<void>;
 }
@@ -42,14 +47,19 @@ export function SettingsView({
   status,
   savingGroupId,
   error,
+  storageLocation,
   onEdit,
   onSave,
   onAppearanceChange,
   onLibraryPreferencesChange,
   onChooseDownloadDirectory,
+  onOpenStorageDirectory,
+  onMigrateStorage,
   onCreateBackup,
   onCustomGroupsChange
 }: SettingsViewProps) {
+  const [migrating, setMigrating] = useState(false);
+  const [storageMessage, setStorageMessage] = useState("");
   const [customName, setCustomName] = useState("");
   const [customTags, setCustomTags] = useState("");
   const [customAliases, setCustomAliases] = useState("");
@@ -195,11 +205,71 @@ export function SettingsView({
         <PreferenceSelect label="默认排序" value={libraryPreferences.defaultSortBy} onChange={(value) => void onLibraryPreferencesChange({ ...libraryPreferences, defaultSortBy: value as LibraryPreferences["defaultSortBy"] })} options={[["savedAt", "保存时间"], ["publishedAt", "发布时间"], ["title", "标题"], ["artist", "作者"], ["pageCount", "页数"], ["byteLength", "大小"]]} />
         <PreferenceSelect label="排序方向" value={libraryPreferences.defaultSortDirection} onChange={(value) => void onLibraryPreferencesChange({ ...libraryPreferences, defaultSortDirection: value as "asc" | "desc" })} options={[["desc", "降序"], ["asc", "升序"]]} />
         <PreferenceSelect label="网格密度" value={libraryPreferences.gridDensity} onChange={(value) => void onLibraryPreferencesChange({ ...libraryPreferences, gridDensity: value as "comfortable" | "compact" })} options={[["comfortable", "舒适"], ["compact", "紧凑"]]} />
-        <div className="storage-preference">
-          <span><strong>Pixiv 保存目录</strong><small>{libraryPreferences.downloadDirectory ?? "系统图片 / Digital Sanctuary / Pixiv"}</small></span>
-          <Button onClick={() => void onChooseDownloadDirectory()}>选择目录</Button>
-          <Button onClick={() => void onCreateBackup().then((path) => path && setBackupMessage(`备份已保存到 ${path}`))}>备份数据库</Button>
-          <Button variant="ghost" onClick={() => void onLibraryPreferencesChange(DEFAULT_LIBRARY_PREFERENCES)}>恢复画廊默认值</Button>
+        <div className="storage-preference-card">
+          <div className="storage-info-header">
+            <div className="storage-path-block">
+              <span className="storage-title">Pixiv 照片保存路径与磁盘</span>
+              <p className="storage-path-text" title={storageLocation?.effectivePath ?? libraryPreferences.downloadDirectory ?? "系统图片 / Digital Sanctuary / Pixiv"}>
+                {storageLocation?.effectivePath ?? libraryPreferences.downloadDirectory ?? "系统图片 / Digital Sanctuary / Pixiv"}
+              </p>
+            </div>
+            <div className="storage-meta-badges">
+              <span className="storage-badge drive-badge">
+                {storageLocation?.driveRoot ? `磁盘 ${storageLocation.driveRoot}` : "系统盘"}
+              </span>
+              {storageLocation?.freeBytes !== null && storageLocation?.freeBytes !== undefined && (
+                <span className="storage-badge space-badge">
+                  可用 {(storageLocation.freeBytes / (1024 ** 3)).toFixed(1)} GB
+                  {storageLocation.totalBytes ? ` / ${(storageLocation.totalBytes / (1024 ** 3)).toFixed(1)} GB` : ""}
+                </span>
+              )}
+              <span className="storage-badge type-badge">
+                {libraryPreferences.downloadDirectory ? "自定义存储盘" : "系统默认目录"}
+              </span>
+            </div>
+          </div>
+
+          {storageLocation && storageLocation.migratableArtworkCount > 0 && (
+            <div className="storage-migratable-banner">
+              <div className="storage-migratable-text">
+                <span>提示：图库中有 <strong>{storageLocation.migratableArtworkCount}</strong> 部作品保存在其他目录或旧磁盘中。</span>
+                <small>点击一键迁移可将所有历史照片合并移动至当前选择的存储盘，并自动释放原磁盘空间。</small>
+              </div>
+              <Button
+                variant="primary"
+                size="small"
+                busy={migrating}
+                busyLabel="正在迁移照片..."
+                onClick={async () => {
+                  try {
+                    setMigrating(true);
+                    const res = await onMigrateStorage?.();
+                    if (res) {
+                      setStorageMessage(`已成功迁移 ${res.migratedArtworks} 部作品（共 ${res.migratedAssets} 张照片）至当前存储盘！`);
+                    }
+                  } catch (e) {
+                    setStorageMessage(`迁移失败: ${e instanceof Error ? e.message : String(e)}`);
+                  } finally {
+                    setMigrating(false);
+                  }
+                }}
+              >
+                一键迁移已有照片至此
+              </Button>
+            </div>
+          )}
+
+          <div className="storage-action-row">
+            <Button onClick={() => void onChooseDownloadDirectory()}>更改存储盘 / 目录</Button>
+            <Button variant="secondary" onClick={() => void onOpenStorageDirectory?.()}>在资源管理器中打开</Button>
+            <Button variant="secondary" onClick={() => void onCreateBackup().then((path) => path && setBackupMessage(`备份已保存到 ${path}`))}>备份数据库</Button>
+            <Button variant="ghost" onClick={() => void onLibraryPreferencesChange(DEFAULT_LIBRARY_PREFERENCES)}>恢复默认位置</Button>
+          </div>
+          {storageMessage && (
+            <AppNotice className="storage-notice" tone="success" onDismiss={() => setStorageMessage("")}>
+              {storageMessage}
+            </AppNotice>
+          )}
         </div>
         {backupMessage && <AppNotice className="storage-backup-notice" tone="success" onDismiss={() => setBackupMessage("")}>{backupMessage}</AppNotice>}
       </section>

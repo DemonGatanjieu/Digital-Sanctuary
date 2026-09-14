@@ -22,18 +22,22 @@ const JOB_TIMEOUT_MS = 10 * 60 * 1_000;
 
 export class ComfyUiService {
   readonly #database: LibraryDatabase;
-  readonly #outputDirectory: string;
+  readonly #outputDirectory: string | (() => string);
   readonly #clientFactory: (baseUrl: string) => ComfyUiClient;
   #queue: Promise<void> = Promise.resolve();
 
   constructor(
     database: LibraryDatabase,
-    outputDirectory: string,
+    outputDirectory: string | (() => string),
     clientFactory: (baseUrl: string) => ComfyUiClient = (baseUrl) => new ComfyUiClient(baseUrl)
   ) {
     this.#database = database;
     this.#outputDirectory = outputDirectory;
     this.#clientFactory = clientFactory;
+  }
+
+  get outputDirectory(): string {
+    return typeof this.#outputDirectory === "function" ? this.#outputDirectory() : this.#outputDirectory;
   }
 
   getConfig(): ComfyUiConfig {
@@ -148,7 +152,7 @@ export class ComfyUiService {
         if (history.error) throw new Error(history.error);
         if (history.complete) {
           if (history.images.length === 0) throw new Error("ComfyUI 任务完成，但没有返回图片输出");
-          const directory = join(this.#outputDirectory, jobId);
+          const directory = join(this.outputDirectory, jobId);
           await mkdir(directory, { recursive: true });
           const outputWorkIds: string[] = [];
           for (const [index, image] of history.images.entries()) {

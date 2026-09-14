@@ -14,6 +14,8 @@ import type {
   RuleSandboxResult,
   SavedCollectionView,
   SavedCollectionViewDraft,
+  StorageLocationInfo,
+  StorageMigrationResult,
   ActiveTheme,
   InstalledTheme,
   StoreCatalogResponse,
@@ -55,6 +57,12 @@ import type {
   PixivPageKind
 } from "../shared/pixiv-download.js";
 import type { ThumbnailBatchResult } from "../main/thumbnail-service.js";
+
+export interface StorageDirectoryChoiceResult {
+  preferences: LibraryPreferences;
+  location: StorageLocationInfo;
+  migrationResult?: StorageMigrationResult;
+}
 
 export interface ExploreBounds {
   x: number;
@@ -165,7 +173,10 @@ export interface SanctuaryApi {
   resetPersonalTagPreferences(): Promise<PersonalPreferenceProfileView>;
   getLibraryPreferences(): Promise<LibraryPreferences>;
   updateLibraryPreferences(preferences: LibraryPreferences): Promise<LibraryPreferences>;
-  chooseDownloadDirectory(): Promise<LibraryPreferences>;
+  getStorageLocation(): Promise<StorageLocationInfo>;
+  chooseDownloadDirectory(): Promise<StorageDirectoryChoiceResult>;
+  openStorageDirectory(): Promise<boolean>;
+  migrateStorage(): Promise<StorageMigrationResult>;
   getInstalledThemes(): Promise<InstalledTheme[]>;
   getActiveTheme(): Promise<ActiveTheme>;
   setActiveTheme(themeId: string): Promise<{ success: boolean; cssContent: string }>;
@@ -329,8 +340,14 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("preferences:library:get") as Promise<LibraryPreferences>,
   updateLibraryPreferences: (preferences) =>
     ipcRenderer.invoke("preferences:library:update", preferences) as Promise<LibraryPreferences>,
+  getStorageLocation: () =>
+    ipcRenderer.invoke("preferences:library:get-storage-location") as Promise<StorageLocationInfo>,
   chooseDownloadDirectory: () =>
-    ipcRenderer.invoke("preferences:library:choose-download-directory") as Promise<LibraryPreferences>,
+    ipcRenderer.invoke("preferences:library:choose-download-directory") as Promise<StorageDirectoryChoiceResult>,
+  openStorageDirectory: () =>
+    ipcRenderer.invoke("preferences:library:open-storage-directory") as Promise<boolean>,
+  migrateStorage: () =>
+    ipcRenderer.invoke("preferences:library:migrate-storage") as Promise<StorageMigrationResult>,
   getInstalledThemes: () =>
     ipcRenderer.invoke("themes:installed") as Promise<InstalledTheme[]>,
   getActiveTheme: () =>

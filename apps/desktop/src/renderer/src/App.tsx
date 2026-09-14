@@ -10,6 +10,7 @@ import {
   type LibraryPreferences,
   type SavedCollectionView,
   type SavedCollectionViewDraft,
+  type StorageLocationInfo,
   type WorkQuery,
   type WorkQueryResult
 } from "@sanctuary/domain";
@@ -56,6 +57,7 @@ export function App() {
   const [collectionSaving, setCollectionSaving] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreferences>(DEFAULT_APPEARANCE);
   const [libraryPreferences, setLibraryPreferences] = useState<LibraryPreferences>(DEFAULT_LIBRARY_PREFERENCES);
+  const [storageLocation, setStorageLocation] = useState<StorageLocationInfo | null>(null);
   const [customElementGroups, setCustomElementGroups] = useState<CustomElementGroup[]>([]);
   const [bookmarkPreview, setBookmarkPreview] = useState<BookmarkDownloadPreview | null>(null);
   const [startingBookmarkDownload, setStartingBookmarkDownload] = useState(false);
@@ -83,18 +85,20 @@ export function App() {
   }, [workQuery]);
 
   const refreshLibrary = useCallback(async () => {
-    const [nextWorks, nextCollections, nextArtists, nextArtworks, nextSavedViews] = await Promise.all([
+    const [nextWorks, nextCollections, nextArtists, nextArtworks, nextSavedViews, nextStorage] = await Promise.all([
       window.sanctuary.queryWorks(workQuery),
       window.sanctuary.listCollections(),
       window.sanctuary.listArtists(),
       galleryMode === "flat" ? Promise.resolve(null) : window.sanctuary.listArtworks(),
-      window.sanctuary.listSavedCollectionViews()
+      window.sanctuary.listSavedCollectionViews(),
+      window.sanctuary.getStorageLocation()
     ]);
     setWorkResult(nextWorks);
     if (nextArtworks) setArtworks(nextArtworks);
     setCollections(nextCollections);
     setArtists(nextArtists);
     setSavedCollectionViews(nextSavedViews);
+    setStorageLocation(nextStorage);
   }, [galleryMode, workQuery]);
 
   useEffect(() => {
@@ -122,9 +126,10 @@ export function App() {
       window.sanctuary.listArtists(),
       window.sanctuary.getAppearancePreferences(),
       window.sanctuary.getLibraryPreferences(),
-      window.sanctuary.listCustomElementGroups()
+      window.sanctuary.listCustomElementGroups(),
+      window.sanctuary.getStorageLocation()
     ])
-      .then(([nextCollections, nextSavedViews, nextFilterSettings, nextStatus, nextArtists, nextAppearance, nextLibraryPreferences, nextCustomGroups]) => {
+      .then(([nextCollections, nextSavedViews, nextFilterSettings, nextStatus, nextArtists, nextAppearance, nextLibraryPreferences, nextCustomGroups, nextStorage]) => {
         setCollections(nextCollections);
         setSavedCollectionViews(nextSavedViews);
         setFilterSettings(nextFilterSettings);
@@ -133,6 +138,7 @@ export function App() {
         setAppearance(nextAppearance);
         setLibraryPreferences(nextLibraryPreferences);
         setCustomElementGroups(nextCustomGroups);
+        setStorageLocation(nextStorage);
         setGalleryMode(nextLibraryPreferences.defaultView);
         setWorkQuery((current) => ({
           ...current,
@@ -432,11 +438,21 @@ export function App() {
         downloadBusy={downloadBusy}
         appearance={appearance}
         status={status}
+        storageLocation={storageLocation}
         onOpenGallery={openGallery}
         onViewChange={setActiveView}
         onDownloadCurrentArtwork={downloadCurrentArtwork}
         onPreviewBookmarks={previewAllBookmarks}
         onAppearanceChange={updateAppearance}
+        onChooseDownloadDirectory={async () => {
+          const res = await window.sanctuary.chooseDownloadDirectory();
+          setLibraryPreferences(res.preferences);
+          setStorageLocation(res.location);
+          await refreshLibrary();
+        }}
+        onOpenStorageDirectory={async () => {
+          await window.sanctuary.openStorageDirectory();
+        }}
       />
 
       <main className="animate-fade-in">
@@ -514,11 +530,25 @@ export function App() {
             status={status}
             savingGroupId={savingGroupId}
             error={error}
+            storageLocation={storageLocation}
             onEdit={editFilterSetting}
             onSave={saveFilterSetting}
             onAppearanceChange={updateAppearance}
             onLibraryPreferencesChange={updateLibraryPreferences}
-            onChooseDownloadDirectory={async () => setLibraryPreferences(await window.sanctuary.chooseDownloadDirectory())}
+            onChooseDownloadDirectory={async () => {
+              const res = await window.sanctuary.chooseDownloadDirectory();
+              setLibraryPreferences(res.preferences);
+              setStorageLocation(res.location);
+              await refreshLibrary();
+              return res;
+            }}
+            onOpenStorageDirectory={async () => window.sanctuary.openStorageDirectory()}
+            onMigrateStorage={async () => {
+              const res = await window.sanctuary.migrateStorage();
+              setStorageLocation(await window.sanctuary.getStorageLocation());
+              await refreshLibrary();
+              return res;
+            }}
             onCreateBackup={async () => {
               try { return await window.sanctuary.createLibraryBackup(); }
               catch (caught) { showError(caught); return null; }
