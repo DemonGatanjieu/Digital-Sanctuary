@@ -135,6 +135,11 @@ import { ModelCenterService, type ResolvedRuntimeModel } from "./model-center/mo
 import { registerModelCenterIpc } from "./model-center/model-center-ipc.js";
 import { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 import { registerInspirationIpc } from "./inspiration-ipc.js";
+import {
+  ensureStandardStorageDirectories,
+  resolveArtworkDirectory,
+  resolveTargetGalleryDirectory
+} from "./storage-path-utils.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -245,6 +250,9 @@ if (!hasSingleInstanceLock) {
       database,
       () => comfyUiOutputDirectory()
     );
+    await ensureStandardStorageDirectories(pixivGalleryDirectory()).catch((err) => {
+      console.warn("[storage] failed to initialize standard storage directories:", err);
+    });
     if (process.env.SANCTUARY_BENCHMARK_LIBRARY === "1") {
       database.seedBenchmarkWorks(Number(process.env.SANCTUARY_BENCHMARK_WORKS ?? 10_000));
     }
@@ -652,9 +660,11 @@ function registerIpc(): void {
   ipcMain.handle("library:create-backup", async (): Promise<string | null> => {
     if (!database || !mainWindow) throw new Error("Application is not ready");
     const timestamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
+    const backupDir = join(pixivGalleryDirectory(), "..", "Backups");
+    await mkdir(backupDir, { recursive: true }).catch(() => undefined);
     const selected = await dialog.showSaveDialog(mainWindow, {
       title: "备份纯净领域数据库",
-      defaultPath: join(app.getPath("documents"), `Digital-Sanctuary-${timestamp}.db`),
+      defaultPath: join(backupDir, `Digital-Sanctuary-${timestamp}.db`),
       filters: [{ name: "SQLite 数据库", extensions: ["db"] }]
     });
     if (selected.canceled || !selected.filePath) return null;
@@ -1674,7 +1684,7 @@ function registerIpc(): void {
 
   ipcMain.handle("preferences:library:open-storage-directory", async (): Promise<boolean> => {
     const dir = pixivGalleryDirectory();
-    await mkdir(dir, { recursive: true });
+    await ensureStandardStorageDirectories(dir);
     const err = await shell.openPath(dir);
     return err === "";
   });
@@ -1703,7 +1713,8 @@ function registerIpc(): void {
       };
     }
 
-    const selectedDirectory = resolve(selected.filePaths[0]);
+    const rawSelected = resolve(selected.filePaths[0]);
+    const selectedDirectory = resolveTargetGalleryDirectory(rawSelected);
     if (selectedDirectory.toLowerCase() === previousEffective.toLowerCase()) {
       return {
         preferences: libraryPreferences(),
@@ -1741,6 +1752,8 @@ function registerIpc(): void {
         migrationResult = await migrateDiskFiles(previousEffective, selectedDirectory);
       }
     }
+
+    await ensureStandardStorageDirectories(selectedDirectory);
 
     const next = { ...libraryPreferences(), downloadDirectory: selectedDirectory };
     database.setPreference("library.preferences", next);
@@ -2255,7 +2268,7 @@ async function migrateDiskFiles(
     };
   }
 
-  await mkdir(normTarget, { recursive: true });
+  await ensureStandardStorageDirectories(normTarget);
 
   if (existsSync(normSource)) {
     try {
@@ -2277,6 +2290,28 @@ async function migrateDiskFiles(
     }
   }
 
+  const oldGeneratedDir = resolve(normSource, "..", "Generated");
+  const newGeneratedDir = resolve(normTarget, "..", "Generated");
+  if (existsSync(oldGeneratedDir) && oldGeneratedDir.toLowerCase() !== newGeneratedDir.toLowerCase()) {
+    try {
+      await mkdir(newGeneratedDir, { recursive: true });
+      await cp(oldGeneratedDir, newGeneratedDir, { recursive: true, force: true });
+    } catch (err) {
+      console.warn("[storage-migration] Error copying generated files:", err);
+    }
+  }
+
+  const oldBackupsDir = resolve(normSource, "..", "Backups");
+  const newBackupsDir = resolve(normTarget, "..", "Backups");
+  if (existsSync(oldBackupsDir) && oldBackupsDir.toLowerCase() !== newBackupsDir.toLowerCase()) {
+    try {
+      await mkdir(newBackupsDir, { recursive: true });
+      await cp(oldBackupsDir, newBackupsDir, { recursive: true, force: true });
+    } catch (err) {
+      console.warn("[storage-migration] Error copying backups:", err);
+    }
+  }
+
   const dbResult = database.migrateArtworkStoragePaths(normSource, normTarget);
 
   if (existsSync(normSource)) {
@@ -2295,6 +2330,24 @@ async function migrateDiskFiles(
       }
     } catch (err) {
       console.warn("[storage-migration] Could not delete old avatars directory:", err);
+    }
+  }
+  if (existsSync(oldGeneratedDir) && oldGeneratedDir.toLowerCase() !== newGeneratedDir.toLowerCase()) {
+    try {
+      if (parse(oldGeneratedDir).root.toLowerCase() !== oldGeneratedDir.toLowerCase()) {
+        await rm(oldGeneratedDir, { recursive: true, force: true });
+      }
+    } catch (err) {
+      console.warn("[storage-migration] Could not delete old generated directory:", err);
+    }
+  }
+  if (existsSync(oldBackupsDir) && oldBackupsDir.toLowerCase() !== newBackupsDir.toLowerCase()) {
+    try {
+      if (parse(oldBackupsDir).root.toLowerCase() !== oldBackupsDir.toLowerCase()) {
+        await rm(oldBackupsDir, { recursive: true, force: true });
+      }
+    } catch (err) {
+      console.warn("[storage-migration] Could not delete old backups directory:", err);
     }
   }
 
@@ -2667,7 +2720,13 @@ async function downloadPixivArtwork(
     message: `正在保存作品 ${artworkId}（共 ${pages.length} 页）`
   });
 
-  const artworkDirectory = join(pixivGalleryDirectory(), artworkId);
+  const resolvedWorkDir = resolveArtworkDirectory(
+    pixivGalleryDirectory(),
+    metadata.authorName,
+    metadata.authorId,
+    artworkId
+  );
+  const artworkDirectory = resolvedWorkDir.artworkDirectory;
   await mkdir(artworkDirectory, { recursive: true });
   let networkCompletedPages = 0;
   const localPages = await mapWithConcurrency(

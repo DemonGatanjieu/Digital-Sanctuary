@@ -212,6 +212,9 @@ export function SettingsView({
               <p className="storage-path-text" title={storageLocation?.effectivePath ?? libraryPreferences.downloadDirectory ?? "系统图片 / Digital Sanctuary / Pixiv"}>
                 {storageLocation?.effectivePath ?? libraryPreferences.downloadDirectory ?? "系统图片 / Digital Sanctuary / Pixiv"}
               </p>
+              <span className="storage-sub-structure">
+                目录结构：Pixiv / 画师名 / 作品ID · 自动维护 avatars、Generated、Backups 体系
+              </span>
             </div>
             <div className="storage-meta-badges">
               <span className="storage-badge drive-badge">

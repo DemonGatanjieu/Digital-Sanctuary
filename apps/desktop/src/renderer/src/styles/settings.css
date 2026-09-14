@@ -628,6 +628,13 @@
   border: 1px solid var(--ds-border-subtle);
 }
 
+.storage-sub-structure {
+  color: var(--ds-text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+
 .storage-meta-badges {
   display: flex;
   align-items: center;
