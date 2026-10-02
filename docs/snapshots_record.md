@@ -68,7 +68,7 @@
 | **inspiration-gallery-attachment-picker** | `ca8d79c` | 2026-08-30 | 灵感台内新增可搜索画廊选择器，多页作品可选具体页；新会话和已有对话均可加入、更换或移除参考图，主进程继续按作品 ID 安全解析路径。 |
 | **inspiration-per-conversation-model-controls** | `db4e62a` | 2026-08-30 | 灵感台支持按对话选择已安装评论模型，并以严谨/均衡/放飞和简短/标准/详细调节回答；不改六维雷达全局模型，Anomalous 联动延后至稳定接口。 |
 | **inspiration-optimistic-sent-turn** | `c32c2d1` | 2026-08-30 | 用户消息发送后立即显示“已发送”气泡，并与发起请求的会话绑定；本地模型思考期间不消失，切换会话时也不会串台。 |
-
+| **user-workflows-navigation-consolidation** | `0fbe379f99d1cc4f5850a3c8fd1bad75e56a0cd5` | 2026-10-03 | 主导航整合为图库、探索、创作、设置；整理归入图库，模型与外部连接归入五类设置，保留设置草稿，修复选中分类入口、下载目录恢复与保护旁路提示。完整类型检查、246 项 TS / 9 项 Python 测试与构建通过，19 项真实 Electron 操作及最小窗口、原生探索生命周期检查通过。 |
 
 
 
