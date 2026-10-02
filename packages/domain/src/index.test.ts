@@ -119,6 +119,10 @@ describe("decideFilter", () => {
       downloadDirectory: "E:\\Pictures"
     })).toBe(true);
     expect(isLibraryPreferences({ defaultView: "flat" })).toBe(false);
+    expect(isLibraryPreferences({
+      defaultView: "flat", defaultSortBy: "lastViewedAt", defaultSortDirection: "desc",
+      gridDensity: "comfortable", downloadDirectory: null
+    })).toBe(true);
   });
 
   it("accepts only bounded explicit analysis scopes", () => {

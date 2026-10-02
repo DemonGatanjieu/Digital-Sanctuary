@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { IpcMain } from "electron";
+import type { BrowserWindow, IpcMain } from "electron";
 import type { LibraryDatabase } from "@sanctuary/database";
 import {
   DEFAULT_INSPIRATION_SETTINGS,
@@ -17,36 +17,41 @@ import {
 } from "@sanctuary/domain";
 import type { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 import { prepareVisionImage } from "./vision/vision-image-preprocessor.js";
+import { createInspirationOutputHost, inspirationMarkdown, inspirationMarkdownFileName, type InspirationOutputHost } from "./inspiration-export.js";
 
 const STORE_KEY = "local_inspiration_conversations_v1";
 const MAX_CONVERSATIONS = 30;
 const MAX_MESSAGES = 80;
 const MAX_CONTEXT_MESSAGES = 16;
 const MAX_CONTEXT_CHARACTERS = 12_000;
-const activeRequests = new Map<string, AbortController>();
+const activeRequests = new Map<string, { controller: AbortController; conversationId: string }>();
 
 export function registerInspirationIpc(
   ipc: IpcMain,
   database: LibraryDatabase,
-  localModel: LocalArtCriticService | undefined
+  localModel: LocalArtCriticService | undefined,
+  getWindow?: () => BrowserWindow | null | undefined,
+  output: InspirationOutputHost = createInspirationOutputHost(getWindow)
 ): void {
   ipc.handle("inspiration:list", () => loadConversations(database));
   ipc.handle("inspiration:send", async (_event, raw: InspirationSendRequest) => {
     if (!localModel) throw new Error("本地灵感服务尚未初始化");
     const request = parseSendRequest(raw);
     if (activeRequests.has(request.requestId)) throw new Error("这个生成请求已经在运行");
-    const controller = new AbortController();
-    activeRequests.set(request.requestId, controller);
     let conversations = loadConversations(database);
     let conversation = request.conversationId
       ? conversations.find((item) => item.id === request.conversationId) ?? null
       : null;
+    if (request.conversationId && !conversation) throw new Error("这段对话已经不存在，请新建对话");
     if (!conversation) {
       conversation = createConversation(database, request);
       conversations = [conversation, ...conversations];
     }
-    const userMessage = makeMessage("user", request.message);
-    conversation.messages.push(userMessage);
+    if (conversationIsGenerating(conversation.id)) throw new Error("这段对话仍在生成，请先停止或等待完成");
+    const lastMessage = conversation.messages.at(-1);
+    const retrying = lastMessage?.role === "user" && lastMessage.content === request.message;
+    const userMessage = retrying ? lastMessage : makeMessage("user", request.message);
+    if (!retrying) conversation.messages.push(userMessage);
     conversation.presetId = request.presetId;
     if (request.modelId) conversation.modelId = request.modelId;
     conversation.settings = normalizeSettings(request.settings ?? conversation.settings);
@@ -54,9 +59,11 @@ export function registerInspirationIpc(
     if (conversation.messages.filter((item) => item.role === "user").length === 1) {
       conversation.title = titleFromMessage(request.message);
     }
-    persistConversations(database, conversations);
+    const controller = new AbortController();
+    activeRequests.set(request.requestId, { controller, conversationId: conversation.id });
     try {
-      return await generateReply(database, localModel, conversations, conversation, controller.signal);
+      persistConversations(database, conversations);
+      return await generateReply(database, localModel, conversation, controller.signal);
     } finally {
       activeRequests.delete(request.requestId);
     }
@@ -69,23 +76,24 @@ export function registerInspirationIpc(
     const conversations = loadConversations(database);
     const conversation = conversations.find((item) => item.id === conversationId);
     if (!conversation) throw new Error("找不到这段对话");
+    if (conversationIsGenerating(conversation.id)) throw new Error("这段对话仍在生成，请先停止或等待完成");
     while (conversation.messages.at(-1)?.role === "assistant") conversation.messages.pop();
     if (!conversation.messages.some((item) => item.role === "user")) throw new Error("还没有可以重新生成的提问");
     if (raw.modelId !== undefined) conversation.modelId = parseOptionalModelId(raw.modelId);
     conversation.settings = normalizeSettings(raw.settings ?? conversation.settings);
     const controller = new AbortController();
-    activeRequests.set(requestId, controller);
-    persistConversations(database, conversations);
+    activeRequests.set(requestId, { controller, conversationId });
     try {
-      return await generateReply(database, localModel, conversations, conversation, controller.signal);
+      // The previous stable answer stays persisted until its replacement succeeds.
+      return await generateReply(database, localModel, conversation, controller.signal);
     } finally {
       activeRequests.delete(requestId);
     }
   });
   ipc.handle("inspiration:cancel", (_event, requestId: unknown) => {
-    const controller = activeRequests.get(requireId(requestId, "请求 ID"));
-    if (!controller) return false;
-    controller.abort();
+    const request = activeRequests.get(requireId(requestId, "请求 ID"));
+    if (!request) return false;
+    request.controller.abort();
     return true;
   });
   ipc.handle("inspiration:update-source", (_event, raw: InspirationSourceUpdateRequest) => {
@@ -94,6 +102,7 @@ export function registerInspirationIpc(
     const conversations = loadConversations(database);
     const conversation = conversations.find((item) => item.id === conversationId);
     if (!conversation) throw new Error("找不到这段对话");
+    if (conversationIsGenerating(conversation.id)) throw new Error("本轮正在使用参考图，请先停止或等待完成");
     conversation.source = raw.sourceWorkId === null
       ? null
       : resolveSource(database, requireId(raw.sourceWorkId, "作品 ID"), raw.sourcePageIndex);
@@ -103,25 +112,42 @@ export function registerInspirationIpc(
   });
   ipc.handle("inspiration:delete", (_event, conversationId: unknown) => {
     const id = requireId(conversationId, "会话 ID");
+    for (const request of activeRequests.values()) {
+      if (request.conversationId === id) request.controller.abort();
+    }
     const current = loadConversations(database);
     const next = current.filter((item) => item.id !== id);
     persistConversations(database, next);
     return next.length !== current.length;
+  });
+  ipc.handle("inspiration:copy-message", async (_event, raw: unknown) => {
+    const { message } = resolveExport(database, raw, true);
+    await output.copyText(message!.content);
+  });
+  ipc.handle("inspiration:copy-markdown", async (_event, raw: unknown) => {
+    const { conversation, message } = resolveExport(database, raw);
+    await output.copyText(inspirationMarkdown(conversation, message, conversationIsGenerating(conversation.id)));
+  });
+  ipc.handle("inspiration:export-markdown", async (_event, raw: unknown) => {
+    const { conversation, message } = resolveExport(database, raw);
+    const markdown = inspirationMarkdown(conversation, message, conversationIsGenerating(conversation.id));
+    return output.saveMarkdown(inspirationMarkdownFileName(conversation.title, Boolean(message)), markdown);
   });
 }
 
 async function generateReply(
   database: LibraryDatabase,
   localModel: LocalArtCriticService,
-  conversations: InspirationConversation[],
   conversation: InspirationConversation,
   signal: AbortSignal
 ): Promise<InspirationConversation> {
+  const startedAt = Date.now();
   const source = conversation.source;
   const work = source ? database.getWork(source.workId) : null;
   const asset = source
-    ? work?.assets.find((item) => item.pageIndex === source.pageIndex) ?? work?.assets[0]
+    ? work?.assets.find((item) => item.pageIndex === source.pageIndex && item.mediaType === "image" && item.fileState === "available")
     : undefined;
+  if (source && !asset) throw new Error("这张参考页已经不可用，请重新选择参考图");
   const prepared = asset ? await prepareVisionImage(asset.path, { maxLongEdge: 1344 }) : undefined;
   try {
     const profile = inspirationGenerationProfile(conversation.settings);
@@ -135,12 +161,27 @@ async function generateReply(
       topK: profile.topK,
       maxTokens: profile.maxTokens
     }, signal);
+    if (signal.aborted) throw new Error("本轮生成已停止，已有回答已保留");
     const assistantMessage = makeMessage("assistant", result.content);
+    assistantMessage.provenance = {
+      ...result.identity,
+      settings: { ...conversation.settings },
+      parameters: { temperature: profile.temperature, topP: profile.topP, topK: profile.topK, maxTokens: profile.maxTokens },
+      source: source ? { workId: source.workId, title: source.title, artistName: source.artistName, pageIndex: source.pageIndex } : null,
+      durationMs: Math.max(0, Date.now() - startedAt)
+    };
     conversation.messages.push(assistantMessage);
     conversation.modelId = result.identity.modelId;
     conversation.updatedAt = assistantMessage.createdAt;
-    persistConversations(database, conversations);
+    conversation.messages = conversation.messages.slice(-MAX_MESSAGES);
+    // Re-read before committing so another conversation's changes/deletion survive.
+    const conversations = loadConversations(database);
+    if (!conversations.some((item) => item.id === conversation.id)) throw new Error("这段对话已删除，未保存新的回答");
+    persistConversations(database, conversations.map((item) => item.id === conversation.id ? conversation : item));
     return conversation;
+  } catch (error) {
+    if (signal.aborted) throw new Error("本轮生成已停止，已保存内容已保留");
+    throw error;
   } finally {
     prepared?.cleanup();
   }
@@ -204,7 +245,8 @@ function loadConversations(database: LibraryDatabase): InspirationConversation[]
   if (!Array.isArray(stored)) return [];
   return stored.filter(isConversation).slice(0, MAX_CONVERSATIONS).map((conversation) => ({
     ...conversation,
-    settings: normalizeSettings(conversation.settings)
+    settings: normalizeSettings(conversation.settings),
+    messages: conversation.messages.filter(isMessage).slice(-MAX_MESSAGES).map((message) => ({ ...message }))
   }));
 }
 
@@ -222,6 +264,36 @@ function isConversation(value: unknown): value is InspirationConversation {
   return typeof item.id === "string" && typeof item.title === "string" &&
     isInspirationPresetId(item.presetId) && Array.isArray(item.messages) &&
     typeof item.createdAt === "string" && typeof item.updatedAt === "string";
+}
+
+function isMessage(value: unknown): value is InspirationMessage {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<InspirationMessage>;
+  return typeof item.id === "string" && ["user", "assistant"].includes(item.role ?? "") &&
+    typeof item.content === "string" && item.content.length > 0 && item.content.length <= 100_000 &&
+    typeof item.createdAt === "string";
+}
+
+function conversationIsGenerating(conversationId: string): boolean {
+  return [...activeRequests.values()].some((request) => request.conversationId === conversationId);
+}
+
+function resolveExport(database: LibraryDatabase, raw: unknown, requireMessage = false): {
+  conversation: InspirationConversation; message?: InspirationMessage;
+} {
+  if (!raw || typeof raw !== "object") throw new Error("导出请求格式不正确");
+  const request = raw as { conversationId?: unknown; messageId?: unknown };
+  const conversationId = requireId(request.conversationId, "会话 ID");
+  const conversation = loadConversations(database).find((item) => item.id === conversationId);
+  if (!conversation) throw new Error("这段对话已经不存在");
+  if (request.messageId !== undefined || requireMessage) {
+    const messageId = requireId(request.messageId, "回答 ID");
+    const message = conversation.messages.find((item) => item.id === messageId && item.role === "assistant");
+    if (!message) throw new Error("这条已完成回答已经不存在");
+    return { conversation, message };
+  }
+  if (conversation.messages.length === 0) throw new Error("还没有已保存的消息可以导出");
+  return { conversation };
 }
 
 function boundedContext(messages: InspirationMessage[]): Array<{ role: "user" | "assistant"; content: string }> {

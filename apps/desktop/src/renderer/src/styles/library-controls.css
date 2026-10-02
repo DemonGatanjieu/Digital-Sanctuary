@@ -2,6 +2,25 @@
    Work Library Toolbar & Controls
    ========================================================================== */
 
+.work-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 12px;
+}
+
+.work-preset-row .ui-segmented { max-width: 100%; }
+.work-preset-row .ui-segmented button { min-height: 36px; }
+.work-preset-row small { color: var(--ds-text-secondary); font-size: 12px; }
+
+.work-library-controls select:disabled,
+.work-sort-direction:disabled {
+  color: var(--ds-text-muted);
+  cursor: default;
+  opacity: 0.65;
+}
+
 .work-library-controls {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) auto auto auto auto;

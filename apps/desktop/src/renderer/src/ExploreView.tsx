@@ -114,7 +114,6 @@ export function ExploreView({
                 void window.sanctuary.focusExplore().then(() => focusRestoredRef.current?.()).catch(onError);
               }
             }
-            else void window.sanctuary.hideExplore();
           })
           .catch(onError);
       } else {

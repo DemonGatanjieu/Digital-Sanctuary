@@ -24,6 +24,7 @@ import type {
   WorkQuery,
   WorkQueryResult,
   WorkRecord,
+  WorkReadingProgress,
   WorkDeletionPreview,
   WorkDeletionResult,
   ExternalVisionPublicConfig,
@@ -47,7 +48,9 @@ import type {
   InspirationConversation,
   InspirationSendRequest,
   InspirationRegenerateRequest,
-  InspirationSourceUpdateRequest
+  InspirationSourceUpdateRequest,
+  InspirationExportRequest,
+  InspirationExportResult
 } from "@sanctuary/domain";
 import type {
   ArtistAvatarRepairResult,
@@ -135,6 +138,7 @@ export interface SanctuaryApi {
   listArtworks(): Promise<ArtworkRecord[]>;
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
   getWork(workId: string): Promise<WorkRecord | null>;
+  recordWorkView(workId: string, assetId: string): Promise<WorkReadingProgress | null>;
   getGenerationProvenance(workId: string): Promise<GenerationProvenance | null>;
   listInspirationConversations(): Promise<InspirationConversation[]>;
   sendInspirationMessage(request: InspirationSendRequest): Promise<InspirationConversation>;
@@ -142,6 +146,9 @@ export interface SanctuaryApi {
   updateInspirationSource(request: InspirationSourceUpdateRequest): Promise<InspirationConversation>;
   cancelInspirationMessage(requestId: string): Promise<boolean>;
   deleteInspirationConversation(conversationId: string): Promise<boolean>;
+  exportInspirationMarkdown(request: InspirationExportRequest): Promise<InspirationExportResult>;
+  copyInspirationMarkdown(request: InspirationExportRequest): Promise<void>;
+  copyInspirationMessage(request: { conversationId: string; messageId: string }): Promise<void>;
   generateThumbnails(): Promise<ThumbnailBatchResult>;
   createLibraryBackup(): Promise<string | null>;
   previewWorkDeletion(workIds: string[]): Promise<WorkDeletionPreview>;
@@ -251,6 +258,8 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:query-works", query) as Promise<WorkQueryResult>,
   getWork: (workId) =>
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
+  recordWorkView: (workId, assetId) =>
+    ipcRenderer.invoke("library:record-work-view", { workId, assetId }) as Promise<WorkReadingProgress | null>,
   getGenerationProvenance: (workId) =>
     ipcRenderer.invoke("library:get-generation-provenance", workId) as Promise<GenerationProvenance | null>,
   listInspirationConversations: () =>
@@ -265,6 +274,12 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("inspiration:cancel", requestId) as Promise<boolean>,
   deleteInspirationConversation: (conversationId) =>
     ipcRenderer.invoke("inspiration:delete", conversationId) as Promise<boolean>,
+  exportInspirationMarkdown: (request) =>
+    ipcRenderer.invoke("inspiration:export-markdown", request) as Promise<InspirationExportResult>,
+  copyInspirationMarkdown: (request) =>
+    ipcRenderer.invoke("inspiration:copy-markdown", request) as Promise<void>,
+  copyInspirationMessage: (request) =>
+    ipcRenderer.invoke("inspiration:copy-message", request) as Promise<void>,
   inspectArtwork: (params) =>
     ipcRenderer.invoke("vision:inspect-artwork", params) as Promise<InspectArtworkResponse | null>,
   addCustomBlacklistTag: (payload) =>

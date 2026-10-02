@@ -13,6 +13,7 @@ import type {
 import { DEFAULT_INSPIRATION_SETTINGS } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { DialogOverlay } from "./DialogOverlay";
+import { Button } from "./Button";
 
 const PRESETS: Array<{ id: InspirationPresetId; label: string; hint: string; starter: string }> = [
   { id: "chat", label: "随便聊聊", hint: "讨论灵感、设定和写作问题", starter: "我有一个想法，想和你一起把它梳理清楚：" },
@@ -42,16 +43,31 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   const [defaultModelId, setDefaultModelId] = useState("");
   const [modelId, setModelId] = useState("");
   const [settings, setSettings] = useState<InspirationGenerationSettings>({ ...DEFAULT_INSPIRATION_SETTINGS });
-  const [pendingTurn, setPendingTurn] = useState<{ conversationId: string | null; userMessage: string | null } | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const [pendingTurn, setPendingTurn] = useState<{ conversationId: string | null; userMessage: string | null; workspaceVersion: number } | null>(null);
+  const [outputBusy, setOutputBusy] = useState("");
+  const [outputNotice, setOutputNotice] = useState("");
+  const workspaceVersion = useRef(0);
+  const mounted = useRef(true);
+  const sending = useRef(false);
+  const deleting = useRef(new Set<string>());
+  const conversationDrafts = useRef(new Map<string, string>());
+  const messagesRef = useRef<HTMLDivElement>(null);
   const selected = conversations.find((item) => item.id === selectedId) ?? null;
-  const pendingVisible = Boolean(requestId) && pendingTurn?.conversationId === (selected?.id ?? null);
+  const pendingVisible = Boolean(requestId) && pendingTurn?.conversationId === (selected?.id ?? null) &&
+    (pendingTurn?.conversationId !== null || pendingTurn.workspaceVersion === workspaceVersion.current);
 
   useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; workspaceVersion.current += 1; };
+  }, []);
+
+  useEffect(() => {
+    const initialVersion = workspaceVersion.current;
     void window.sanctuary.listInspirationConversations()
       .then((items) => {
+        if (!mounted.current) return;
         setConversations(items);
-        if (!launch && items[0]) {
+        if (!launch && items[0] && workspaceVersion.current === initialVersion) {
           setSelectedId(items[0].id);
           setModelId(items[0].modelId ?? "");
           setSettings(items[0].settings ?? { ...DEFAULT_INSPIRATION_SETTINGS });
@@ -60,6 +76,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
       .catch((caught) => setError(messageOf(caught)));
     void window.sanctuary.getModelCenterSnapshot()
       .then((snapshot) => {
+        if (!mounted.current) return;
         const installed = snapshot.models.filter((model) => model.capability === "art_critic" && model.installed && model.availability === "ready");
         const preferred = snapshot.activeByCapability.art_critic ?? installed[0]?.id ?? "";
         setModels(installed);
@@ -67,26 +84,29 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
         setModelId((current) => current || preferred);
       })
       .catch((caught) => setError(messageOf(caught)))
-      .finally(() => setModelsLoading(false));
+      .finally(() => { if (mounted.current) setModelsLoading(false); });
   }, []);
 
   useEffect(() => {
     if (!launch) return;
+    const version = ++workspaceVersion.current;
     setSelectedId("");
+    setSourceWork(null);
     setPresetId("image_chat");
     setModelId(defaultModelId);
     setSettings({ ...DEFAULT_INSPIRATION_SETTINGS });
     setDraft(PRESETS.find((item) => item.id === "image_chat")!.starter);
     setSourcePageIndex(launch.pageIndex);
     void window.sanctuary.getWork(launch.workId)
-      .then(setSourceWork)
-      .catch((caught) => setError(messageOf(caught)))
-      .finally(onLaunchConsumed);
+      .then((work) => { if (mounted.current && workspaceVersion.current === version) setSourceWork(work); })
+      .catch((caught) => { if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught)); })
+      .finally(() => { if (mounted.current && workspaceVersion.current === version) onLaunchConsumed(); });
   }, [launch?.workId, launch?.pageIndex]);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [selected?.messages.length, requestId]);
+    const messages = messagesRef.current;
+    if (messages) messages.scrollTop = messages.scrollHeight;
+  }, [selected?.id, selected?.messages.length, requestId]);
 
   const activePreset = useMemo(
     () => PRESETS.find((item) => item.id === (selected?.presetId ?? presetId)) ?? PRESETS[0]!,
@@ -94,6 +114,8 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   );
 
   function beginNew() {
+    if (selectedId) conversationDrafts.current.set(selectedId, draft);
+    workspaceVersion.current += 1;
     setSelectedId("");
     setSourceWork(null);
     setSourcePageIndex(0);
@@ -102,14 +124,19 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     setSettings({ ...DEFAULT_INSPIRATION_SETTINGS });
     setDraft("");
     setError("");
+    setOutputNotice("");
   }
 
   function selectConversation(conversation: InspirationConversation) {
+    if (selectedId) conversationDrafts.current.set(selectedId, draft);
+    workspaceVersion.current += 1;
     setSelectedId(conversation.id);
     setSourceWork(null);
     setModelId(conversation.modelId ?? defaultModelId);
     setSettings(conversation.settings ?? { ...DEFAULT_INSPIRATION_SETTINGS });
     setError("");
+    setOutputNotice("");
+    setDraft(conversationDrafts.current.get(conversation.id) ?? "");
   }
 
   function choosePreset(next: typeof PRESETS[number]) {
@@ -120,12 +147,15 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
 
   async function send() {
     const message = draft.trim();
-    if (!message || requestId || modelsLoading || models.length === 0) return;
+    if (!message || sending.current || requestId || modelsLoading || models.length === 0) return;
+    sending.current = true;
+    const version = workspaceVersion.current;
     const nextRequestId = crypto.randomUUID();
     setRequestId(nextRequestId);
-    setPendingTurn({ conversationId: selected?.id ?? null, userMessage: message });
+    setPendingTurn({ conversationId: selected?.id ?? null, userMessage: message, workspaceVersion: version });
     setError("");
     setDraft("");
+    if (selected) conversationDrafts.current.delete(selected.id);
     try {
       const updated = await window.sanctuary.sendInspirationMessage({
         requestId: nextRequestId,
@@ -136,28 +166,36 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
         ...(selected ? { conversationId: selected.id } : {}),
         ...(!selected && sourceWork ? { sourceWorkId: sourceWork.id, sourcePageIndex } : {})
       });
-      setConversations((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
-      setSelectedId(updated.id);
-      setSourceWork(null);
+      if (mounted.current && !deleting.current.has(updated.id)) {
+        setConversations((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
+        if (workspaceVersion.current === version) {
+          setSelectedId(updated.id);
+          setSourceWork(null);
+        }
+      }
     } catch (caught) {
-      setDraft(message);
-      setError(messageOf(caught));
+      if (mounted.current && workspaceVersion.current === version) {
+        setDraft((current) => current || message);
+        setError(messageOf(caught));
+      }
       const latest = await window.sanctuary.listInspirationConversations().catch(() => null);
-      if (latest) {
+      if (latest && mounted.current) {
         setConversations(latest);
-        if (!selectedId && latest[0]) setSelectedId(latest[0].id);
+        if (workspaceVersion.current === version && !selectedId && latest[0]) setSelectedId(latest[0].id);
       }
     } finally {
-      setPendingTurn(null);
-      setRequestId("");
+      sending.current = false;
+      if (mounted.current) { setPendingTurn(null); setRequestId(""); }
     }
   }
 
   async function regenerate() {
-    if (!selected || requestId || modelsLoading || models.length === 0) return;
+    if (!selected || sending.current || requestId || modelsLoading || models.length === 0) return;
+    sending.current = true;
+    const version = workspaceVersion.current;
     const nextRequestId = crypto.randomUUID();
     setRequestId(nextRequestId);
-    setPendingTurn({ conversationId: selected.id, userMessage: null });
+    setPendingTurn({ conversationId: selected.id, userMessage: null, workspaceVersion: version });
     setError("");
     try {
       const updated = await window.sanctuary.regenerateInspirationMessage({
@@ -166,23 +204,57 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
         ...(modelId ? { modelId } : {}),
         settings
       });
-      setConversations((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
+      if (mounted.current && !deleting.current.has(updated.id)) {
+        setConversations((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
+      }
     } catch (caught) {
-      setError(messageOf(caught));
+      if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught));
     } finally {
-      setPendingTurn(null);
-      setRequestId("");
+      sending.current = false;
+      if (mounted.current) { setPendingTurn(null); setRequestId(""); }
     }
   }
 
   async function removeConversation(id: string) {
-    await window.sanctuary.deleteInspirationConversation(id);
-    const next = conversations.filter((item) => item.id !== id);
-    setConversations(next);
-    if (selectedId === id) setSelectedId(next[0]?.id ?? "");
+    deleting.current.add(id);
+    const version = workspaceVersion.current;
+    try {
+      await window.sanctuary.deleteInspirationConversation(id);
+      if (!mounted.current) return;
+      setConversations((items) => items.filter((item) => item.id !== id));
+      if (selectedId === id && workspaceVersion.current === version) beginNew();
+    } catch (caught) {
+      if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught));
+    } finally { deleting.current.delete(id); }
+  }
+
+  async function outputConversation(mode: "copy" | "save" | "reply", messageId?: string) {
+    if (!selected || outputBusy) return;
+    const version = workspaceVersion.current;
+    const request = { conversationId: selected.id, ...(messageId ? { messageId } : {}) };
+    setOutputBusy(messageId ?? mode);
+    setOutputNotice("");
+    setError("");
+    try {
+      let notice = "";
+      if (mode === "save") {
+        const result = await window.sanctuary.exportInspirationMarkdown(request);
+        if (!result.canceled) notice = `已保存 ${result.fileName ?? "Markdown 文档"}`;
+      } else if (mode === "reply" && messageId) {
+        await window.sanctuary.copyInspirationMessage({ conversationId: selected.id, messageId });
+        notice = "回答已复制";
+      } else {
+        await window.sanctuary.copyInspirationMarkdown(request);
+        notice = "对话已复制为 Markdown";
+      }
+      if (mounted.current && workspaceVersion.current === version) setOutputNotice(notice);
+    } catch (caught) {
+      if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught));
+    } finally { if (mounted.current) setOutputBusy(""); }
   }
 
   async function attachGalleryWork(work: WorkRecord, pageIndex: number) {
+    const version = workspaceVersion.current;
     setError("");
     if (selected) {
       try {
@@ -191,9 +263,10 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
           sourceWorkId: work.id,
           sourcePageIndex: pageIndex
         });
+        if (!mounted.current) return;
         setConversations((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
       } catch (caught) {
-        setError(messageOf(caught));
+        if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught));
         return;
       }
     } else {
@@ -202,10 +275,11 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
       if (presetId === "chat") setPresetId("image_chat");
       if (!draft.trim()) setDraft(PRESETS.find((item) => item.id === "image_chat")!.starter);
     }
-    setGalleryPickerOpen(false);
+    if (mounted.current && workspaceVersion.current === version) setGalleryPickerOpen(false);
   }
 
   async function detachGalleryWork() {
+    const version = workspaceVersion.current;
     setError("");
     if (selected) {
       try {
@@ -213,9 +287,9 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
           conversationId: selected.id,
           sourceWorkId: null
         });
-        setConversations((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
+        if (mounted.current) setConversations((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
       } catch (caught) {
-        setError(messageOf(caught));
+        if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught));
       }
     } else {
       setSourceWork(null);
@@ -252,6 +326,16 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
         </aside>
 
         <article className="inspiration-chat">
+          {selected && selected.messages.length > 0 && (
+            <div className="inspiration-conversation-actions">
+              <strong>{selected.title}</strong>
+              <div>
+                <Button size="small" disabled={Boolean(outputBusy)} onClick={() => void outputConversation("copy")}>复制对话</Button>
+                <Button size="small" disabled={Boolean(outputBusy)} onClick={() => void outputConversation("save")}>导出 Markdown</Button>
+              </div>
+              {pendingVisible && <small>仅包含已保存的消息，未完成回答不会导出。</small>}
+            </div>
+          )}
           {(selected?.source || sourceWork) && (
             <div className="inspiration-source">
               <img src={selected?.source?.imageUrl ?? imageUrlFor(sourceWork!, sourcePageIndex)} alt="参考作品" />
@@ -267,21 +351,26 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
               <span>＋</span><strong>从画廊加入参考图</strong><small>可以搜索作品，也可以选择多页作品中的具体一页</small>
             </button>
           )}
-          {!selected && !requestId && (
-            <div className="inspiration-welcome">
-              <span className="inspiration-orb">✦</span><h2>{sourceWork ? "把这张图变成新的灵感" : "今天想一起做点什么？"}</h2>
-              <p>{sourceWork ? "参考图已经带进来了。选一个方向，或者直接改写下面的话。" : "不必先写完整提示词，像平时聊天一样说就可以。"}</p>
-            </div>
-          )}
-          <div className="inspiration-messages">
+          <div ref={messagesRef} className="inspiration-messages" tabIndex={0} aria-label="对话消息">
+            {!selected && !requestId && (
+              <div className="inspiration-welcome">
+                <span className="inspiration-orb">✦</span><h2>{sourceWork ? "把这张图变成新的灵感" : "今天想一起做点什么？"}</h2>
+                <p>{sourceWork ? "参考图已经带进来了。选一个方向，或者直接改写下面的话。" : "不必先写完整提示词，像平时聊天一样说就可以。"}</p>
+              </div>
+            )}
             <InspirationMessageTimeline
               messages={selected?.messages ?? []}
               pendingUserMessage={pendingVisible ? pendingTurn?.userMessage ?? null : null}
               thinking={pendingVisible}
+              models={models}
+              outputBusy={Boolean(outputBusy)}
+              onCopyReply={(messageId) => void outputConversation("reply", messageId)}
+              onSaveReply={(messageId) => void outputConversation("save", messageId)}
             />
-            <div ref={endRef} />
           </div>
           {error && <AppNotice tone="error">{error}</AppNotice>}
+          {outputNotice && <AppNotice tone="success">{outputNotice}</AppNotice>}
+          {requestId && !pendingVisible && <AppNotice tone="info">另一段对话正在生成。可以先写草稿，完成后回答会保存在原对话。</AppNotice>}
           <div className="inspiration-composer">
             <div className="inspiration-mode-pill">✦ {activePreset.label}</div>
             <textarea
@@ -289,13 +378,13 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
               placeholder="把你的想法告诉本地模型……"
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void send(); }
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); }
               }}
             />
             <div className="inspiration-composer-actions">
               <small>Enter 发送 · Shift + Enter 换行</small>
               {requestId ? (
-                <button type="button" className="inspiration-stop" onClick={() => void window.sanctuary.cancelInspirationMessage(requestId)}>停止</button>
+                <button type="button" className="inspiration-stop" onClick={() => void window.sanctuary.cancelInspirationMessage(requestId).catch((caught) => setError(messageOf(caught)))}>停止</button>
               ) : (
                 <button type="button" className="inspiration-send" disabled={!draft.trim() || modelsLoading || models.length === 0} onClick={() => void send()}>发送</button>
               )}
@@ -355,10 +444,14 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   );
 }
 
-export function InspirationMessageTimeline({ messages, pendingUserMessage, thinking }: {
+export function InspirationMessageTimeline({ messages, pendingUserMessage, thinking, models = [], outputBusy = false, onCopyReply, onSaveReply }: {
   messages: InspirationMessage[];
   pendingUserMessage: string | null;
   thinking: boolean;
+  models?: InstalledModelView[];
+  outputBusy?: boolean;
+  onCopyReply?: (messageId: string) => void;
+  onSaveReply?: (messageId: string) => void;
 }) {
   return (
     <>
@@ -366,6 +459,17 @@ export function InspirationMessageTimeline({ messages, pendingUserMessage, think
         <div key={message.id} className={`inspiration-message ${message.role}`}>
           <span>{message.role === "user" ? "你" : "本地模型"}</span>
           <div>{message.content}</div>
+          {message.role === "assistant" && (
+            <footer className="inspiration-reply-actions">
+              <small>{message.provenance
+                ? `${models.find((model) => model.id === message.provenance!.modelId)?.name ?? message.provenance.modelId} · ${(message.provenance.durationMs / 1000).toFixed(1)} 秒 · ${message.provenance.source ? `参考第 ${message.provenance.source.pageIndex + 1} 页` : "纯文字"}`
+                : "历史回答 · 来源未记录"}</small>
+              <div>
+                {onCopyReply && <Button variant="ghost" size="small" disabled={outputBusy} onClick={() => onCopyReply(message.id)}>复制回答</Button>}
+                {onSaveReply && <Button variant="ghost" size="small" disabled={outputBusy} onClick={() => onSaveReply(message.id)}>保存 Markdown</Button>}
+              </div>
+            </footer>
+          )}
         </div>
       ))}
       {pendingUserMessage && (

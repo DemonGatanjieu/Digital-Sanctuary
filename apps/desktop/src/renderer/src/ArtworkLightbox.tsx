@@ -1,24 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { ArtworkRecord, VisionEvaluationResult } from "@sanctuary/domain";
+import type { ArtworkRecord, VisionEvaluationResult, WorkRecord } from "@sanctuary/domain";
 import { artworkImageUrl } from "./ArtworkCard";
 import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 import { artworkLibraryWorkId, artworkPageIndex } from "./gallery-model";
 import { useCinemaViewer } from "./useCinemaViewer";
+import { artworkReadingAsset } from "./work-reading";
+import { useWorkReading } from "./useWorkReading";
 
 export function ArtworkLightbox({
   artwork,
   pages,
   onClose,
   onSelect,
-  onOpenInspiration
+  onOpenInspiration,
+  onReadingSaved,
+  onError
 }: {
   artwork: ArtworkRecord;
   pages: ArtworkRecord[];
   onClose: () => void;
   onSelect: (artwork: ArtworkRecord) => void;
   onOpenInspiration: (workId: string, pageIndex: number) => void;
+  onReadingSaved: () => Promise<void> | void;
+  onError: (error: unknown) => void;
 }) {
   const currentIndex = Math.max(0, pages.findIndex((page) => page.id === artwork.id));
   const previous = pages[currentIndex - 1];
@@ -30,6 +36,13 @@ export function ArtworkLightbox({
   const [showInspector, setShowInspector] = useState(false);
   const interactionSuspended = showInspector || showRadar;
   const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
+  const readingLookup = useRef<{ workId: string; promise: Promise<WorkRecord | null> } | null>(null);
+  const resolveReadingAssetId = useCallback(async () => {
+    if (readingLookup.current?.workId !== libraryWorkId) {
+      readingLookup.current = { workId: libraryWorkId, promise: window.sanctuary.getWork(libraryWorkId) };
+    }
+    return artworkReadingAsset(await readingLookup.current.promise, artwork)?.id ?? null;
+  }, [libraryWorkId, artwork.id, artwork.path]);
   const viewerPages = useMemo(() => pages.map((page) => ({ url: artworkImageUrl(page) })), [pages]);
   const viewer = useCinemaViewer({
     imageKey: artwork.id + ":" + artwork.path, pages: viewerPages, pageIndex: currentIndex,
@@ -38,6 +51,8 @@ export function ArtworkLightbox({
     onDismissOverlay: showInspector ? undefined : showRadar ? () => setShowRadar(false) : undefined
   });
   const { zoom, nativeMode, isPanning, imageLoaded, imageFailed, hudVisible, resetHudTimer } = viewer;
+  // Preserve the clicked page, and retain its mapping until a brief successfully displayed visit has flushed.
+  useWorkReading({ workId: libraryWorkId, assetId: null, resolveAssetId: resolveReadingAssetId, imageLoaded, onSaved: onReadingSaved, onError });
 
   useEffect(() => {
     let active = true;

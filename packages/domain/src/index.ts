@@ -203,6 +203,19 @@ export interface WorkRecord {
   updatedAt: string;
   collectionIds: string[];
   assets: WorkAssetRecord[];
+  readingProgress?: WorkReadingProgress;
+}
+
+/** Last successfully displayed local page; it contains IDs, never file paths. */
+export interface WorkReadingProgress {
+  workId: string;
+  assetId: string;
+  viewedAt: string;
+}
+
+export interface WorkViewRequest {
+  workId: string;
+  assetId: string;
 }
 
 export interface WorkAssetRecord {
@@ -225,6 +238,7 @@ export interface WorkAssetRecord {
 
 export type WorkSortField =
   | "savedAt"
+  | "lastViewedAt"
   | "publishedAt"
   | "title"
   | "artist"
@@ -264,6 +278,12 @@ export interface WorkQuery {
   collectionIds?: string[];
   collectionMatchMode?: CollectionMatchMode;
   excludedCollectionIds?: string[];
+  /** When present, selects either favorite or non-favorite works. */
+  favorite?: boolean;
+  /** True selects works without any ordinary collection membership. */
+  uncollected?: boolean;
+  /** True selects works that have been successfully viewed at least once. */
+  viewedOnly?: boolean;
   sortBy?: WorkSortField;
   direction?: SortDirection;
   offset?: number;
@@ -280,6 +300,7 @@ export interface WorkListItem {
   workType: WorkType;
   publishedAt: string | null;
   savedAt: string;
+  lastViewedAt?: string | null;
   favorite: boolean;
   pageCount: number;
   totalByteLength: number;
@@ -551,7 +572,7 @@ export function isLibraryPreferences(value: unknown): value is LibraryPreference
   const candidate = value as Partial<LibraryPreferences>;
   return (
     (candidate.defaultView === "flat" || candidate.defaultView === "collections" || candidate.defaultView === "author-work") &&
-    (["savedAt", "publishedAt", "title", "artist", "pageCount", "byteLength"] as const).includes(candidate.defaultSortBy as WorkSortField) &&
+    (["savedAt", "lastViewedAt", "publishedAt", "title", "artist", "pageCount", "byteLength"] as const).includes(candidate.defaultSortBy as WorkSortField) &&
     (candidate.defaultSortDirection === "asc" || candidate.defaultSortDirection === "desc") &&
     (candidate.gridDensity === "comfortable" || candidate.gridDensity === "compact") &&
     (candidate.downloadDirectory === null || typeof candidate.downloadDirectory === "string")

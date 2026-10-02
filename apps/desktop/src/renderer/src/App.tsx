@@ -22,6 +22,8 @@ import type { SettingsSection } from "./app-navigation";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
 import { useLibraryQuery } from "./useLibraryQuery";
 import { QuickActions, type QuickAction } from "./QuickActions";
+import { AppNotice } from "./AppNotice";
+import { applyWorkPreset, clearWorkCollectionFilters, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
 
 const SettingsView = lazy(() => import("./SettingsView").then((module) => ({ default: module.SettingsView })));
 const AnalysisView = lazy(() => import("./AnalysisView").then((module) => ({ default: module.AnalysisView })));
@@ -36,7 +38,7 @@ const DEFAULT_APPEARANCE: AppearancePreferences = {
 };
 
 export function App() {
-  const [activeView, setActiveView] = useState<ActiveView>("gallery");
+  const [activeView, setActiveViewState] = useState<ActiveView>("gallery");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("library");
   const mainRef = useRef<HTMLElement>(null);
   const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
@@ -69,7 +71,22 @@ export function App() {
   const [savingGroupId, setSavingGroupId] = useState("");
   const [error, setError] = useState("");
   const [exploreState, setExploreState] = useState<ExploreState>(initialExploreState);
-  const [galleryMode, setGalleryMode] = useState<GalleryMode>("flat");
+  const [galleryMode, setGalleryModeState] = useState<GalleryMode>("flat");
+  const navigationState = useRef({ activeView, galleryMode });
+  const rememberGalleryPosition = useCallback(() => {
+    const current = navigationState.current;
+    if (current.activeView === "gallery" && mainRef.current) {
+      scrollPositions.current.set(`gallery:${current.galleryMode}`, mainRef.current.scrollTop);
+    }
+  }, []);
+  const setActiveView = useCallback((next: ActiveView) => {
+    if (next !== navigationState.current.activeView) rememberGalleryPosition();
+    setActiveViewState(next);
+  }, [rememberGalleryPosition]);
+  const setGalleryMode = useCallback((next: GalleryMode) => {
+    if (next !== navigationState.current.galleryMode) rememberGalleryPosition();
+    setGalleryModeState(next);
+  }, [rememberGalleryPosition]);
   const [analysisWorkIds, setAnalysisWorkIds] = useState<string[]>([]);
   const [inspectorTarget, setInspectorTarget] = useState<ElementInspectorTarget | null>(null);
   const [inspirationLaunch, setInspirationLaunch] = useState<{ workId: string; pageIndex: number } | null>(null);
@@ -92,7 +109,12 @@ export function App() {
   }, [galleryMode, refreshArtworks, showError]);
   const { query: workQuery, result: workResult, loading: workLoading,
     setQuery: setWorkQuery, refresh: refreshWorks, loadMore: loadMoreWorks } = useLibraryQuery(showError);
+  const normalSort = useRef<WorkSortSnapshot>({ sortBy: "savedAt", direction: "desc" });
+  if (workQuery.sortBy !== "lastViewedAt") {
+    normalSort.current = { sortBy: workQuery.sortBy ?? "savedAt", direction: workQuery.direction ?? "desc" };
+  }
   const scrollKey = activeView === "gallery" ? `gallery:${galleryMode}` : activeView === "settings" ? `settings:${settingsSection}` : activeView;
+  useLayoutEffect(() => { navigationState.current = { activeView, galleryMode }; }, [activeView, galleryMode]);
   useLayoutEffect(() => {
     const main = mainRef.current;
     if (!main) return;
@@ -384,6 +406,15 @@ export function App() {
     setGalleryMode(mode);
   }
 
+  function openWorkPreset(preset: WorkPreset) {
+    setGalleryMode("flat");
+    setActiveView("gallery");
+    setWorkQuery((current) => {
+      const { search: _search, workType: _workType, artistId: _artistId, ...withoutSearch } = current;
+      return applyWorkPreset(clearWorkCollectionFilters(withoutSearch), preset, normalSort.current);
+    });
+  }
+
   async function downloadCurrentArtwork() {
     setError("");
     try {
@@ -447,6 +478,9 @@ export function App() {
 
   const quickActions: QuickAction[] = [
     { id: "gallery", label: "打开图库", description: "继续浏览刚才的位置", shortcut: "Ctrl 1", keywords: ["浏览", "作品"], onSelect: openGallery },
+    { id: "favorites", label: "喜欢的作品", description: "浏览图库中标记喜欢的作品", keywords: ["收藏", "喜爱"], onSelect: () => openWorkPreset("favorites") },
+    { id: "recent", label: "最近浏览", description: "找到看过的作品，继续上次阅读", keywords: ["历史", "继续", "阅读"], onSelect: () => openWorkPreset("recent") },
+    { id: "uncollected", label: "未分相册", description: "找出还没有加入任何相册的作品", keywords: ["整理", "分类"], onSelect: () => openWorkPreset("uncollected") },
     { id: "search", label: "搜索图库", description: "按标题、画师或 Pixiv ID 找作品", shortcut: "Ctrl F", keywords: ["查找"], onSelect: () => {
       setPendingSearchFocus(true); setActiveView("gallery"); void changeGalleryMode("flat");
     } },
@@ -511,6 +545,7 @@ export function App() {
             artworks={artworks}
             workResult={workResult}
             workQuery={workQuery}
+            normalSort={normalSort.current}
             workLoading={workLoading || (galleryMode !== "flat" && artworksLoading)}
             collections={collections}
             savedCollectionViews={savedCollectionViews}
@@ -565,11 +600,14 @@ export function App() {
             onError={showError}
           />
         ) : activeView === "inspiration" ? (
+          <>
+          {error && <AppNotice tone="error">{error}</AppNotice>}
           <InspirationView
             launch={inspirationLaunch}
             onLaunchConsumed={() => setInspirationLaunch(null)}
             onOpenModelCenter={() => openSettings("models")}
           />
+          </>
         ) : activeView === "settings" ? (
           <SettingsView
             section={settingsSection}

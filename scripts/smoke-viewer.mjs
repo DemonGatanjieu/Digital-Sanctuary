@@ -6,7 +6,7 @@ import { join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createServer } from "node:net";
 import { deflateSync } from "node:zlib";
-import { connectElectronMainInspector } from "./electron-smoke-support.mjs";
+import { connectElectronMainInspector, showElectronTestWindow } from "./electron-smoke-support.mjs";
 
 // Real renderer, real local image protocol, disposable library; no model or user library required.
 const port = await availablePort();
@@ -40,17 +40,19 @@ for (let index = 0; index < 3; index++) {
   database.prepare("INSERT INTO collection_artworks(collection_id, artwork_id) VALUES ('viewer-album', ?)").run(`viewer-page-${index}`);
 }
 database.close();
-const child = spawn(resolve("node_modules/electron/dist/electron.exe"),
+const startElectron = () => spawn(resolve("node_modules/electron/dist/electron.exe"),
   [resolve("apps/desktop/out/main/index.js"), `--inspect=127.0.0.1:${mainPort}`, `--remote-debugging-port=${port}`, `--user-data-dir=${userData}`, "--host-resolver-rules=MAP pixiv.net ~NOTFOUND, MAP *.pixiv.net ~NOTFOUND"],
   { env: { ...process.env, LOCALAPPDATA: join(userData, "LocalAppData") }, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+let child = startElectron();
 let stderr = "";
 child.stderr.on("data", (chunk) => { stderr += String(chunk); });
 const checks = [];
 
 try {
+  let main = await connectElectronMainInspector(mainPort);
+  await showElectronTestWindow(main);
   const target = await waitForRenderer();
-  const main = await connectElectronMainInspector(mainPort);
-  const cdp = await connectCdp(target.webSocketDebuggerUrl);
+  let cdp = await connectCdp(target.webSocketDebuggerUrl);
   try {
     // Test-only IPC fixture inside this disposable Electron process; production renderer/preload stay unchanged.
     await main.evaluate(`(() => {
@@ -78,6 +80,14 @@ try {
       }
       throw new Error(`Timed out: ${expression}`);
     }
+    async function waitForMain(expression) {
+      const started = Date.now();
+      while (Date.now() - started < 10_000) {
+        if (await main.evaluate(expression)) return;
+        await new Promise((done) => setTimeout(done, 50));
+      }
+      throw new Error(`Main fixture timed out: ${expression}`);
+    }
     async function click(selector) {
       await waitFor(`Boolean(document.querySelector(${JSON.stringify(selector)}))`);
       await cdp.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
@@ -89,6 +99,13 @@ try {
     async function key(key, code = key) {
       await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key, code });
       await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key, code });
+    }
+    async function changeControl(selector, value) {
+      await waitFor(`Boolean(document.querySelector(${JSON.stringify(selector)}))`);
+      await cdp.evaluate(`(() => { const control = document.querySelector(${JSON.stringify(selector)}); const prototype = control.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(prototype, 'value').set.call(control, ${JSON.stringify(value)}); control.dispatchEvent(new Event(control.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); })()`);
+    }
+    async function waitForProgress(pageIndex) {
+      await waitFor(`(async () => { const work = await window.sanctuary.getWork('pixiv:123456789'); return work.readingProgress?.assetId === work.assets[${pageIndex}].id; })()`);
     }
     async function imageReady() {
       await waitFor("Boolean(document.querySelector('.cinema-image-entity')?.complete && document.querySelector('.cinema-image-entity')?.naturalWidth > 0 && document.querySelector('.cinema-image-entity')?.getAttribute('aria-busy') === 'false')");
@@ -188,6 +205,26 @@ try {
 
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 900, height: 620, deviceScaleFactor: 1, mobile: false });
     await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    await changeControl('[aria-label="排序字段"]', 'title');
+    await click('.work-sort-direction');
+    await clickText('[aria-label="常用筛选"] button', '最近浏览');
+    await waitFor("document.querySelector('.compact-empty h2')?.textContent === '还没有浏览记录'");
+    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.library-start-actions'))"), false, "empty recent history was presented as a completely empty library");
+    await click('[data-nav="settings"]');
+    await click('[data-nav="gallery"]');
+    await waitFor("document.querySelector('[aria-label=\"常用筛选\"] button.active')?.textContent === '最近浏览'");
+    await clickText('[aria-label="常用筛选"] button', '全部');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').value"), 'title', "leaving recent after visiting settings lost the user's previous sort");
+    assert.equal(await cdp.evaluate("document.querySelector('.work-sort-direction').textContent.trim()"), '升序 ↑');
+    await clickText('[aria-label="常用筛选"] button', '喜欢');
+    await waitFor("document.querySelector('.compact-empty h2')?.textContent === '还没有喜欢的作品'");
+    await clickText('[aria-label="常用筛选"] button', '未分相册');
+    await waitFor("document.querySelector('.compact-empty h2')?.textContent === '没有未分相册的作品'");
+    await screenshot('empty-presets-retain-controls');
+    await clickText('[aria-label="常用筛选"] button', '全部');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    checks.push({ name: "empty-presets-keep-controls-and-recent-restores-sort-across-settings" });
     await cdp.evaluate(`(() => { const RealImage = window.Image; window.__viewerPreloads = []; window.Image = function(...args) { const image = new RealImage(...args); window.__viewerPreloads.push(image); return image; }; })()`);
     await click(".work-cover-button");
     await viewerChecks("flat-gallery");
@@ -297,6 +334,101 @@ try {
     await click(".work-select-toggle");
     checks.push({ name: "memoized-card-favorite-undo-and-current-selection-mode" });
 
+    await cdp.evaluate("window.sanctuary.updateWorkFavorite(['pixiv:123456789'], true)");
+    await clickText('[aria-label="常用筛选"] button', '喜欢');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1 && document.querySelector('.work-card-favorite').classList.contains('active')");
+    await changeControl('input[type="search"]', '不可能匹配的测试标题');
+    await waitFor("document.querySelector('.compact-empty h2')?.textContent === '当前条件下没有喜欢的作品'");
+    await changeControl('input[type="search"]', '横竖');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    await changeControl('[aria-label="作品类型"]', 'local');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 0 && Boolean(document.querySelector('.compact-empty'))");
+    await changeControl('[aria-label="作品类型"]', '');
+    await clickText('[aria-label="画廊布局"] button', '相册');
+    await click('.collection-filter-button');
+    await waitFor("Boolean(document.querySelector('.work-collection-context')) && document.querySelectorAll('.work-library-card').length === 1");
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"常用筛选\"] button.active').textContent"), '喜欢');
+    assert.equal(await cdp.evaluate("document.querySelector('input[type=search]').value"), '横竖');
+    await clickText('.work-collection-context button', '查看全部作品');
+    await waitFor("!document.querySelector('.work-collection-context') && document.querySelector('[aria-label=\"常用筛选\"] button.active')?.textContent === '全部'");
+    assert.equal(await cdp.evaluate("document.querySelector('input[type=search]').value"), '横竖', "return all unexpectedly erased the search");
+    await changeControl('input[type="search"]', '');
+    await cdp.evaluate("window.sanctuary.updateWorkFavorite(['pixiv:123456789'], false)");
+    await clickText('[aria-label="常用筛选"] button', '最近浏览');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').value"), 'lastViewedAt');
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').disabled && document.querySelector('.work-sort-direction').disabled"), true);
+    await screenshot('recent-reading-gallery');
+    await clickText('[aria-label="常用筛选"] button', '全部');
+    checks.push({ name: "favorite-recent-uncollected-compose-with-search-type-and-album-return-all-clears-presets" });
+
+    await click('.work-cover-button');
+    await imageReady();
+    await key('End');
+    await waitFor("document.querySelector('.cinema-heading-group small')?.textContent.includes('第 3/3 页')");
+    await imageReady();
+    // Close before the 500 ms coalescing interval: the last displayed page must still be flushed.
+    await key('Escape');
+    await waitForProgress(2);
+    await click('.work-cover-button');
+    await imageReady();
+    assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 3/3 页')"), true, 'work cover did not resume its last successful page');
+    await screenshot('continued-third-page');
+    await key('Escape');
+
+    const workBeforeFailure = await cdp.evaluate("window.sanctuary.getWork('pixiv:123456789')");
+    const failureAsset = workBeforeFailure.assets[1];
+    const fixtureDb = new DatabaseSync(join(userData, 'library.db'));
+    fixtureDb.prepare('UPDATE assets SET path = ? WHERE id = ?').run(join(userData, 'missing-original.png'), failureAsset.id);
+    fixtureDb.close();
+    await main.evaluate(`(() => { const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain; const channel = 'library:record-work-view'; const original = ipc._invokeHandlers.get(channel); globalThis.__viewerReading = { original, requests: [] }; ipc.removeHandler(channel); ipc.handle(channel, (event, request) => { globalThis.__viewerReading.requests.push(request); return original(event, request); }); })()`);
+    try {
+      await click('.work-cover-button');
+      await imageReady();
+      await key('ArrowLeft');
+      await waitFor("Boolean(document.querySelector('.cinema-load-error'))");
+      await key('Escape');
+      await waitForProgress(2);
+      const writes = await main.evaluate('globalThis.__viewerReading.requests');
+      assert.equal(writes.some(request => request.assetId === failureAsset.id), false, 'failed original was recorded as a read page');
+      checks.push({ name: 'failed-original-never-recorded-as-reading-progress', writes: writes.length });
+    } finally {
+      const restoring = new DatabaseSync(join(userData, 'library.db'));
+      restoring.prepare('UPDATE assets SET path = ? WHERE id = ?').run(failureAsset.path, failureAsset.id);
+      restoring.close();
+      await main.evaluate("(() => { const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain; ipc.removeHandler('library:record-work-view'); ipc.handle('library:record-work-view', globalThis.__viewerReading.original); delete globalThis.__viewerReading; })()");
+    }
+
+    await clickText('[aria-label="画廊布局"] button', '相册');
+    await click('.collection-card');
+    await clickText('[aria-label="画册模式"] button', '典藏网格');
+    await main.evaluate("(() => { const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain; const channel = 'library:get-work'; const original = ipc._invokeHandlers.get(channel); globalThis.__viewerMapping = { original, pending: [] }; ipc.removeHandler(channel); ipc.handle(channel, (event, request) => new Promise(resolve => globalThis.__viewerMapping.pending.push({ result: original(event, request), resolve }))); })()");
+    try {
+      await click('.collection-detail-grid .art-preview-button');
+      await imageReady();
+      await waitFor("Boolean(document.querySelector('.cinema-lightbox-theater'))");
+      assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"), true, 'explicit album page was overwritten by saved reading progress');
+      await waitForMain('globalThis.__viewerMapping.pending.length === 1');
+      await key('Escape');
+      await waitFor("!document.querySelector('.cinema-lightbox-theater')");
+      await main.evaluate('globalThis.__viewerMapping.pending[0].resolve(globalThis.__viewerMapping.pending[0].result)');
+    } finally {
+      await main.evaluate("(() => { const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain; ipc.removeHandler('library:get-work'); ipc.handle('library:get-work', globalThis.__viewerMapping.original); delete globalThis.__viewerMapping; })()");
+    }
+    await waitForProgress(0);
+    await key('Escape');
+    await clickText('[aria-label="画廊布局"] button', '全部作品');
+    await click('.work-cover-button');
+    await imageReady();
+    assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"), true, 'album entry did not save its canonical asset progress');
+    await key('End');
+    await waitFor("document.querySelector('.cinema-heading-group small')?.textContent.includes('第 3/3 页')");
+    await imageReady();
+    await key('Escape');
+    await waitForProgress(2);
+    await cdp.evaluate("(async () => window.sanctuary.updateLibraryPreferences({ ...(await window.sanctuary.getLibraryPreferences()), defaultView: 'flat' }))()");
+    checks.push({ name: 'cover-resumes-and-explicit-album-entry-preserves-clicked-page-and-flushes-slow-canonical-mapping-after-close' });
+
     await cdp.evaluate("(() => { window.__viewerUnhandled = 0; window.addEventListener('unhandledrejection', () => window.__viewerUnhandled++); })()");
     // Delete only this fixture album through IPC while leaving the rendered select stale, then exercise a genuine failed assignment.
     await cdp.evaluate("window.sanctuary.deleteCollection('viewer-album')");
@@ -305,6 +437,28 @@ try {
     assert.equal(await cdp.evaluate("window.__viewerUnhandled"), 0, "card mutation produced an unhandled rejection");
     assert.equal(await cdp.evaluate("Boolean(document.querySelector('.work-operation-notice'))"), false, "failed assignment claimed success");
     checks.push({ name: "failed-card-assignment-surfaces-error-and-releases-busy-without-success-or-rejection" });
+
+    // Restart the actual Electron process, keeping only this disposable SQLite library.
+    cdp.close();
+    main.close();
+    child.kill();
+    await new Promise((done) => { if (child.exitCode !== null) done(); else child.once('exit', done); });
+    child = startElectron();
+    child.stderr.on('data', chunk => { stderr += String(chunk); });
+    main = await connectElectronMainInspector(mainPort);
+    await showElectronTestWindow(main);
+    const restartedTarget = await waitForRenderer();
+    cdp = await connectCdp(restartedTarget.webSocketDebuggerUrl);
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 900, height: 620, deviceScaleFactor: 1, mobile: false });
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    await click('.work-cover-button');
+    await imageReady();
+    assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 3/3 页')"), true, 'reading progress did not survive an Electron restart');
+    await key('Escape');
+    await waitForProgress(2);
+    await clickText('[aria-label="常用筛选"] button', '最近浏览');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    checks.push({ name: 'successful-reading-page-and-recent-history-survive-real-electron-restart' });
     console.log(JSON.stringify({ status: "passed", checks, screenshots }, null, 2));
   } finally {
     cdp.close();

@@ -45,4 +45,28 @@ describe("InspirationMessageTimeline", () => {
     expect(markup).not.toContain("你 · 已发送");
     expect(markup).not.toContain("正在认真想……");
   });
+
+  it("offers output actions only for stable assistant messages and shows actual per-reply origin", () => {
+    const markup = renderToStaticMarkup(<InspirationMessageTimeline messages={[{
+      ...history[0]!, provenance: {
+        modelId: "gemma-test", modelVersion: "v1", evaluatorVersion: "runtime-v1",
+        settings: { creativity: "balanced", responseLength: "standard" },
+        parameters: { temperature: 0.65, topP: 0.9, topK: 40, maxTokens: 1400 },
+        source: { workId: "work-1", title: "参考图", artistName: null, pageIndex: 2 }, durationMs: 1250
+      }
+    }, { id: "user-stable", role: "user", content: "新提问", createdAt: "2026-10-03T00:00:00Z" }]}
+      pendingUserMessage="等待中的用户输入" thinking onCopyReply={() => undefined} onSaveReply={() => undefined} />);
+    expect(markup.match(/复制回答/g)).toHaveLength(1);
+    expect(markup.match(/保存 Markdown/g)).toHaveLength(1);
+    expect(markup).toContain("gemma-test · 1.3 秒 · 参考第 3 页");
+    expect(markup).not.toContain("历史回答 · 来源未记录");
+  });
+
+  it("keeps historical answer output available while another reply is being generated", () => {
+    const markup = renderToStaticMarkup(<InspirationMessageTimeline messages={history} pendingUserMessage={null}
+      thinking outputBusy onCopyReply={() => undefined} onSaveReply={() => undefined} />);
+    expect(markup).toContain("历史回答 · 来源未记录");
+    expect(markup.match(/disabled=""/g)).toHaveLength(2);
+    expect(markup).toContain("正在认真想……");
+  });
 });

@@ -22,6 +22,23 @@ export async function connectElectronMainInspector(port, timeoutMs = 20_000) {
   throw new Error("Isolated Electron main process did not expose its Node inspector");
 }
 
+/** Interactive smoke input and visibility need a real shown window, even after a hidden process launch. */
+export async function showElectronTestWindow(inspector, timeoutMs = 20_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const shown = await inspector.evaluate(`(() => {
+      const electron=process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron');
+      const window=electron.BrowserWindow.getAllWindows()[0];
+      if (!window || window.isDestroyed()) return false;
+      window.show(); window.focus();
+      return window.isVisible();
+    })()`);
+    if (shown) return;
+    await new Promise((done) => setTimeout(done, 80));
+  }
+  throw new Error("Isolated Electron test window did not become visible");
+}
+
 async function connectMain(url) {
   const socket = new WebSocket(url);
   const pending = new Map();

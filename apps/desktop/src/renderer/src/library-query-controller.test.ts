@@ -82,4 +82,31 @@ describe("library query concurrency", () => {
     expect(controller.state.query.search).toBe("changed");
     expect(controller.state.loading).toBe(true);
   });
+
+  it("advances the database offset when concurrent insertions produce a duplicate page", async () => {
+    const { controller, pending } = fixture();
+    controller.changeQuery({ limit: 2 });
+    const initial = controller.refresh(); pending[0]!.resolve(page(["a", "b"], 6, 0, 2)); await initial;
+    const repeated = controller.loadMore(); pending[1]!.resolve(page(["a", "b"], 8, 2, 2)); await repeated;
+    expect(controller.state.result.items.map((item) => item.id)).toEqual(["a", "b"]);
+    const more = controller.loadMore();
+    expect(pending[2]!.query.offset).toBe(4);
+    pending[2]!.resolve(page(["c", "d"], 8, 4, 2)); await more;
+    expect(controller.state.result.items.map((item) => item.id)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("treats quick filters as new generations and preserves explicitly false favorite", async () => {
+    const { controller, pending } = fixture();
+    const old = controller.refresh();
+    expect(controller.changeQuery({ favorite: true })).toBe(true);
+    const favorites = controller.refresh();
+    pending[0]!.resolve(page(["old"])); await old;
+    expect(controller.state.loading).toBe(true);
+    pending[1]!.resolve(page(["liked"])); await favorites;
+    expect(controller.changeQuery({ favorite: false })).toBe(true);
+    expect(controller.changeQuery({ uncollected: true })).toBe(true);
+    expect(controller.changeQuery({ viewedOnly: true, sortBy: "lastViewedAt" })).toBe(true);
+    expect(controller.state.query.viewedOnly).toBe(true);
+    expect(controller.state.loading).toBe(true);
+  });
 });

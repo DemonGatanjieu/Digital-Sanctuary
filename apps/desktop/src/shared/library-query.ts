@@ -2,6 +2,7 @@ import type {
   CollectionMatchMode,
   SortDirection,
   WorkQuery,
+  WorkViewRequest,
   WorkSortField,
   WorkType
 } from "@sanctuary/domain";
@@ -9,6 +10,7 @@ import type {
 const WORK_TYPES = new Set<WorkType>(["illustration", "manga", "ugoira", "local", "unknown"]);
 const SORT_FIELDS = new Set<WorkSortField>([
   "savedAt",
+  "lastViewedAt",
   "publishedAt",
   "title",
   "artist",
@@ -53,7 +55,18 @@ export function parseWorkQuery(value: unknown): WorkQuery {
   if (typeof value.direction === "string" && DIRECTIONS.has(value.direction as SortDirection)) {
     query.direction = value.direction as SortDirection;
   }
+  if (typeof value.favorite === "boolean") query.favorite = value.favorite;
+  if (typeof value.uncollected === "boolean") query.uncollected = value.uncollected;
+  if (typeof value.viewedOnly === "boolean") query.viewedOnly = value.viewedOnly;
   return query;
+}
+
+export function parseWorkViewRequest(value: unknown): WorkViewRequest | null {
+  if (!isRecord(value)) return null;
+  const isLocalId = (id: unknown): id is string => typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9:._-]{0,299}$/.test(id);
+  return isLocalId(value.workId) && isLocalId(value.assetId)
+    ? { workId: value.workId, assetId: value.assetId }
+    : null;
 }
 
 export function parseWorkId(value: unknown): string | null {

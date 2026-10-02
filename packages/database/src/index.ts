@@ -24,6 +24,7 @@ import type {
   WorkQuery,
   WorkQueryResult,
   WorkRecord,
+  WorkReadingProgress,
   WorkType,
   VisionEvaluationResult,
   VisionEvaluationKind,
@@ -130,6 +131,7 @@ interface WorkListRow {
   work_type: string;
   published_at: string | null;
   saved_at: string;
+  last_viewed_at: string | null;
   favorite: number;
   page_count: number;
   total_byte_length: number;
@@ -516,6 +518,7 @@ export class LibraryDatabase {
     const sortBy = query.sortBy ?? "savedAt";
     const sortExpressions: Record<NonNullable<WorkQuery["sortBy"]>, string> = {
       savedAt: "w.saved_at",
+      lastViewedAt: "w.last_viewed_at",
       publishedAt: "w.published_at",
       title: "w.title COLLATE NOCASE",
       artist: "ar.name COLLATE NOCASE",
@@ -523,11 +526,19 @@ export class LibraryDatabase {
       byteLength: "(SELECT COALESCE(SUM(a.byte_length), 0) FROM assets a WHERE a.work_id = w.id)"
     };
     const sortExpression = sortExpressions[sortBy];
-    const nullableSort = sortBy === "publishedAt" || sortBy === "artist";
+    const nullableSort = sortBy === "publishedAt" || sortBy === "artist" || (sortBy === "lastViewedAt" && query.viewedOnly !== true);
     const pageSort = `sort_value ${direction}, w.id ASC`;
     const resultSort = `page.sort_value${sortBy === "title" || sortBy === "artist" ? " COLLATE NOCASE" : ""} ${direction}, w.id ASC`;
     const clauses = ["w.deleted_at IS NULL"];
     const parameters: Array<string | number> = [];
+    if (typeof query.favorite === "boolean") {
+      clauses.push("w.favorite = ?");
+      parameters.push(query.favorite ? 1 : 0);
+    }
+    if (query.uncollected === true) {
+      clauses.push("NOT EXISTS (SELECT 1 FROM collection_works uncollected_cw WHERE uncollected_cw.work_id = w.id)");
+    }
+    if (query.viewedOnly === true) clauses.push("w.last_viewed_at IS NOT NULL");
     if (search) {
       clauses.push(
         `(instr(lower(w.title), lower(?)) > 0
@@ -602,7 +613,7 @@ export class LibraryDatabase {
          )
          SELECT w.id, w.source_platform, w.source_work_id, w.artist_id,
                 ar.name AS artist_name, w.title, w.work_type, w.published_at,
-                w.saved_at, w.favorite, w.page_count,
+                w.saved_at, w.last_viewed_at, w.favorite, w.page_count,
                 ${sortBy === "byteLength" ? "page.sort_value" : "(SELECT COALESCE(SUM(a.byte_length), 0) FROM assets a WHERE a.work_id = w.id)"} AS total_byte_length,
                 w.ownership,
                 (SELECT GROUP_CONCAT(cw.collection_id, char(31)) FROM collection_works cw WHERE cw.work_id = w.id) AS collection_ids,
@@ -643,10 +654,11 @@ export class LibraryDatabase {
            FROM works w
            LEFT JOIN artists ar ON ar.id = w.artist_id
            LEFT JOIN collection_works cw ON cw.work_id = w.id
-          WHERE w.id = ?`
+          WHERE w.id = ? AND w.deleted_at IS NULL`
       )
       .all(workId) as unknown as WorkRow[];
     const first = rows[0];
+    const readingProgress = this.#readReadingProgress().find((entry) => entry.workId === workId);
     if (!first) return null;
     const assets = this.#database
       .prepare(
@@ -676,8 +688,68 @@ export class LibraryDatabase {
       createdAt: first.created_at,
       updatedAt: first.updated_at,
       collectionIds: rows.flatMap((row) => row.collection_id ? [row.collection_id] : []),
-      assets: assets.map(mapWorkAsset)
+      assets: assets.map(mapWorkAsset),
+      ...(readingProgress ? { readingProgress } : {})
     };
+  }
+
+  recordWorkView(workId: string, assetId: string): WorkReadingProgress | null {
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const target = this.#database.prepare(
+        `SELECT 1 AS found FROM assets a JOIN works w ON w.id = a.work_id
+          WHERE w.id = ? AND a.id = ? AND w.deleted_at IS NULL
+            AND a.media_type = 'image' AND a.file_state = 'available'`
+      ).get(workId, assetId);
+      if (!target) {
+        this.#database.exec("COMMIT");
+        return null;
+      }
+      const progress: WorkReadingProgress = { workId, assetId, viewedAt: new Date().toISOString() };
+      const history = this.#readReadingProgress().filter((entry) => entry.workId !== workId);
+      this.#database.prepare("UPDATE works SET last_viewed_at = ? WHERE id = ?").run(progress.viewedAt, workId);
+      this.setPreference("library.readingProgress", [progress, ...history].slice(0, 100));
+      this.#database.exec("COMMIT");
+      return progress;
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  #readReadingProgress(): WorkReadingProgress[] {
+    const row = this.#database.prepare("SELECT value_json FROM user_preferences WHERE key = ?")
+      .get("library.readingProgress") as { value_json: string } | undefined;
+    if (!row) return [];
+    let stored: unknown;
+    try { stored = JSON.parse(row.value_json); } catch { stored = []; }
+    const candidates = (Array.isArray(stored) ? stored.slice(0, 100) : []).flatMap((value: unknown): WorkReadingProgress[] => {
+      if (!value || typeof value !== "object") return [];
+      const entry = value as Partial<WorkReadingProgress>;
+      const validId = (id: unknown): id is string => typeof id === "string" && /^[A-Za-z0-9][A-Za-z0-9:._-]{0,299}$/.test(id);
+      if (!validId(entry.workId) || !validId(entry.assetId) || typeof entry.viewedAt !== "string" || entry.viewedAt.length > 40) return [];
+      const time = Date.parse(entry.viewedAt);
+      if (!Number.isFinite(time) || new Date(time).toISOString() !== entry.viewedAt) return [];
+      return [{ workId: entry.workId, assetId: entry.assetId, viewedAt: entry.viewedAt }];
+    }).sort((left, right) => right.viewedAt.localeCompare(left.viewedAt));
+    const ids = [...new Set(candidates.map((entry) => entry.assetId))];
+    const validAssets = new Map<string, string>();
+    if (ids.length > 0) {
+      const rows = this.#database.prepare(
+        `SELECT a.id, a.work_id FROM assets a JOIN works w ON w.id = a.work_id
+          WHERE a.id IN (${ids.map(() => "?").join(", ")}) AND w.deleted_at IS NULL
+            AND a.media_type = 'image' AND a.file_state = 'available'`
+      ).all(...ids) as Array<{ id: string; work_id: string }>;
+      for (const asset of rows) validAssets.set(asset.id, asset.work_id);
+    }
+    const seen = new Set<string>();
+    const history = candidates.filter((entry) => {
+      if (seen.has(entry.workId) || validAssets.get(entry.assetId) !== entry.workId) return false;
+      seen.add(entry.workId);
+      return true;
+    });
+    if (row.value_json !== JSON.stringify(history)) this.setPreference("library.readingProgress", history);
+    return history;
   }
 
   listAssetsNeedingThumbnails(limit = 100): WorkAssetRecord[] {
@@ -792,6 +864,7 @@ export class LibraryDatabase {
     this.#database
       .prepare("UPDATE assets SET file_state = ?, updated_at = ? WHERE id = ?")
       .run(state, new Date().toISOString(), assetId);
+    if (state !== "available") this.#readReadingProgress();
   }
 
   removeWorkFromIndex(workId: string): boolean {
@@ -809,6 +882,7 @@ export class LibraryDatabase {
         )
         .run(workId);
       const result = this.#database.prepare("DELETE FROM works WHERE id = ?").run(workId);
+      this.#readReadingProgress();
       this.#database.exec("COMMIT");
       return Number(result.changes) > 0;
     } catch (error) {
@@ -2211,6 +2285,9 @@ export class LibraryDatabase {
         ON works(source_platform, source_work_id)
         WHERE source_platform IS NOT NULL AND source_work_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_works_saved_at ON works(saved_at DESC, id);
+      CREATE INDEX IF NOT EXISTS idx_works_last_viewed_at
+        ON works(last_viewed_at DESC, id)
+        WHERE deleted_at IS NULL AND last_viewed_at IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_works_artist ON works(artist_id, saved_at DESC);
       CREATE INDEX IF NOT EXISTS idx_assets_work ON assets(work_id, page_index);
       CREATE INDEX IF NOT EXISTS idx_assets_thumbnail_path
@@ -2643,6 +2720,7 @@ function mapWorkListItem(row: WorkListRow): WorkListItem {
     workType: asWorkType(row.work_type),
     publishedAt: row.published_at,
     savedAt: row.saved_at,
+    lastViewedAt: row.last_viewed_at,
     favorite: row.favorite === 1,
     pageCount: row.page_count,
     totalByteLength: Number(row.total_byte_length),

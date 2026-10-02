@@ -91,7 +91,7 @@ describe("large library query boundary", () => {
       if (index % 2 === 0) fixture.prepare("INSERT INTO collection_works VALUES ('selected',?,'2026-01-01')").run(id);
     });
     const sorts: Record<NonNullable<WorkQuery["sortBy"]>, string> = {
-      savedAt: "w.saved_at", publishedAt: "w.published_at", title: "w.title COLLATE NOCASE",
+      savedAt: "w.saved_at", lastViewedAt: "w.last_viewed_at", publishedAt: "w.published_at", title: "w.title COLLATE NOCASE",
       artist: "ar.name COLLATE NOCASE", pageCount: "w.page_count", byteLength: "total_byte_length"
     };
     const database = new LibraryDatabase(path);

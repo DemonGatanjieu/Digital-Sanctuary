@@ -14,6 +14,7 @@ export class LibraryQueryController {
   state: LibraryQueryState = { query: INITIAL_WORK_QUERY, result: EMPTY_WORK_RESULT, loading: true };
   private generation = 0;
   private resultKey = "";
+  private nextOffset = 0;
 
   constructor(
     private readonly fetchPage: (query: WorkQuery) => Promise<WorkQueryResult>,
@@ -26,6 +27,7 @@ export class LibraryQueryController {
     if (queryKey(normalized) === queryKey(this.state.query)) return false;
     this.generation += 1;
     this.resultKey = "";
+    this.nextOffset = 0;
     this.update({ query: normalized, loading: true });
     return true;
   }
@@ -42,13 +44,21 @@ export class LibraryQueryController {
       // Revalidate already loaded pages in bounded chunks without collapsing the scroll range.
       let next: WorkQueryResult | undefined;
       const items: WorkQueryResult["items"] = [];
+      const knownIds = new Set<string>();
+      let offset = 0;
       do {
-        next = await this.fetchPage({ ...query, offset: items.length, limit: Math.min(200, wanted - items.length) });
+        next = await this.fetchPage({ ...query, offset, limit: Math.min(200, wanted - items.length) });
         if (generation !== this.generation) return;
-        items.push(...next.items);
+        offset += next.items.length;
+        for (const item of next.items) {
+          if (knownIds.has(item.id)) continue;
+          knownIds.add(item.id);
+          items.push(item);
+        }
       } while (next.hasMore && next.items.length > 0 && items.length < wanted);
+      this.nextOffset = offset;
       this.resultKey = key;
-      this.update({ result: { ...next, items, offset: 0, limit: query.limit ?? 60, hasMore: items.length < next.total } });
+      this.update({ result: { ...next, items, offset: 0, limit: query.limit ?? 60 } });
     } catch (error) {
       if (generation === this.generation) this.reportError(error);
     } finally {
@@ -62,8 +72,9 @@ export class LibraryQueryController {
     const previous = this.state.result;
     this.update({ loading: true });
     try {
-      const next = await this.fetchPage({ ...this.state.query, offset: previous.items.length, limit: previous.limit });
+      const next = await this.fetchPage({ ...this.state.query, offset: this.nextOffset, limit: previous.limit });
       if (generation !== this.generation) return;
+      this.nextOffset += next.items.length;
       const knownIds = new Set(previous.items.map((item) => item.id));
       this.update({ result: { ...next, offset: 0, items: [...previous.items, ...next.items.filter((item) => !knownIds.has(item.id))] } });
     } catch (error) {
@@ -81,5 +92,6 @@ export class LibraryQueryController {
 
 function queryKey(query: WorkQuery): string {
   return JSON.stringify([query.search ?? "", query.workType, query.artistId, query.collectionId,
-    query.collectionIds, query.collectionMatchMode, query.excludedCollectionIds, query.sortBy, query.direction, query.limit ?? 60]);
+    query.collectionIds, query.collectionMatchMode, query.excludedCollectionIds,
+    query.favorite, query.uncollected, query.viewedOnly, query.sortBy, query.direction, query.limit ?? 60]);
 }

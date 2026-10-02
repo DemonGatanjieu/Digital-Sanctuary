@@ -17,11 +17,16 @@ import { Button } from "./Button";
 import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 import { useCinemaViewer } from "./useCinemaViewer";
+import { SegmentedControl } from "./SegmentedControl";
+import { applyWorkPreset, clearWorkCollectionFilters, getWorkPreset, workEmptyMessage, type WorkSortSnapshot } from "./work-presets";
+import { initialWorkPageIndex, isReadableWorkAsset } from "./work-reading";
+import { useWorkReading } from "./useWorkReading";
 
 
 export function WorkLibrary({
   result,
   query,
+  normalSort,
   collections,
   appearance,
   loading,
@@ -35,6 +40,7 @@ export function WorkLibrary({
 }: {
   result: WorkQueryResult;
   query: WorkQuery;
+  normalSort: WorkSortSnapshot;
   collections: CollectionRecord[];
   appearance: AppearancePreferences;
   loading: boolean;
@@ -53,6 +59,9 @@ export function WorkLibrary({
   const [deletionPreview, setDeletionPreview] = useState<WorkDeletionPreview | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState<{ message: string; undo?: () => Promise<void> } | null>(null);
+  const preset = getWorkPreset(query);
+  const emptyMessage = workEmptyMessage(query);
+  const showAllWorks = () => onQueryChange(clearWorkCollectionFilters(applyWorkPreset(query, "all", normalSort)));
   const activeCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
   const isCombinationFilter = Boolean(
     (query.collectionIds && query.collectionIds.length > 0) ||
@@ -210,7 +219,7 @@ export function WorkLibrary({
         <section className="work-ambient-hero">
           <img className="work-ambient-backdrop" src={workImageUrl(featuredWork.coverAsset.thumbnailPath ?? featuredWork.coverAsset.path)} alt="" aria-hidden="true" />
           <div className="work-ambient-copy">
-            <span>{activeCollection ? "相册精选" : "最近保存"}</span>
+            <span>{activeCollection ? "相册精选" : preset === "recent" ? "最近浏览" : preset === "favorites" ? "喜欢的作品" : "作品精选"}</span>
             <strong>{featuredWork.title}</strong>
             <small>{featuredWork.artistName ?? "本地作品"} · {featuredWork.pageCount} 页</small>
             <button type="button" onClick={() => void openWork(featuredWork)}>继续欣赏</button>
@@ -218,6 +227,21 @@ export function WorkLibrary({
           <img className="work-ambient-cover" src={workImageUrl(featuredWork.coverAsset.thumbnailPath ?? featuredWork.coverAsset.path)} alt="" />
         </section>
       )}
+      <div className="work-preset-row">
+        <SegmentedControl
+          label="常用筛选"
+          value={preset}
+          options={[
+            { value: "all", label: "全部" },
+            { value: "favorites", label: "喜欢" },
+            { value: "recent", label: "最近浏览", title: "按最近看过的时间排列，打开作品继续上次读到的页" },
+            { value: "uncollected", label: "未分相册" }
+          ]}
+          onChange={(next) => onQueryChange(applyWorkPreset(query, next, normalSort))}
+        />
+        {preset === "recent" && <small>按最近浏览排列 · 自动记住读到的页</small>}
+      </div>
+
       <section className="work-library-controls" aria-label="画廊搜索与排序">
         <label className="work-search">
           <span>⌕</span>
@@ -252,6 +276,7 @@ export function WorkLibrary({
         <select
           aria-label="排序字段"
           value={query.sortBy ?? "savedAt"}
+          disabled={preset === "recent"}
           onChange={(event) => onQueryChange({
             ...query,
             sortBy: event.target.value as NonNullable<WorkQuery["sortBy"]>,
@@ -259,6 +284,7 @@ export function WorkLibrary({
           })}
         >
           <option value="savedAt">本地保存时间</option>
+          {preset === "recent" && <option value="lastViewedAt">最近浏览时间</option>}
           <option value="publishedAt">Pixiv 发布时间</option>
           <option value="title">标题</option>
           <option value="artist">作者</option>
@@ -268,6 +294,7 @@ export function WorkLibrary({
         <button
           type="button"
           className="work-sort-direction"
+          disabled={preset === "recent"}
           title={query.direction === "asc" ? "当前升序" : "当前降序"}
           onClick={() => onQueryChange({
             ...query,
@@ -293,10 +320,7 @@ export function WorkLibrary({
       {activeCollection && (
         <section className="work-collection-context">
           <div><span>当前分类</span><strong>{activeCollection.name}</strong>{activeCollection.description && <small>{activeCollection.description}</small>}</div>
-          <button type="button" onClick={() => {
-            const { collectionId: _collectionId, ...withoutCollection } = query;
-            onQueryChange({ ...withoutCollection, offset: 0 });
-          }}>查看全部作品</button>
+          <button type="button" onClick={showAllWorks}>查看全部作品</button>
         </section>
       )}
 
@@ -309,10 +333,7 @@ export function WorkLibrary({
               {query.collectionMatchMode === "all" ? "全部满足 (AND)" : "任意满足 (OR)"}
             </small>
           </div>
-          <button type="button" onClick={() => {
-            const { collectionIds: _cids, collectionMatchMode: _cmm, excludedCollectionIds: _ecids, ...withoutCombo } = query;
-            onQueryChange({ ...withoutCombo, offset: 0 });
-          }}>查看全部作品</button>
+          <button type="button" onClick={showAllWorks}>查看全部作品</button>
         </section>
       )}
 
@@ -324,8 +345,8 @@ export function WorkLibrary({
       {result.items.length === 0 && !loading ? (
         <section className="empty-state compact-empty">
           <p className="eyebrow">NO MATCHES</p>
-          <h2>{query.search ? "没有匹配的作品" : "画廊还是空的"}</h2>
-          <p>{query.search ? "换一个标题、作者或 Pixiv ID 试试。" : "从探索页保存作品，或导入本地图片。"}</p>
+          <h2>{emptyMessage.title}</h2>
+          <p>{emptyMessage.description}</p>
         </section>
       ) : (
         <section className="work-library-grid" aria-busy={loading}>
@@ -442,7 +463,7 @@ export function WorkLibrary({
       )}
 
       {selectedWork && (
-        <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} onOpenInspiration={onOpenInspiration} />
+        <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} onOpenInspiration={onOpenInspiration} onError={onError} />
       )}
       {deletionPreview && (
         <DialogOverlay busy={deleting} onClose={() => setDeletionPreview(null)}>
@@ -590,8 +611,8 @@ function LazyWorkImage({ path }: { path: string }) {
   );
 }
 
-function WorkLightbox({ work, onClose, onGenerated, onOpenInspiration }: { work: WorkRecord; onClose: () => void; onGenerated: () => Promise<void> | void; onOpenInspiration: (workId: string, pageIndex: number) => void }) {
-  const [pageIndex, setPageIndex] = useState(0);
+function WorkLightbox({ work, onClose, onGenerated, onOpenInspiration, onError }: { work: WorkRecord; onClose: () => void; onGenerated: () => Promise<void> | void; onOpenInspiration: (workId: string, pageIndex: number) => void; onError: (error: unknown) => void }) {
+  const [pageIndex, setPageIndex] = useState(() => initialWorkPageIndex(work));
   const [showRadar, setShowRadar] = useState(false);
   const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
   const [provenance, setProvenance] = useState<GenerationProvenance | null>(null);
@@ -606,6 +627,7 @@ function WorkLightbox({ work, onClose, onGenerated, onOpenInspiration }: { work:
     onDismissOverlay: showInspector ? undefined : showRadar ? () => setShowRadar(false) : showProvenance ? () => setShowProvenance(false) : undefined
   });
   const { zoom, nativeMode, isPanning, hudVisible, imageLoaded, imageFailed, resetHudTimer } = viewer;
+  useWorkReading({ workId: work.id, assetId: page && isReadableWorkAsset(page) ? page.id : null, imageLoaded, onSaved: onGenerated, onError });
 
   useEffect(() => {
     let active = true;

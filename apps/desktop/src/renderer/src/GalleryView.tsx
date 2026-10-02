@@ -19,6 +19,7 @@ import { SavedCollectionViewEditor } from "./SavedCollectionViewEditor";
 import { SegmentedControl } from "./SegmentedControl";
 import { WorkLibrary } from "./WorkLibrary";
 import { artworkWorkPages, buildAuthorGroups } from "./gallery-model";
+import { applyWorkPreset, clearWorkCollectionFilters, hasWorkFilters, type WorkSortSnapshot } from "./work-presets";
 
 export type GalleryMode = "flat" | "author-work" | "collections";
 
@@ -26,6 +27,7 @@ export function GalleryView({
   artworks,
   workResult,
   workQuery,
+  normalSort,
   workLoading,
   collections,
   savedCollectionViews,
@@ -58,6 +60,7 @@ export function GalleryView({
   artworks: ArtworkRecord[];
   workResult: WorkQueryResult;
   workQuery: WorkQuery;
+  normalSort: WorkSortSnapshot;
   workLoading: boolean;
   collections: CollectionRecord[];
   savedCollectionViews: SavedCollectionView[];
@@ -108,14 +111,7 @@ export function GalleryView({
   const missingAvatarCount = artists.filter((artist) => !artist.avatarLocalPath).length;
 
   const showAllWorks = () => {
-    const {
-      collectionId: _collectionId,
-      collectionIds: _collectionIds,
-      collectionMatchMode: _collectionMatchMode,
-      excludedCollectionIds: _excludedCollectionIds,
-      ...withoutCollection
-    } = workQuery;
-    onWorkQueryChange({ ...withoutCollection, offset: 0 });
+    onWorkQueryChange(clearWorkCollectionFilters(applyWorkPreset(workQuery, "all", normalSort)));
     onModeChange("flat");
   };
 
@@ -168,9 +164,9 @@ export function GalleryView({
         <article><span>相册</span><strong>{collections.length}</strong></article>
       </section>
 
-      {workLoading && (workResult.total === 0 || (mode !== "flat" && artworks.length === 0)) ? (
+      {workLoading && !hasWorkFilters(workQuery) && (workResult.total === 0 || (mode !== "flat" && artworks.length === 0)) ? (
         <section className="library-loading" role="status">正在读取图库…</section>
-      ) : workResult.total === 0 && !workQuery.search ? (
+      ) : workResult.total === 0 && !hasWorkFilters(workQuery) ? (
         <section className="empty-state">
           <div className="empty-orbit"><span>✦</span></div>
           <p className="eyebrow">YOUR FIRST ARTWORK</p>
@@ -301,6 +297,7 @@ export function GalleryView({
         <WorkLibrary
           result={workResult}
           query={workQuery}
+          normalSort={normalSort}
           collections={collections}
           appearance={appearance}
           loading={workLoading}
@@ -344,6 +341,8 @@ export function GalleryView({
           pages={lightboxPages}
           onClose={() => setSelectedArtworkId("")}
           onSelect={(artwork) => setSelectedArtworkId(artwork.id)}
+          onReadingSaved={onWorkLibraryChanged}
+          onError={onError}
           onOpenInspiration={(workId, pageIndex) => {
             setSelectedArtworkId("");
             onOpenInspiration(workId, pageIndex);

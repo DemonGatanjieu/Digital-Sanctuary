@@ -597,7 +597,7 @@ function localImageUrl(imagePath: string): string {
 function registerIpc(): void {
   if (!database || !vision || !themeManager || !themeStore || !comfyUiService || !modelCenter) throw new Error("Application services are unavailable");
   registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService, localArtCriticService);
-  registerInspirationIpc(ipcMain, database, localArtCriticService);
+  registerInspirationIpc(ipcMain, database, localArtCriticService, () => mainWindow);
   registerModelCenterIpc({
     ipc: ipcMain,
     service: modelCenter,

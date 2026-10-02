@@ -1,13 +1,14 @@
-.inspiration-view { min-height: 100%; min-width: 0; background: radial-gradient(circle at 72% 4%, color-mix(in srgb, var(--accent, #ff5d9e) 12%, transparent), transparent 32%); color: var(--text-primary); }
-.inspiration-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 26px; }
+.app-shell > main:has(> .inspiration-view) { display: flex; flex-direction: column; }
+.inspiration-view { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; background: radial-gradient(circle at 72% 4%, color-mix(in srgb, var(--accent, #ff5d9e) 12%, transparent), transparent 32%); color: var(--text-primary); }
+.inspiration-header { flex-shrink: 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
 .inspiration-header h1 { margin: 3px 0 6px; font-size: clamp(30px, 3vw, 46px); letter-spacing: -.04em; }
 .inspiration-header p:last-child { max-width: 680px; margin: 0; color: var(--text-secondary); }
 .inspiration-new, .inspiration-send { border: 0; border-radius: 999px; padding: 12px 20px; color: #fff; font-weight: 800; background: linear-gradient(135deg, #ff699f, #b94ce4); box-shadow: 0 10px 24px rgba(211, 71, 150, .24); cursor: pointer; }
 .inspiration-new { flex-shrink: 0; white-space: nowrap; }
-.inspiration-layout { display: grid; grid-template-columns: minmax(160px, 200px) minmax(0, 1fr) minmax(180px, 230px); gap: 18px; height: calc(100vh - 210px); min-height: 520px; }
-.inspiration-layout > * { min-width: 0; }
+.inspiration-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(160px, 200px) minmax(0, 1fr) minmax(180px, 230px); grid-template-rows: minmax(0, 1fr); gap: 18px; }
+.inspiration-layout > * { min-width: 0; min-height: 0; }
 .inspiration-sessions, .inspiration-chat, .inspiration-presets { border: 1px solid color-mix(in srgb, var(--border, #bbc5d6) 72%, transparent); border-radius: 24px; background: color-mix(in srgb, var(--surface, #fff) 92%, transparent); box-shadow: 0 18px 50px rgba(41, 49, 75, .08); overflow: hidden; }
-.inspiration-sessions, .inspiration-presets { padding: 16px; overflow-y: auto; }
+.inspiration-sessions, .inspiration-presets { padding: 16px; overflow-y: auto; overscroll-behavior: contain; }
 .inspiration-panel-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 3px 3px 14px; }
 .inspiration-panel-title small, .inspiration-muted { color: var(--text-tertiary, #8d96a8); font-size: 12px; }
 .inspiration-session { display: grid; grid-template-columns: 1fr 28px; align-items: center; border-radius: 15px; margin-bottom: 7px; transition: background .18s ease, transform .18s ease; }
@@ -18,7 +19,13 @@
 .inspiration-session small { margin-top: 4px; color: var(--text-tertiary, #8d96a8); }
 .inspiration-delete { width: 25px; height: 25px; border: 0; border-radius: 50%; color: var(--text-tertiary); background: transparent; cursor: pointer; }
 .inspiration-delete:hover { color: #e74470; background: rgba(231, 68, 112, .1); }
-.inspiration-chat { position: relative; display: flex; flex-direction: column; padding: 20px; }
+.inspiration-chat { position: relative; display: flex; flex-direction: column; padding: 16px; }
+.inspiration-chat > :not(.inspiration-messages) { flex-shrink: 0; }
+.inspiration-conversation-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 14px; }
+.inspiration-conversation-actions > strong { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-text-heading); font-size: 13px; }
+.inspiration-conversation-actions > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.inspiration-conversation-actions > small { flex-basis: 100%; color: var(--ds-text-secondary); font-size: 11px; line-height: var(--ds-leading-body); }
+.inspiration-conversation-actions .ui-button { min-height: 36px; background: var(--ds-bg-card-subtle); color: var(--ds-text-body); }
 .inspiration-source { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 17px; background: linear-gradient(120deg, rgba(255, 105, 159, .1), rgba(135, 103, 255, .08)); }
 .inspiration-source img { width: 54px; height: 54px; object-fit: cover; border-radius: 13px; box-shadow: 0 5px 15px rgba(30, 35, 58, .16); }
 .inspiration-source > div:nth-child(2) { min-width: 0; flex: 1; }
@@ -33,11 +40,12 @@
 .inspiration-attach-empty strong { font-size: 13px; }
 .inspiration-attach-empty small { color: var(--text-tertiary); }
 .inspiration-attach-empty:hover { border-style: solid; background: color-mix(in srgb, var(--accent, #ff5d9e) 9%, transparent); }
-.inspiration-welcome { margin: auto; max-width: 520px; text-align: center; padding: 35px; }
+.inspiration-welcome { margin: auto; max-width: 520px; text-align: center; padding: 18px; }
 .inspiration-welcome h2 { margin: 14px 0 7px; font-size: 28px; }
 .inspiration-welcome p { color: var(--text-secondary); line-height: 1.7; }
 .inspiration-orb { display: inline-grid; place-items: center; width: 60px; height: 60px; border-radius: 22px; color: white; font-size: 26px; background: linear-gradient(145deg, #ff75aa, #995cec); box-shadow: 0 16px 40px rgba(175, 76, 193, .3); }
-.inspiration-messages { flex: 1; overflow-y: auto; padding: 14px 4px; scroll-behavior: smooth; }
+.inspiration-messages { flex: 1 1 0; min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 4px; }
+.inspiration-messages:focus-visible { outline: 2px solid var(--ds-primary); outline-offset: -2px; border-radius: 8px; }
 .inspiration-message { max-width: 84%; margin: 12px 0; }
 .inspiration-message.user { margin-left: auto; }
 .inspiration-message > span { display: block; margin: 0 8px 5px; color: var(--text-tertiary); font-size: 11px; font-weight: 700; }
@@ -46,9 +54,13 @@
 .inspiration-message.user > div { color: #fff; border-radius: 18px 18px 5px 18px; background: linear-gradient(135deg, #f0699c, #a75ed7); }
 .inspiration-message.user.queued > div { box-shadow: 0 8px 24px rgba(190, 75, 154, .18); }
 .inspiration-message.pending > div { color: var(--text-secondary); animation: inspiration-pulse 1.4s ease-in-out infinite; }
+.inspiration-reply-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 5px 10px; padding: 5px 4px 0; }
+.inspiration-reply-actions > small { min-width: 0; color: var(--ds-text-secondary); font-size: 10px; line-height: var(--ds-leading-body); overflow-wrap: anywhere; }
+.inspiration-reply-actions > div { display: flex; flex-wrap: wrap; gap: 2px; }
+.inspiration-reply-actions .ui-button { min-height: 36px; color: var(--ds-text-secondary); }
 .inspiration-composer { padding: 12px; border: 1px solid color-mix(in srgb, var(--accent, #ff5d9e) 20%, var(--border)); border-radius: 20px; background: color-mix(in srgb, var(--surface, #fff) 96%, transparent); box-shadow: 0 10px 30px rgba(45, 52, 79, .08); }
 .inspiration-mode-pill { display: inline-flex; padding: 5px 9px; border-radius: 999px; color: #c8427c; background: rgba(255, 95, 155, .1); font-size: 12px; font-weight: 800; }
-.inspiration-composer textarea { display: block; width: 100%; min-height: 68px; max-height: 180px; resize: vertical; box-sizing: border-box; padding: 11px 4px 5px; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; line-height: 1.55; }
+.inspiration-composer textarea { display: block; width: 100%; height: 68px; min-height: 54px; max-height: min(140px, 20vh); resize: vertical; box-sizing: border-box; padding: 11px 4px 5px; border: 0; outline: 0; background: transparent; color: inherit; font: inherit; line-height: 1.55; }
 .inspiration-composer-actions { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .inspiration-composer-actions small { color: var(--text-tertiary); }
 .inspiration-send { padding: 9px 18px; }
@@ -74,7 +86,7 @@
 .inspiration-no-model { padding: 10px; border-radius: 12px; background: rgba(230, 80, 100, .07); }
 .inspiration-no-model p { margin: 0 0 8px; color: var(--text-secondary); font-size: 12px; }
 .inspiration-no-model button { border: 0; padding: 7px 10px; border-radius: 999px; color: #fff; background: linear-gradient(135deg, #f0699c, #a75ed7); cursor: pointer; }
-.inspiration-setup-notice { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding: 14px 18px; }
+.inspiration-setup-notice { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding: 14px 18px; }
 .inspiration-setup-notice p { margin: 0; }
 .inspiration-setup-notice button { min-height: 36px; white-space: nowrap; }
 .inspiration-boundary { margin-top: 20px; padding: 13px; border-radius: 16px; color: var(--text-secondary); background: rgba(94, 112, 151, .07); }
@@ -102,13 +114,24 @@
 .inspiration-picker-empty { grid-column: 1 / -1; margin: 80px auto; color: var(--text-tertiary); }
 @keyframes inspiration-pulse { 50% { opacity: .55; } }
 @media (max-width: 1180px) {
-  .inspiration-layout { grid-template-columns: 180px minmax(0, 1fr); height: auto; }
-  .inspiration-sessions, .inspiration-chat { min-height: 520px; }
-  .inspiration-presets { grid-column: 1 / -1; max-height: 420px; }
+  .inspiration-layout { grid-template-columns: 180px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1.8fr); gap: 14px; }
+  .inspiration-sessions { grid-column: 1; grid-row: 1; }
+  .inspiration-chat { grid-column: 2; grid-row: 1 / 3; }
+  .inspiration-presets { grid-column: 1; grid-row: 2; }
+  .inspiration-sessions, .inspiration-presets { padding: 12px; }
+  .inspiration-model-controls { padding: 10px; }
+  .inspiration-model-controls .inspiration-panel-title { flex-wrap: wrap; gap: 4px; }
 }
 @media (max-width: 980px) {
-  .inspiration-layout { display: block; height: auto; }
-  .inspiration-sessions { min-height: 0; max-height: 180px; margin-bottom: 14px; }
-  .inspiration-chat { min-height: 520px; margin-bottom: 14px; }
-  .inspiration-presets { max-height: 460px; }
+  .inspiration-layout { grid-template-columns: 170px minmax(0, 1fr); gap: 12px; }
+  .inspiration-header { gap: 14px; margin-bottom: 14px; }
+  .inspiration-header p:last-child { font-size: 12px; }
+  .inspiration-chat { padding: 12px; }
+  .inspiration-welcome { padding: 12px; }
+  .inspiration-welcome h2 { font-size: 21px; }
+  .inspiration-orb { width: 44px; height: 44px; border-radius: 16px; font-size: 21px; }
+  .inspiration-composer { padding: 10px; }
+  .inspiration-composer textarea { height: 54px; }
+  .inspiration-composer-actions { gap: 8px; }
+  .inspiration-composer-actions small { font-size: 10px; }
 }

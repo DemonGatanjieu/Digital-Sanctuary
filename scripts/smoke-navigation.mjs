@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createServer } from "node:net";
-import { connectElectronMainInspector } from "./electron-smoke-support.mjs";
+import { connectElectronMainInspector, showElectronTestWindow } from "./electron-smoke-support.mjs";
 
 // Run against a disposable library. No user files, downloads or model installations are changed.
 const port = await availablePort();
@@ -68,13 +68,14 @@ let mainInspector;
 
 try {
   mainInspector = await connectElectronMainInspector(mainPort);
+  await showElectronTestWindow(mainInspector);
   const target = await waitForRenderer();
   const cdp = await connectCdp(target.webSocketDebuggerUrl);
   try {
-    async function waitFor(expression) {
+    async function waitFor(expression, page = cdp) {
       const started = Date.now();
       while (Date.now() - started < 10_000) {
-        if (await cdp.evaluate(expression)) return;
+        if (await page.evaluate(expression)) return;
         await new Promise((done) => setTimeout(done, 80));
       }
       throw new Error(`Timed out: ${expression}`);
@@ -151,6 +152,11 @@ try {
     await key("k", "KeyK", 2);
     await key("Escape", "Escape");
     await waitFor("!document.querySelector('.quick-actions-dialog')");
+    // Returning must work even if the browser has not delivered the last scroll event.
+    await cdp.evaluate(`(() => {
+      window.__suppressScroll = event => event.stopImmediatePropagation();
+      document.querySelector('main').addEventListener('scroll', window.__suppressScroll, true);
+    })()`);
     await cdp.evaluate("document.querySelector('main').scrollTo({top:250,behavior:'instant'})");
     await new Promise((done) => setTimeout(done, 100));
     const galleryTop = await cdp.evaluate("document.querySelector('main').scrollTop");
@@ -166,8 +172,43 @@ try {
     await click('[data-nav="gallery"]');
     await waitFor("Boolean(document.querySelector('.work-search input'))");
     await waitFor("document.querySelectorAll('.work-library-card').length === 2");
-    assert.ok(Math.abs(await cdp.evaluate("document.querySelector('main').scrollTop") - galleryTop) <= 2, "gallery scroll position was not restored");
+    const restoredGalleryTop = await cdp.evaluate("document.querySelector('main').scrollTop");
+    assert.ok(Math.abs(restoredGalleryTop - galleryTop) <= 2, `gallery scroll position was not restored: ${galleryTop} -> ${restoredGalleryTop}`);
+    await cdp.evaluate("document.querySelector('main').removeEventListener('scroll', window.__suppressScroll, true); delete window.__suppressScroll");
     checks.push({ name: "quick-actions-IME-focus-routing-and-gallery-revalidation", galleryTop, worksOnReturn: 2 });
+
+    // Preset queries must render real counts, keep the previous sort and avoid first-run onboarding.
+    await click(".work-card-favorite");
+    await waitFor("document.querySelector('.work-card-favorite')?.classList.contains('active') && !document.querySelector('.work-card-favorite')?.disabled");
+    await fill('[aria-label="排序字段"]', "title");
+    await click(".work-sort-direction");
+    await waitFor("document.querySelector('.work-sort-direction')?.textContent.includes('升序')");
+    await key("k", "KeyK", 2);
+    await fill(".quick-actions-search", "喜欢的作品");
+    await key("Enter", "Enter");
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1 && !document.querySelector('.work-querying')");
+    assert.equal(await cdp.evaluate("document.querySelector('.work-result-note')?.textContent.includes('1 个作品')"), true);
+    await click('[aria-label="常用筛选"] button:nth-child(3)');
+    await waitFor("document.querySelector('.work-result-note')?.textContent.includes('0 个作品') && !document.querySelector('.work-querying')");
+    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.library-start-actions'))"), false, "empty recent filter claimed that the whole library was empty");
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').disabled"), true);
+    await click('[data-nav="settings"]');
+    await key("k", "KeyK", 2);
+    await fill(".quick-actions-search", "喜欢的作品");
+    await key("Enter", "Enter");
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1 && !document.querySelector('.work-querying')");
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').value"), "title");
+    assert.equal(await cdp.evaluate("document.querySelector('.work-sort-direction').textContent.includes('升序')"), true);
+    await cdp.evaluate("window.sanctuary.recordWorkView('fixture-work', 'fixture-asset')");
+    await click('[aria-label="常用筛选"] button:nth-child(3)');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1 && !document.querySelector('.work-querying')");
+    await cdp.evaluate("window.sanctuary.addWorkToCollection('fixture-work', 'fixture-collection')");
+    await click('[aria-label="常用筛选"] button:nth-child(4)');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1 && !document.querySelector('.work-querying')");
+    assert.equal(await cdp.evaluate("document.querySelector('.work-card-copy strong').textContent"), "原生保存的新作品");
+    await click('[aria-label="常用筛选"] button:nth-child(1)');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 2 && !document.querySelector('.work-querying')");
+    checks.push({ name: "favorite-recent-uncollected-query-counts-empty-state-and-sort-restoration" });
 
     await click(".work-select-toggle");
     await click(".work-card-check");
@@ -250,9 +291,33 @@ try {
     await key("Escape", "Escape");
     checks.push({ name: "quick-actions-900", ...palette });
 
+    // Hold only the first production show response, after its visibility update has run.
+    // A quick-actions open/cancel creates a newer show before this old response arrives.
+    await mainInspector.evaluate(`(() => {
+      const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain;
+      const original = ipc._invokeHandlers.get('explore:show');
+      if (typeof original !== 'function') throw new Error('Production exploration show handler is missing');
+      const state = globalThis.__navigationShowDelay = { original, calls: 0, holding: false, released: false, release: null };
+      ipc.removeHandler('explore:show');
+      ipc.handle('explore:show', (...args) => {
+        const result = original(...args);
+        if (++state.calls !== 1) return result;
+        state.holding = true;
+        return new Promise(resolve => {
+          state.release = () => {
+            state.holding = false;
+            state.released = true;
+            state.release = null;
+            resolve(result);
+          };
+        });
+      });
+      return true;
+    })()`);
     // Keep the remote site offline while checking the real native view lifecycle.
     await click('[data-nav="explore"]');
     await waitFor("Boolean(document.querySelector('.explore-page'))");
+    await waitFor("globalThis.__navigationShowDelay?.holding === true", mainInspector);
     await cdp.evaluate("window.sanctuary.exploreCommand('browse-unprotected')");
     await waitFor("document.querySelector('.engine-card strong')?.textContent === '本次无保护浏览'");
     assert.equal(await cdp.evaluate("Boolean(document.querySelector('.engine-card .online'))"), false);
@@ -267,11 +332,24 @@ try {
     assert.ok(nativeTarget, "native exploration target did not appear");
     const native = await connectCdp(nativeTarget.webSocketDebuggerUrl);
     try {
-      const bounds = await cdp.evaluate("(() => { const rect = document.querySelector('.explore-surface').getBoundingClientRect(); return { width: Math.round(rect.width), height: Math.round(rect.height) }; })()");
-      const viewport = await native.evaluate("({ width: innerWidth, height: innerHeight, visibility: document.visibilityState })");
-      assert.ok(Math.abs(bounds.width - viewport.width) <= 2 && Math.abs(bounds.height - viewport.height) <= 2, "native view bounds do not match the exploration surface");
+      let bounds;
+      let viewport;
+      let boundsMatch = false;
+      const boundsStarted = Date.now();
+      // Target creation can precede ResizeObserver's bounds IPC and the native resize.
+      while (Date.now() - boundsStarted < 10_000) {
+        [bounds, viewport] = await Promise.all([
+          cdp.evaluate("(() => { const rect = document.querySelector('.explore-surface').getBoundingClientRect(); return { width: Math.round(rect.width), height: Math.round(rect.height) }; })()"),
+          native.evaluate("({ width: innerWidth, height: innerHeight, visibility: document.visibilityState })")
+        ]);
+        boundsMatch = Math.abs(bounds.width - viewport.width) <= 2 && Math.abs(bounds.height - viewport.height) <= 2;
+        if (boundsMatch) break;
+        await new Promise((done) => setTimeout(done, 80));
+      }
+      assert.ok(boundsMatch, `native view bounds do not match the exploration surface: ${JSON.stringify({ bounds, viewport })}`);
       // Native shortcuts go through Electron host input; CDP skips before-input-event.
-      await mainInspector.evaluate("process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').BrowserWindow.getAllWindows()[0].focus()");
+      // A hidden launch can keep document.visibilityState hidden even when the native view is shown.
+      await showElectronTestWindow(mainInspector);
       await cdp.evaluate("window.sanctuary.focusExplore()");
       let nativeContents;
       const focusStarted = Date.now();
@@ -281,18 +359,35 @@ try {
         await new Promise((done) => setTimeout(done, 80));
       }
       assert.ok(nativeContents, "native exploration did not receive keyboard focus");
+      // Chromium can report an offline error document hidden while its native View is visible.
+      // Check the actual Electron View; keyboard ownership is checked independently below.
+      const visibleNativeView = `(() => {
+        const window=process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').BrowserWindow.getAllWindows()[0];
+        return window.isVisible() && window.contentView.children.some(view=>view.webContents?.id===${nativeContents.id} && view.getVisible());
+      })()`;
       await mainInspector.sendHostKey(nativeContents.id, "K", ["control"]);
       await waitFor("document.activeElement?.className === 'quick-actions-search'");
-      assert.equal(await native.evaluate("document.visibilityState"), "hidden");
+      await waitFor(`!${visibleNativeView}`, mainInspector);
       await key("Escape", "Escape");
       await waitFor("!document.querySelector('.quick-actions-dialog')");
-      await new Promise((done) => setTimeout(done, 100));
-      assert.equal(await native.evaluate("document.visibilityState"), "visible");
+      await waitFor("globalThis.__navigationShowDelay?.calls >= 2", mainInspector);
+      await waitFor(visibleNativeView, mainInspector);
       assert.equal(await native.evaluate("document.hasFocus()"), true, "native exploration focus was not restored");
       checks.push({ name: "native-quick-actions-hide-cancel-and-restore-focus" });
+      assert.equal(await mainInspector.evaluate(`(() => {
+        const state = globalThis.__navigationShowDelay;
+        if (!state?.holding || typeof state.release !== 'function') return false;
+        state.release();
+        return true;
+      })()`), true, "the earlier show response was not held until the newer show");
+      // Let the late response reach the renderer, including any incorrect follow-up hide IPC.
+      await cdp.evaluate("(async () => { await window.sanctuary.getExploreState(); await new Promise(done => setTimeout(done, 250)); })()");
+      assert.equal(await mainInspector.evaluate(visibleNativeView), true, "an expired show response hid the current exploration view");
+      assert.equal(await native.evaluate("document.hasFocus()"), true, "an expired show response interrupted restored native focus");
+      checks.push({ name: "native-expired-show-response-preserves-newer-show" });
       await click('[data-nav="settings"]');
       await waitFor("Boolean(document.querySelector('.settings-navigation'))");
-      assert.equal(await native.evaluate("document.visibilityState"), "hidden");
+      await waitFor(`!${visibleNativeView}`, mainInspector);
       await click(".engine-card");
       await waitFor("Boolean(document.querySelector('.shield-status.protection-bypassed button'))");
       await click(".shield-status.protection-bypassed button");
@@ -308,6 +403,20 @@ try {
   if (stderr.trim()) console.error(stderr.trim());
   process.exitCode = 1;
 } finally {
+  if (mainInspector) {
+    try {
+      await mainInspector.evaluate(`(() => {
+        const state = globalThis.__navigationShowDelay;
+        if (!state) return true;
+        const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain;
+        ipc.removeHandler('explore:show');
+        ipc.handle('explore:show', state.original);
+        state.release?.();
+        delete globalThis.__navigationShowDelay;
+        return true;
+      })()`);
+    } catch {}
+  }
   mainInspector?.close();
   child.kill();
   await new Promise((done) => {

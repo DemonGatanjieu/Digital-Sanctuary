@@ -35,6 +35,27 @@ export interface InspirationMessage {
   role: InspirationRole;
   content: string;
   createdAt: string;
+  provenance?: InspirationReplyProvenance;
+}
+
+export interface InspirationReplyProvenance {
+  modelId: string;
+  modelVersion: string;
+  evaluatorVersion: string;
+  settings: InspirationGenerationSettings;
+  parameters: { temperature: number; topP: number; topK: number; maxTokens: number };
+  source: { workId: string; title: string; artistName: string | null; pageIndex: number } | null;
+  durationMs: number;
+}
+
+export interface InspirationExportRequest {
+  conversationId: string;
+  messageId?: string;
+}
+
+export interface InspirationExportResult {
+  canceled: boolean;
+  fileName?: string;
 }
 
 export interface InspirationConversation {
