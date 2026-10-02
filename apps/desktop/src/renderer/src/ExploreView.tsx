@@ -51,6 +51,8 @@ export function ExploreView({
   error,
   isDrawerOpen = false,
   isModalOpen = false,
+  focusOnShow = false,
+  onFocusRestored,
   onStateChange,
   onError
 }: {
@@ -58,10 +60,16 @@ export function ExploreView({
   error: string;
   isDrawerOpen?: boolean;
   isModalOpen?: boolean;
+  focusOnShow?: boolean;
+  onFocusRestored?: () => void;
   onStateChange: (state: ExploreState) => void;
   onError: (caught: unknown) => void;
 }) {
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const focusOnShowRef = useRef(focusOnShow);
+  const focusRestoredRef = useRef(onFocusRestored);
+  focusOnShowRef.current = focusOnShow;
+  focusRestoredRef.current = onFocusRestored;
   const [passwordSetupOpened, setPasswordSetupOpened] = useState(false);
   const protectedBrowsingReady = state.protectionStatus === "ready";
   const contentAvailable = protectedBrowsingReady || state.protectionStatus === "bypassed";
@@ -99,7 +107,13 @@ export function ExploreView({
         shown = true;
         void window.sanctuary.showExplore(bounds)
           .then((nextState) => {
-            if (active) onStateChange(nextState);
+            if (active) {
+              onStateChange(nextState);
+              if (focusOnShowRef.current) {
+                focusOnShowRef.current = false;
+                void window.sanctuary.focusExplore().then(() => focusRestoredRef.current?.()).catch(onError);
+              }
+            }
             else void window.sanctuary.hideExplore();
           })
           .catch(onError);

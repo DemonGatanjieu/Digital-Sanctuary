@@ -21,6 +21,7 @@ export function AppSidebar({
   status,
   storageLocation,
   onOpenGallery,
+  onQuickActions,
   onViewChange,
   onDownloadCurrentArtwork,
   onPreviewBookmarks,
@@ -35,6 +36,7 @@ export function AppSidebar({
   status: AppStatus | null;
   storageLocation?: StorageLocationInfo | null;
   onOpenGallery: () => void | Promise<void>;
+  onQuickActions?: () => void;
   onViewChange: (view: ActiveView) => void;
   onDownloadCurrentArtwork: () => void | Promise<void>;
   onPreviewBookmarks: () => void | Promise<void>;
@@ -72,6 +74,9 @@ export function AppSidebar({
       </div>
 
 
+      {onQuickActions && <button type="button" className="sidebar-quick-actions" onClick={onQuickActions} title="快捷操作 (Ctrl+K)">
+        <span>⌕ 快捷操作</span><kbd>Ctrl K</kbd>
+      </button>}
       <nav aria-label="主导航">
         {MAIN_NAVIGATION.map((item) => (
           <button

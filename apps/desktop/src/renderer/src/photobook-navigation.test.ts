@@ -4,10 +4,18 @@ import {
   getPhotobookSpreadForArtworkIndex,
   getPhotobookTotalSpreads,
   normalizePhotoMountStyle,
+  photobookNeighborIndices,
   resolvePhotobookKeyboardAction
 } from "./photobook-navigation";
 
 describe("photobook page mapping", () => {
+  it("preloads only neighboring spreads, including cover and odd final pages", () => {
+    expect(photobookNeighborIndices(0, 0)).toEqual([]);
+    expect(photobookNeighborIndices(0, 1)).toEqual([]);
+    expect(photobookNeighborIndices(0, 4)).toEqual([1, 2]);
+    expect(photobookNeighborIndices(1, 4)).toEqual([3, 0]);
+    expect(photobookNeighborIndices(100, 10_000)).toEqual([201, 202, 197, 198]);
+  });
   it.each([
     [0, 1],
     [1, 1],

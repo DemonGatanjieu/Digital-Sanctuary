@@ -20,6 +20,8 @@ export interface ThumbnailBatchResult {
 
 export type ThumbnailEncoder = (sourcePath: string, targetPath: string) => Promise<void>;
 
+const inFlightBatches = new WeakMap<ThumbnailStore, Promise<ThumbnailBatchResult>>();
+
 export function thumbnailPathForAsset(cacheRoot: string, asset: WorkAssetRecord): string {
   const fingerprint = createHash("sha256")
     .update(`${THUMBNAIL_CACHE_VERSION}\0${asset.id}\0${asset.path}\0${asset.contentHash ?? asset.byteLength ?? ""}`)
@@ -27,11 +29,27 @@ export function thumbnailPathForAsset(cacheRoot: string, asset: WorkAssetRecord)
   return join(cacheRoot, THUMBNAIL_CACHE_VERSION, `${fingerprint}.png`);
 }
 
-export async function generateThumbnailBatch(
+export function generateThumbnailBatch(
   store: ThumbnailStore,
   cacheRoot: string,
   encode: ThumbnailEncoder,
   limit = 24
+): Promise<ThumbnailBatchResult> {
+  const pending = inFlightBatches.get(store);
+  if (pending) return pending;
+  const batch = runThumbnailBatch(store, cacheRoot, encode, limit);
+  inFlightBatches.set(store, batch);
+  void batch.finally(() => {
+    if (inFlightBatches.get(store) === batch) inFlightBatches.delete(store);
+  }).catch(() => undefined);
+  return batch;
+}
+
+async function runThumbnailBatch(
+  store: ThumbnailStore,
+  cacheRoot: string,
+  encode: ThumbnailEncoder,
+  limit: number
 ): Promise<ThumbnailBatchResult> {
   const assets = store.listAssetsNeedingThumbnails(limit);
   const result: ThumbnailBatchResult = {

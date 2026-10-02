@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WorkAssetRecord } from "@sanctuary/domain";
 import { generateThumbnailBatch, thumbnailPathForAsset, type ThumbnailStore } from "./thumbnail-service";
 
@@ -54,6 +54,57 @@ describe("thumbnail service", () => {
       expect(storedPath && existsSync(storedPath)).toBe(true);
       expect(await generateThumbnailBatch(store, directory, async () => undefined))
         .toMatchObject({ attempted: 0, generated: 0 });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("shares an overlapping batch and releases it for the next request", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-thumbnail-overlap-"));
+    const candidate = asset("asset-overlap", join(directory, "source.png"));
+    let storedPath: string | null = null;
+    let release!: () => void;
+    let started!: () => void;
+    const startedEncoding = new Promise<void>((resolve) => { started = resolve; });
+    const barrier = new Promise<void>((resolve) => { release = resolve; });
+    const store: ThumbnailStore = {
+      listAssetsNeedingThumbnails: vi.fn(() => storedPath ? [] : [candidate]),
+      updateAssetThumbnail: vi.fn((_id, path) => { storedPath = path; return true; })
+    };
+    const encode = vi.fn(async (_source: string, target: string) => {
+      started();
+      await barrier;
+      writeFileSync(target, "thumbnail");
+    });
+    try {
+      const first = generateThumbnailBatch(store, directory, encode, 6);
+      await startedEncoding;
+      const overlapping = generateThumbnailBatch(store, directory, encode, 6);
+      expect(overlapping).toBe(first);
+      expect(store.listAssetsNeedingThumbnails).toHaveBeenCalledTimes(1);
+      release();
+      expect(await first).toEqual(await overlapping);
+      expect(encode).toHaveBeenCalledTimes(1);
+      expect(store.updateAssetThumbnail).toHaveBeenCalledTimes(1);
+      expect(await generateThumbnailBatch(store, directory, encode, 6)).toMatchObject({ attempted: 0 });
+      expect(store.listAssetsNeedingThumbnails).toHaveBeenCalledTimes(2);
+    } finally {
+      release();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("releases a failed batch so the next request can retry", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-thumbnail-retry-"));
+    const store: ThumbnailStore = {
+      listAssetsNeedingThumbnails: vi.fn()
+        .mockImplementationOnce(() => { throw new Error("Database unavailable"); })
+        .mockReturnValue([]),
+      updateAssetThumbnail: () => true
+    };
+    try {
+      await expect(generateThumbnailBatch(store, directory, async () => undefined)).rejects.toThrow("Database unavailable");
+      await expect(generateThumbnailBatch(store, directory, async () => undefined)).resolves.toMatchObject({ attempted: 0 });
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

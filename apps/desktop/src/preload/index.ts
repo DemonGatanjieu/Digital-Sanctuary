@@ -226,6 +226,7 @@ export interface SanctuaryApi {
   showExplore(bounds: ExploreBounds): Promise<ExploreState>;
   setExploreBounds(bounds: ExploreBounds): Promise<boolean>;
   hideExplore(): Promise<void>;
+  focusExplore(): Promise<void>;
   exploreCommand(command: ExploreCommand): Promise<ExploreState>;
   openPixivArtist(artistId: string): Promise<ExploreState>;
   getExploreState(): Promise<ExploreState>;
@@ -240,6 +241,7 @@ export interface SanctuaryApi {
   onExploreState(listener: (state: ExploreState) => void): () => void;
   onExploreOpenInspector(listener: (data: { artworkId?: string; url?: string; pageIndex?: number }) => void): () => void;
   onAppStatus(listener: (status: ApplicationStatus) => void): () => void;
+  onQuickActionsRequested(listener: () => void): () => void;
   status(): Promise<ApplicationStatus>;
 }
 
@@ -448,6 +450,7 @@ const api: SanctuaryApi = {
   setExploreBounds: (bounds) =>
     ipcRenderer.invoke("explore:set-bounds", bounds) as Promise<boolean>,
   hideExplore: () => ipcRenderer.invoke("explore:hide") as Promise<void>,
+  focusExplore: () => ipcRenderer.invoke("explore:focus") as Promise<void>,
   exploreCommand: (command) =>
     ipcRenderer.invoke("explore:command", command) as Promise<ExploreState>,
   openPixivArtist: (artistId) =>
@@ -474,6 +477,11 @@ const api: SanctuaryApi = {
     const wrapped = (_event: Electron.IpcRendererEvent, status: ApplicationStatus) => listener(status);
     ipcRenderer.on("app:status-changed", wrapped);
     return () => ipcRenderer.removeListener("app:status-changed", wrapped);
+  },
+  onQuickActionsRequested: (listener) => {
+    const wrapped = () => listener();
+    ipcRenderer.on("app:quick-actions", wrapped);
+    return () => ipcRenderer.removeListener("app:quick-actions", wrapped);
   },
   onExploreOpenInspector: (listener) => {
     const wrapped = (_event: Electron.IpcRendererEvent, data: { artworkId?: string; url?: string }) => listener(data);

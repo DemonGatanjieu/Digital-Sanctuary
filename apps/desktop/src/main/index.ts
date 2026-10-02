@@ -1092,6 +1092,11 @@ function registerIpc(): void {
     exploreVisible = false;
     exploreView?.setVisible(false);
   });
+  ipcMain.handle("explore:focus", () => {
+    if (exploreVisible && exploreView && !exploreView.webContents.isDestroyed() && (exploreProtectionBypassed || vision?.available)) {
+      exploreView.webContents.focus();
+    }
+  });
   ipcMain.handle("explore:command", async (_event, command: unknown) => {
     if (command === "retry-vision") {
       exploreProtectionBypassed = false;
@@ -1852,6 +1857,14 @@ function ensureExploreView(): WebContentsView {
   if (exploreBounds) view.setBounds(exploreBounds);
 
   const contents = view.webContents;
+  contents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown" || input.alt || !(input.control || input.meta) || input.key.toLowerCase() !== "k") return;
+    event.preventDefault();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.focus();
+      mainWindow.webContents.send("app:quick-actions");
+    }
+  });
   const exploreSession = contents.session;
   exploreSession.setPermissionCheckHandler(
     (_contents, permission, requestingOrigin, details) =>

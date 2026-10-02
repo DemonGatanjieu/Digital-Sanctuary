@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
+import { createServer } from "node:net";
 
-const port = 9237;
+const port = await availablePort();
 const fixtureSize = 10_000;
 const userData = await mkdtemp(join(tmpdir(), "sanctuary-library-benchmark-"));
 const electron = resolve("node_modules/electron/dist/electron.exe");
@@ -81,10 +82,19 @@ try {
         totalLongTaskMs: Math.round(longTaskDurations.reduce((sum, duration) => sum + duration, 0) * 10) / 10,
         jsHeapMb: memory.usedJSHeapSize ? Math.round(memory.usedJSHeapSize / 1024 / 1024) : null
       };
+      scroller.scrollTo({ top: Math.max(0, scroller.scrollTop - 400), behavior: "instant" });
+      await sampleFrame();
+      const rememberedTop = scroller.scrollTop;
+      document.querySelector('[data-nav="settings"]')?.click();
+      await waitUntil(() => Boolean(document.querySelector('.settings-navigation')));
+      document.querySelector('[data-nav="gallery"]')?.click();
+      await waitUntil(() => document.querySelectorAll('.work-library-card').length >= metrics.loadedCardsAfterScroll);
+      await sampleFrame();
+      const galleryPositionRestored = Math.abs(scroller.scrollTop - rememberedTop) <= 2;
       const organizeButton = document.querySelector("nav [data-nav='organize']");
       organizeButton?.click();
       await waitUntil(() => Boolean(document.querySelector(".analysis-scope-card")), 3000);
-      return { ...metrics, analysisViewReady: Boolean(document.querySelector(".analysis-scope-card")) };
+      return { ...metrics, galleryPositionRestored, analysisViewReady: Boolean(document.querySelector(".analysis-scope-card")) };
     })()`);
     const afterMetrics = metricMap(await cdp.send("Performance.getMetrics"));
     const metricDeltaMs = (name) => Math.round(
@@ -105,6 +115,7 @@ try {
     if (measuredResult.layoutDurationMs > 3_000) failures.push("renderer layout duration exceeded 3s");
     if (measuredResult.jsHeapMb !== null && measuredResult.jsHeapMb > 512) failures.push("renderer heap exceeded 512MB");
     if (!measuredResult.analysisViewReady) failures.push("explicit analysis center did not render");
+    if (!measuredResult.galleryPositionRestored) failures.push("gallery scroll position or loaded range was lost on return");
     console.log(JSON.stringify({ ...measuredResult, status: failures.length ? "failed" : "passed", failures }, null, 2));
     if (failures.length) process.exitCode = 1;
   } finally {
@@ -123,7 +134,21 @@ try {
       setTimeout(resolveTask, 2_000);
     }
   });
+  if (!resolve(userData).startsWith(`${resolve(tmpdir())}${sep}sanctuary-library-benchmark-`)) {
+    throw new Error("Unexpected benchmark temporary directory");
+  }
   await rm(userData, { recursive: true, force: true });
+}
+
+async function availablePort() {
+  const server = createServer();
+  return new Promise((done, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      server.close((error) => error ? reject(error) : done(port));
+    });
+  });
 }
 
 async function waitForRenderer(debugPort, timeout) {
@@ -168,11 +193,11 @@ async function connectCdp(url) {
     async send(method, params = {}) {
       const response = await new Promise((resolveTask, reject) => {
         const id = nextId++;
-        pending.set(id, { resolve: resolveTask, reject });
-        socket.send(JSON.stringify({ id, method, params }));
-        setTimeout(() => {
+        const timer = setTimeout(() => {
           if (pending.delete(id)) reject(new Error("CDP evaluation timed out"));
         }, 30_000);
+        pending.set(id, { resolve: (value) => { clearTimeout(timer); resolveTask(value); }, reject: (error) => { clearTimeout(timer); reject(error); } });
+        socket.send(JSON.stringify({ id, method, params }));
       });
       return response;
     },

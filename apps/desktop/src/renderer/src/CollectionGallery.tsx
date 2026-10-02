@@ -9,6 +9,7 @@ import {
   getPhotobookSpreadForArtworkIndex,
   getPhotobookTotalSpreads,
   normalizePhotoMountStyle,
+  photobookNeighborIndices,
   resolvePhotobookKeyboardAction,
   type PhotoMountStyle
 } from "./photobook-navigation";
@@ -35,7 +36,7 @@ export function CollectionDetailPage({
   onFilterInGallery?: () => void;
   lightboxOpen?: boolean;
 }) {
-  const items = artworks.filter((artwork) => artwork.collectionIds.includes(collection.id));
+  const items = useMemo(() => artworks.filter((artwork) => artwork.collectionIds.includes(collection.id)), [artworks, collection.id]);
   const coverArtwork = artworks.find((a) => a.id === collection.coverArtworkId) ?? items[0];
   const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
   const [viewMode, setViewMode] = useState<"flip" | "aquarium" | "grid" | "toc">("flip");
@@ -352,15 +353,27 @@ export function PhotobookFlipSpread({
     if (fallbackTimerRef.current !== null) window.clearTimeout(fallbackTimerRef.current);
   }, []);
 
-  // Pre-cache all collection artworks into browser memory immediately to guarantee zero decoding flash
+  const preloadedPages = useRef(new Map<string, HTMLImageElement>());
+  // Keep the neighboring spreads ready without decoding a whole album of originals.
   useEffect(() => {
-    if (!items || items.length === 0) return;
-    items.forEach((item) => {
+    const efficient = document.querySelector<HTMLElement>(".app-shell")?.dataset.displayProfile === "efficient";
+    const center = spreadState.isAnimating ? spreadState.toSpread : spreadState.currentSpread;
+    const urls = efficient ? [] : photobookNeighborIndices(center, items.length).map((index) => artworkImageUrl(items[index]!));
+    for (const [url, image] of preloadedPages.current) {
+      if (!urls.includes(url)) { image.removeAttribute("src"); preloadedPages.current.delete(url); }
+    }
+    for (const url of urls) {
+      if (preloadedPages.current.has(url)) continue;
       const img = new Image();
-      img.decoding = "sync";
-      img.src = artworkImageUrl(item);
-    });
-  }, [items]);
+      img.decoding = "async";
+      img.src = url;
+      preloadedPages.current.set(url, img);
+    }
+  }, [items, spreadState.currentSpread, spreadState.isAnimating, spreadState.toSpread]);
+  useEffect(() => () => {
+    for (const image of preloadedPages.current.values()) image.removeAttribute("src");
+    preloadedPages.current.clear();
+  }, []);
 
   useEffect(() => {
     const safeSpread = Math.min(spreadState.currentSpread, Math.max(0, totalSpreads - 1));

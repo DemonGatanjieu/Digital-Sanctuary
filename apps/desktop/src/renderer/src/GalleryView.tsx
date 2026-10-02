@@ -168,7 +168,9 @@ export function GalleryView({
         <article><span>相册</span><strong>{collections.length}</strong></article>
       </section>
 
-      {workResult.total === 0 && !workQuery.search ? (
+      {workLoading && (workResult.total === 0 || (mode !== "flat" && artworks.length === 0)) ? (
+        <section className="library-loading" role="status">正在读取图库…</section>
+      ) : workResult.total === 0 && !workQuery.search ? (
         <section className="empty-state">
           <div className="empty-orbit"><span>✦</span></div>
           <p className="eyebrow">YOUR FIRST ARTWORK</p>

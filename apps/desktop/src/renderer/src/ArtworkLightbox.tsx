@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ArtworkRecord, VisionEvaluationResult } from "@sanctuary/domain";
 import { artworkImageUrl } from "./ArtworkCard";
 import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 import { artworkLibraryWorkId, artworkPageIndex } from "./gallery-model";
+import { useCinemaViewer } from "./useCinemaViewer";
 
 export function ArtworkLightbox({
   artwork,
@@ -25,152 +26,40 @@ export function ArtworkLightbox({
   const libraryWorkId = artworkLibraryWorkId(artwork);
   const sourcePageIndex = artworkPageIndex(artwork);
 
-  // Zoom & Pan state
-  const [zoom, setZoom] = useState<number>(1);
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState<boolean>(false);
-  const [imageLoaded, setImageLoaded] = useState<boolean>(false);
-  const [imageFailed, setImageFailed] = useState<boolean>(false);
-  const [hudVisible, setHudVisible] = useState<boolean>(true);
-  const [showRadar, setShowRadar] = useState<boolean>(false);
-  const [showInspector, setShowInspector] = useState<boolean>(false);
+  const [showRadar, setShowRadar] = useState(false);
+  const [showInspector, setShowInspector] = useState(false);
+  const interactionSuspended = showInspector || showRadar;
   const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
+  const viewerPages = useMemo(() => pages.map((page) => ({ url: artworkImageUrl(page) })), [pages]);
+  const viewer = useCinemaViewer({
+    imageKey: artwork.id + ":" + artwork.path, pages: viewerPages, pageIndex: currentIndex,
+    onPageChange: (index) => { const page = pages[index]; if (page && page.id !== artwork.id) onSelect(page); }, onClose,
+    interactionSuspended,
+    onDismissOverlay: showInspector ? undefined : showRadar ? () => setShowRadar(false) : undefined
+  });
+  const { zoom, nativeMode, isPanning, imageLoaded, imageFailed, hudVisible, resetHudTimer } = viewer;
 
-  const panStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const hudTimer = useRef<number | null>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
-
-  // Reset zoom & pan when artwork changes
   useEffect(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-    const imgEl = imageRef.current;
-    if (imgEl && imgEl.complete && imgEl.naturalWidth > 0) {
-      setImageLoaded(true);
-      setImageFailed(false);
-    } else {
-      setImageLoaded(false);
-      setImageFailed(false);
-    }
-    setHudVisible(true);
+    let active = true;
+    setEvaluations([]);
     if (window.sanctuary?.listVisionEvaluationsForWork) {
-      window.sanctuary.listVisionEvaluationsForWork(libraryWorkId).then(setEvaluations).catch(() => setEvaluations([]));
+      window.sanctuary.listVisionEvaluationsForWork(libraryWorkId).then((values) => { if (active) setEvaluations(values); }).catch(() => {});
     }
-  }, [artwork.id, libraryWorkId]);
-
-  // Lock body scroll
-  useEffect(() => {
-    document.body.classList.add("lightbox-open");
-    return () => document.body.classList.remove("lightbox-open");
-  }, []);
-
-  // Preload adjacent pages
-  useEffect(() => {
-    for (const candidate of [previous, next]) {
-      if (!candidate) continue;
-      const img = new Image();
-      img.src = artworkImageUrl(candidate);
-    }
-  }, [next, previous]);
-
-  // Auto-hide HUD on idle mouse movement
-  const resetHudTimer = useCallback(() => {
-    setHudVisible(true);
-    if (hudTimer.current) window.clearTimeout(hudTimer.current);
-    hudTimer.current = window.setTimeout(() => {
-      if (!isPanning) setHudVisible(false);
-    }, 3200);
-  }, [isPanning]);
-
-  useEffect(() => {
-    resetHudTimer();
-    return () => {
-      if (hudTimer.current) window.clearTimeout(hudTimer.current);
-    };
-  }, [resetHudTimer]);
-
-  // Keyboard navigation & zoom
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      resetHudTimer();
-      if (event.key === "Escape") onClose();
-      else if (event.key === "ArrowLeft" && previous) onSelect(previous);
-      else if (event.key === "ArrowRight" && next) onSelect(next);
-      else if (event.key === "0" || event.key === "r" || event.key === "R") {
-        setZoom(1);
-        setPan({ x: 0, y: 0 });
-      } else if (event.key === "1") {
-        setZoom((z) => (z === 1 ? 2 : 1));
-        setPan({ x: 0, y: 0 });
-      } else if (event.key === "+" || event.key === "=") {
-        setZoom((z) => Math.min(5, Number((z + 0.25).toFixed(2))));
-      } else if (event.key === "-" || event.key === "_") {
-        setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))));
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [next, onClose, onSelect, previous, resetHudTimer]);
-
-  // Wheel zoom handler
-  const handleWheel = (e: React.WheelEvent) => {
-    resetHudTimer();
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.15 : -0.15;
-    setZoom((current) => {
-      const nextZoom = Math.min(5, Math.max(0.4, current + delta));
-      if (nextZoom <= 1) setPan({ x: 0, y: 0 });
-      return Number(nextZoom.toFixed(2));
-    });
-  };
-
-  // Pan dragging handlers
-  const handlePointerDown = (e: React.PointerEvent) => {
-    resetHudTimer();
-    if (zoom > 1) {
-      setIsPanning(true);
-      panStart.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    }
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    resetHudTimer();
-    if (isPanning && zoom > 1) {
-      setPan({
-        x: e.clientX - panStart.current.x,
-        y: e.clientY - panStart.current.y
-      });
-    }
-  };
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (isPanning) {
-      setIsPanning(false);
-      (e.target as HTMLElement).releasePointerCapture?.(e.pointerId);
-    }
-  };
-
-  // Double click toggles fit / 2x zoom
-  const handleDoubleClick = () => {
-    setZoom((current) => {
-      if (current === 1) {
-        setPan({ x: 0, y: 0 });
-        return 2;
-      }
-      setPan({ x: 0, y: 0 });
-      return 1;
-    });
-  };
+    return () => { active = false; };
+  }, [libraryWorkId]);
 
   return createPortal(
     <div
+      ref={viewer.theaterRef}
       className={`cinema-lightbox-theater ${hudVisible ? "hud-visible" : "hud-hidden"}`}
       role="dialog"
       aria-modal="true"
       aria-label={artwork.source?.title ?? artwork.fileName}
+      data-display-profile={viewer.displayProfile}
+      data-reduced-motion={viewer.reducedMotion}
       onMouseMove={resetHudTimer}
+      onFocusCapture={resetHudTimer}
+      tabIndex={-1}
     >
       {/* Floating Top Floating HUD Pill */}
       <header className="cinema-hud-island">
@@ -185,21 +74,21 @@ export function ArtworkLightbox({
             <button
               type="button"
               title="缩小 (快捷键 -)"
-              onClick={() => setZoom((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+              onClick={() => viewer.changeZoom(zoom - 0.25)}
             >
               -
             </button>
-            <span
+            <button type="button"
               className="zoom-readout"
-              title="重置缩放 (快捷键 0)"
-              onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+              title="原始像素比例 · 点击自适应全貌 (0)"
+              onClick={viewer.resetZoom}
             >
-              {Math.round(zoom * 100)}%
-            </span>
+              {viewer.zoomPercent}%
+            </button>
             <button
               type="button"
               title="放大 (快捷键 +)"
-              onClick={() => setZoom((z) => Math.min(5, Number((z + 0.25).toFixed(2))))}
+              onClick={() => viewer.changeZoom(zoom + 0.25)}
             >
               +
             </button>
@@ -208,10 +97,10 @@ export function ArtworkLightbox({
           <button
             type="button"
             className={`cinema-btn-fit ${zoom === 1 ? "active" : ""}`}
-            title="自适应全屏 / 1:1 原图切换 (双击图片或按 1)"
-            onClick={handleDoubleClick}
+            title="自适应 / 原始像素 (每像素对应 1 CSS px；双击或按 1)"
+            onClick={viewer.toggleNativeZoom}
           >
-            {zoom === 1 ? "1:1 原图" : "自适应全貌"}
+            {nativeMode ? "自适应全貌" : "1:1 原图"}
           </button>
 
           <button
@@ -236,7 +125,7 @@ export function ArtworkLightbox({
             type="button"
             className="cinema-btn-fit"
             title="把当前图片带到本地灵感台"
-            onClick={() => onOpenInspiration(libraryWorkId, sourcePageIndex)}
+            onClick={() => { onClose(); onOpenInspiration(libraryWorkId, sourcePageIndex); }}
           >
             ✦ 一起创作
           </button>
@@ -288,13 +177,14 @@ export function ArtworkLightbox({
 
       {/* Main Full-Aspect Canvas Stage */}
       <div
-        ref={stageRef}
+        ref={viewer.stageRef}
         className={`cinema-stage-viewport ${isPanning ? "panning" : ""}`}
-        onWheel={handleWheel}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onDoubleClick={handleDoubleClick}
+        onPointerDown={viewer.handlePointerDown}
+        onPointerMove={viewer.handlePointerMove}
+        onPointerUp={viewer.handlePointerUp}
+        onPointerCancel={viewer.handlePointerUp}
+        onLostPointerCapture={viewer.handlePointerUp}
+        onDoubleClick={viewer.handleDoubleClick}
       >
         {!imageLoaded && !imageFailed && (
           <div className="cinema-loading-spinner" aria-label="正在读取原图全貌..." />
@@ -302,30 +192,22 @@ export function ArtworkLightbox({
         {imageFailed && (
           <div className="cinema-load-error">原图读取失败，请检查本地文件是否存在。</div>
         )}
-        {!imageFailed && (
-          <img
-            ref={imageRef}
+        <img
+            ref={viewer.imageRef}
             key={`${artwork.id}:${artwork.path}`}
             src={artworkImageUrl(artwork)}
             alt={artwork.source?.title ?? artwork.fileName}
             className="cinema-image-entity"
             aria-busy={!imageLoaded}
+            hidden={imageFailed}
             style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "zoom-in"
             }}
             decoding="async"
             draggable={false}
-            onLoad={() => {
-              setImageLoaded(true);
-              setImageFailed(false);
-            }}
-            onError={() => {
-              setImageLoaded(false);
-              setImageFailed(true);
-            }}
+            onLoad={viewer.onImageLoad}
+            onError={viewer.onImageError}
           />
-        )}
       </div>
 
       {/* Left/Right Navigation Arrows */}
@@ -335,6 +217,7 @@ export function ArtworkLightbox({
           className="cinema-nav-arrow prev"
           aria-label="上一页 (←)"
           title="上一页 (←)"
+          disabled={interactionSuspended}
           onClick={() => onSelect(previous)}
         >
           ‹
@@ -346,6 +229,7 @@ export function ArtworkLightbox({
           className="cinema-nav-arrow next"
           aria-label="下一页 (→)"
           title="下一页 (→)"
+          disabled={interactionSuspended}
           onClick={() => onSelect(next)}
         >
           ›
@@ -362,9 +246,12 @@ export function ArtworkLightbox({
                 type="button"
                 className={`filmstrip-thumb-btn ${page.id === artwork.id ? "active" : ""}`}
                 title={`第 ${idx + 1} 页`}
+                aria-label={`第 ${idx + 1} 页`}
+                aria-current={page.id === artwork.id ? "page" : undefined}
+                disabled={interactionSuspended}
                 onClick={() => onSelect(page)}
               >
-                <img src={artworkImageUrl(page)} alt="" loading="lazy" />
+                <img src={artworkImageUrl(page)} alt="" loading="lazy" decoding="async" />
                 <span className="thumb-page-badge">{idx + 1}</span>
               </button>
             ))}

@@ -155,6 +155,36 @@ describe("LibraryDatabase", () => {
     }
   });
 
+  it("bounds missing-cache recovery and skips valid cached thumbnails", () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-thumbnail-recovery-"));
+    const thumbnailPath = join(directory, "valid-thumb.png");
+    writeFileSync(thumbnailPath, "thumbnail");
+    const database = new LibraryDatabase(":memory:");
+    try {
+      const missingIds: string[] = [];
+      for (let index = 0; index < 8; index += 1) {
+        const sourcePath = join(directory, `source-${index}.png`);
+        writeFileSync(sourcePath, "source");
+        const imported = database.importArtwork(sourcePath);
+        const asset = database.getWork(`local:${imported.id}`)!.assets[0]!;
+        database.updateAssetThumbnail(asset.id, index % 2 ? join(directory, `missing-${index}.png`) : thumbnailPath);
+        if (index % 2) missingIds.push(asset.id);
+      }
+      const firstBatch = database.listAssetsNeedingThumbnails(2);
+      expect(firstBatch).toHaveLength(2);
+      expect(firstBatch.every((asset) => missingIds.includes(asset.id))).toBe(true);
+      for (const asset of firstBatch) database.updateAssetThumbnail(asset.id, thumbnailPath);
+      const nextBatch = database.listAssetsNeedingThumbnails(2);
+      expect(nextBatch).toHaveLength(2);
+      expect(nextBatch.some((asset) => firstBatch.some((first) => first.id === asset.id))).toBe(false);
+      for (const asset of nextBatch) database.updateAssetThumbnail(asset.id, thumbnailPath);
+      expect(database.listAssetsNeedingThumbnails(2)).toEqual([]);
+    } finally {
+      database.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("persists an indexed artwork, assessment, and collection relation", () => {
     const database = new LibraryDatabase(":memory:");
     const artwork = database.importArtwork("E:\\gallery\\safe-image.png");
@@ -194,6 +224,30 @@ describe("LibraryDatabase", () => {
     expect(database.listElementFilterSettings().find((setting) => setting.groupId === "blood"))
       .toEqual({ groupId: "blood", enabled: false, minimumConfidence: 0.6 });
     database.close();
+  });
+
+  it("returns complete metadata when reimporting an existing path with different casing", () => {
+    const database = new LibraryDatabase(":memory:");
+    try {
+      const artwork = database.importArtwork("E:\\gallery\\Existing.PNG");
+      const assessment: VisionAssessment = { status: "complete", engine: "test", engineVersion: "1", labels: { safe: 0.99 }, elapsedMs: 1 };
+      database.saveAssessment(artwork.id, assessment, decideFilter(assessment, DEFAULT_FILTER_RULES));
+      database.saveArtworkSource(artwork.id, { platform: "pixiv", workId: "723", pageIndex: 0, authorId: "42", authorName: "Existing Artist", title: "Existing work" });
+      const first = database.createCollection("First");
+      const second = database.createCollection("Second");
+      database.addArtworkToCollection(artwork.id, first.id);
+      database.addArtworkToCollection(artwork.id, second.id);
+      database.importArtwork("E:\\gallery\\unrelated.png");
+      const expected = database.listArtworks().find((item) => item.id === artwork.id)!;
+      const reimported = database.importArtwork("e:\\GALLERY\\existing.png");
+      expect(reimported).toEqual(expected);
+      expect(reimported.collectionIds).toHaveLength(2);
+      expect(reimported.source?.workId).toBe("723");
+      expect(reimported.assessment).toEqual(assessment);
+      expect(database.listArtworks()).toHaveLength(2);
+    } finally {
+      database.close();
+    }
   });
 
   it("persists complete remote reviews and rejects stale cache keys", () => {

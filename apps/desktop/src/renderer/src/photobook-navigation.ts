@@ -36,6 +36,19 @@ export function getPhotobookArtworkIndex(
   return artworkIndex < itemCount ? artworkIndex : null;
 }
 
+/** At most four off-screen pages; the current spread is already loaded by its visible images. */
+export function photobookNeighborIndices(spread: number, itemCount: number): number[] {
+  const indices: number[] = [];
+  for (const neighbor of [spread + 1, spread - 1]) {
+    if (neighbor < 0 || neighbor >= getPhotobookTotalSpreads(itemCount)) continue;
+    for (const side of ["left", "right"] as const) {
+      const index = getPhotobookArtworkIndex(neighbor, side, itemCount);
+      if (index !== null) indices.push(index);
+    }
+  }
+  return indices;
+}
+
 export function resolvePhotobookKeyboardAction({
   key,
   code,

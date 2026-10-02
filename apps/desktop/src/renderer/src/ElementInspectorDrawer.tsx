@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import type { CustomElementGroup, InspectArtworkPage, VisionAssessment } from "@sanctuary/domain";
 import type { ApplicationStatus } from "../../preload/index";
 import { Button } from "./Button";
 import { AppNotice } from "./AppNotice";
 import { PromptWorkbenchPanel } from "./PromptWorkbenchPanel";
+import { InspectorRequestController, type InspectorRequest } from "./inspector-request-controller";
 
 export interface ElementInspectorTarget {
   workId?: string;
@@ -41,24 +42,17 @@ export function ElementInspectorDrawer({
   const [runtimeStatus, setRuntimeStatus] = useState<ApplicationStatus | null>(null);
   const [activeSection, setActiveSection] = useState<"features" | "prompt" | "filter">("features");
 
-  const loadAnalysis = useCallback((overridePageIndex?: number) => {
-    if (!target) return;
-    setLoading(true);
-    setAssessment(null);
-    setError("");
-    setNotice("");
-    setSelectedTags([]);
-
-    const pageIdx = overridePageIndex !== undefined ? overridePageIndex : target.pageIndex;
-    const inspectParams: { workId?: string; artworkId?: string; url?: string; pageIndex?: number } = {};
-    if (target.workId) inspectParams.workId = target.workId;
-    if (target.artworkId) inspectParams.artworkId = target.artworkId;
-    if (target.url) inspectParams.url = target.url;
-    if (pageIdx !== undefined) inspectParams.pageIndex = pageIdx;
-
-    window.sanctuary
-      .inspectArtwork(inspectParams)
-      .then((res) => {
+  const requests = useMemo(() => new InspectorRequestController(
+    (params) => window.sanctuary.inspectArtwork(params),
+    {
+      started: () => {
+        setLoading(true);
+        setAssessment(null);
+        setError("");
+        setNotice("");
+        setSelectedTags([]);
+      },
+      result: (res, params) => {
         if (!res || !res.assessment) {
           setError("没有收到可显示的标签结果。请确认本地模型已启动后重试。");
           setAssessment(null);
@@ -68,19 +62,33 @@ export function ElementInspectorDrawer({
           setPageCount(res.pageCount || 1);
           const activeIdx = res.activePageIndex ?? 0;
           setActivePageIndex(activeIdx);
-          const thumb = res.pages?.[activeIdx]?.thumbUrl || res.pages?.[activeIdx]?.regularUrl || res.url || target.url || "";
+          const thumb = res.pages?.[activeIdx]?.thumbUrl || res.pages?.[activeIdx]?.regularUrl || res.url || params.url || "";
           setCurrentThumbUrl(thumb);
         }
-      })
-      .catch((err) => {
+      },
+      failed: (err) => {
         const rawMessage = err instanceof Error ? err.message : "分析失败";
         setError(rawMessage.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/, ""));
         setAssessment(null);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [target]);
+      },
+      settled: () => setLoading(false)
+    }
+  ), []);
+  const workId = target?.workId;
+  const artworkId = target?.artworkId;
+  const targetUrl = target?.url;
+  const targetPageIndex = target?.pageIndex;
+  const targetKey = target ? JSON.stringify([workId, artworkId, targetUrl, targetPageIndex]) : "";
+  const loadAnalysis = useCallback((overridePageIndex?: number) => {
+    if (!targetKey) return;
+    const pageIdx = overridePageIndex ?? targetPageIndex;
+    const inspectParams: InspectorRequest = {};
+    if (workId) inspectParams.workId = workId;
+    if (artworkId) inspectParams.artworkId = artworkId;
+    if (targetUrl) inspectParams.url = targetUrl;
+    if (pageIdx !== undefined) inspectParams.pageIndex = pageIdx;
+    void requests.load(inspectParams);
+  }, [requests, workId, artworkId, targetUrl, targetPageIndex, targetKey]);
 
   useEffect(() => {
     let active = true;
@@ -98,28 +106,31 @@ export function ElementInspectorDrawer({
     };
   }, []);
 
-  const targetKey = target ? `${target.workId ?? ""}:${target.artworkId ?? ""}:${target.url ?? ""}:${target.pageIndex ?? ""}` : "";
+  useLayoutEffect(() => {
+    requests.invalidate();
+    setAssessment(null);
+    setPages([]);
+    setPageCount(1);
+    setActivePageIndex(targetPageIndex ?? 0);
+    setCurrentThumbUrl("");
+    setError("");
+    setSelectedTags([]);
+    setNotice("");
+    setActiveSection("features");
+    setSearchFilter("");
+    setLoading(Boolean(targetKey));
+    return () => requests.invalidate();
+  }, [requests, targetKey, targetPageIndex]);
 
   useEffect(() => {
-    if (!targetKey) {
-      setAssessment(null);
-      setPages([]);
-      setPageCount(1);
-      setActivePageIndex(0);
-      setCurrentThumbUrl("");
-      setError("");
-      setSelectedTags([]);
-      setNotice("");
-      setActiveSection("features");
-      return;
-    }
-    setActiveSection("features");
-    loadAnalysis();
+    if (targetKey) loadAnalysis();
   }, [loadAnalysis, targetKey]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing || e.defaultPrevented || document.querySelector(".dialog-overlay")) return;
       if (e.key === "Escape") {
+        e.preventDefault();
         onClose();
       }
     };

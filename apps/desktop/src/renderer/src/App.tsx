@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   type AppearancePreferences,
   type ArtistRecord,
@@ -11,30 +11,23 @@ import {
   type SavedCollectionView,
   type SavedCollectionViewDraft,
   type StorageLocationInfo,
-  type WorkQuery,
-  type WorkQueryResult
 } from "@sanctuary/domain";
 import type { ExploreState } from "../../preload/index";
-import { CollectionEditor, type CollectionDraft } from "./CollectionEditor";
-import { BookmarkDownloadDialog } from "./BookmarkDownloadDialog";
+import type { CollectionDraft } from "./CollectionEditor";
 import { ElementInspectorDrawer, type ElementInspectorTarget } from "./ElementInspectorDrawer";
-import { SettingsView } from "./SettingsView";
-import { AnalysisView } from "./AnalysisView";
 import { ExploreView, initialExploreState } from "./ExploreView";
-import { InspirationView } from "./InspirationView";
 import { AppSidebar, type ActiveView, type AppStatus } from "./AppSidebar";
 import { GalleryView, type GalleryMode } from "./GalleryView";
 import type { SettingsSection } from "./app-navigation";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
+import { useLibraryQuery } from "./useLibraryQuery";
+import { QuickActions, type QuickAction } from "./QuickActions";
 
-const EMPTY_WORK_RESULT: WorkQueryResult = {
-  items: [],
-  total: 0,
-  totalPages: 0,
-  offset: 0,
-  limit: 60,
-  hasMore: false
-};
+const SettingsView = lazy(() => import("./SettingsView").then((module) => ({ default: module.SettingsView })));
+const AnalysisView = lazy(() => import("./AnalysisView").then((module) => ({ default: module.AnalysisView })));
+const InspirationView = lazy(() => import("./InspirationView").then((module) => ({ default: module.InspirationView })));
+const CollectionEditor = lazy(() => import("./CollectionEditor").then((module) => ({ default: module.CollectionEditor })));
+const BookmarkDownloadDialog = lazy(() => import("./BookmarkDownloadDialog").then((module) => ({ default: module.BookmarkDownloadDialog })));
 
 const DEFAULT_APPEARANCE: AppearancePreferences = {
   displayProfile: "balanced",
@@ -47,14 +40,16 @@ export function App() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("library");
   const mainRef = useRef<HTMLElement>(null);
   const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
-  const [workResult, setWorkResult] = useState<WorkQueryResult>(EMPTY_WORK_RESULT);
-  const [workQuery, setWorkQuery] = useState<WorkQuery>({
-    sortBy: "savedAt",
-    direction: "desc",
-    offset: 0,
-    limit: 60
-  });
-  const [workLoading, setWorkLoading] = useState(false);
+  const [thumbnailRevision, setThumbnailRevision] = useState(0);
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
+  const nativeQuickActions = useRef(false);
+  const nativeFocusPending = useRef(false);
+  const blockingAppOverlay = useRef(false);
+  const artworkGeneration = useRef(0);
+  const [artworksLoading, setArtworksLoading] = useState(false);
+  const scrollPositions = useRef(new Map<string, number>());
+  const previousView = useRef<ActiveView>("gallery");
   const [collectionEditor, setCollectionEditor] = useState<CollectionRecord | "new" | null>(null);
   const [collectionSaving, setCollectionSaving] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreferences>(DEFAULT_APPEARANCE);
@@ -81,31 +76,86 @@ export function App() {
   const showError = useCallback((caught: unknown) => {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
-
+  blockingAppOverlay.current = Boolean(collectionEditor || bookmarkPreview || inspectorTarget);
+  const refreshArtworks = useCallback(async () => {
+    const generation = ++artworkGeneration.current;
+    setArtworksLoading(true);
+    try {
+      const next = await window.sanctuary.listArtworks();
+      if (generation === artworkGeneration.current) setArtworks(next);
+    } finally {
+      if (generation === artworkGeneration.current) setArtworksLoading(false);
+    }
+  }, []);
   useEffect(() => {
-    mainRef.current?.scrollTo({ top: 0, behavior: "instant" });
-  }, [activeView, settingsSection]);
-
-  const refreshWorks = useCallback(async (query: WorkQuery = workQuery) => {
-    setWorkResult(await window.sanctuary.queryWorks(query));
+    if (galleryMode !== "flat") void refreshArtworks().catch(showError);
+  }, [galleryMode, refreshArtworks, showError]);
+  const { query: workQuery, result: workResult, loading: workLoading,
+    setQuery: setWorkQuery, refresh: refreshWorks, loadMore: loadMoreWorks } = useLibraryQuery(showError);
+  const scrollKey = activeView === "gallery" ? `gallery:${galleryMode}` : activeView === "settings" ? `settings:${settingsSection}` : activeView;
+  useLayoutEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    main.scrollTo({ top: activeView === "gallery" ? scrollPositions.current.get(scrollKey) ?? 0 : 0, behavior: "instant" });
+  }, [scrollKey]);
+  useEffect(() => {
+    scrollPositions.current.set("gallery:flat", 0);
+    if (activeView === "gallery" && galleryMode === "flat") mainRef.current?.scrollTo({ top: 0, behavior: "instant" });
   }, [workQuery]);
 
+  const openQuickActions = useCallback(() => {
+    if (!blockingAppOverlay.current && !hasBlockingOverlay()) setQuickActionsOpen(true);
+  }, []);
+  useEffect(() => window.sanctuary.onQuickActionsRequested(() => {
+    if (blockingAppOverlay.current || hasBlockingOverlay()) return;
+    nativeQuickActions.current = true;
+    openQuickActions();
+  }), [openQuickActions]);
+  useEffect(() => {
+    if (!pendingSearchFocus || quickActionsOpen || activeView !== "gallery" || galleryMode !== "flat") return;
+    const input = document.querySelector<HTMLInputElement>(".work-search input");
+    if (input) { input.focus(); input.select(); setPendingSearchFocus(false); }
+  }, [activeView, galleryMode, quickActionsOpen, workLoading, pendingSearchFocus]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.isComposing || event.altKey || !(event.ctrlKey || event.metaKey) || blockingAppOverlay.current || hasBlockingOverlay()) return;
+      const key = event.key.toLowerCase();
+      if (key === "k") { event.preventDefault(); openQuickActions(); }
+      else if (key === "o" && !busy) { event.preventDefault(); void importImages(); }
+      else if (key === "f" && activeView === "gallery" && galleryMode === "flat") {
+        const input = document.querySelector<HTMLInputElement>(".work-search input");
+        if (input) { event.preventDefault(); input.focus(); input.select(); }
+      } else if (["1", "2", "3", "4"].includes(key)) {
+        event.preventDefault();
+        setActiveView(({ "1": "gallery", "2": "explore", "3": "inspiration", "4": "settings" } as const)[key as "1" | "2" | "3" | "4"]);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeView, busy, galleryMode, openQuickActions]);
+
   const refreshLibrary = useCallback(async () => {
-    const [nextWorks, nextCollections, nextArtists, nextArtworks, nextSavedViews, nextStorage] = await Promise.all([
-      window.sanctuary.queryWorks(workQuery),
+    const [, nextCollections, nextArtists, , nextSavedViews, nextStorage] = await Promise.all([
+      refreshWorks(),
       window.sanctuary.listCollections(),
       window.sanctuary.listArtists(),
-      galleryMode === "flat" ? Promise.resolve(null) : window.sanctuary.listArtworks(),
+      galleryMode === "flat" ? Promise.resolve() : refreshArtworks(),
       window.sanctuary.listSavedCollectionViews(),
       window.sanctuary.getStorageLocation()
     ]);
-    setWorkResult(nextWorks);
-    if (nextArtworks) setArtworks(nextArtworks);
     setCollections(nextCollections);
     setArtists(nextArtists);
     setSavedCollectionViews(nextSavedViews);
     setStorageLocation(nextStorage);
-  }, [galleryMode, workQuery]);
+  }, [galleryMode, refreshWorks, refreshArtworks]);
+
+  useEffect(() => {
+    const returned = activeView === "gallery" && previousView.current !== "gallery";
+    previousView.current = activeView;
+    // Native Pixiv page controls can save works without a renderer-side download callback.
+    // Revalidate the retained range on every route back, including shortcuts and search actions.
+    if (returned) void refreshLibrary().catch(showError);
+  }, [activeView, refreshLibrary, showError]);
 
   useEffect(() => {
     return window.sanctuary.onAppStatus(setStatus);
@@ -173,10 +223,16 @@ export function App() {
     let active = true;
     void (async () => {
       let changed = false;
-      for (let batch = 0; batch < 80; batch += 1) {
+      for (let batch = 0; batch < 80 && active; batch += 1) {
         await waitForRendererIdle();
+        if (!active) return;
         const result = await window.sanctuary.generateThumbnails();
         changed ||= result.generated + result.reused > 0;
+        if (!active) return;
+        if (changed && (batch === 0 || batch % 10 === 0)) {
+          await refreshWorks();
+          changed = false;
+        }
         if (result.attempted < 6 || result.generated + result.reused === 0) break;
         await new Promise((resolveTask) => window.setTimeout(resolveTask, 120));
       }
@@ -185,27 +241,17 @@ export function App() {
     return () => {
       active = false;
     };
-  }, [refreshWorks, showError]);
-
-  useEffect(() => {
-    if (activeView !== "gallery" || galleryMode !== "flat") return;
-    const timer = window.setTimeout(() => {
-      setWorkLoading(true);
-      void window.sanctuary.queryWorks(workQuery)
-        .then(setWorkResult)
-        .catch(showError)
-        .finally(() => setWorkLoading(false));
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [activeView, galleryMode, showError, workQuery]);
+  }, [refreshWorks, showError, thumbnailRevision]);
 
   async function importImages() {
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
       await window.sanctuary.importImages();
       await refreshWorks();
-      if (galleryMode !== "flat") setArtworks(await window.sanctuary.listArtworks());
+      setThumbnailRevision((current) => current + 1);
+      if (galleryMode !== "flat") await refreshArtworks();
     } catch (caught) {
       showError(caught);
     } finally {
@@ -275,12 +321,8 @@ export function App() {
 
   async function assignWorkCollection(workId: string, collectionId: string) {
     if (!collectionId) return;
-    try {
-      await window.sanctuary.addWorkToCollection(workId, collectionId);
-      await refreshWorks();
-    } catch (caught) {
-      showError(caught);
-    }
+    await window.sanctuary.addWorkToCollection(workId, collectionId);
+    await refreshWorks();
   }
 
   async function updateCollectionCover(collectionId: string, artworkId: string | null) {
@@ -331,11 +373,6 @@ export function App() {
 
   async function openGallery() {
     setActiveView("gallery");
-    try {
-      await refreshLibrary();
-    } catch (caught) {
-      showError(caught);
-    }
   }
 
   function openSettings(section: SettingsSection) {
@@ -345,33 +382,6 @@ export function App() {
 
   async function changeGalleryMode(mode: GalleryMode) {
     setGalleryMode(mode);
-    if (mode === "flat" || artworks.length > 0) return;
-    try {
-      setArtworks(await window.sanctuary.listArtworks());
-    } catch (caught) {
-      showError(caught);
-    }
-  }
-
-  async function loadMoreWorks() {
-    if (workLoading || !workResult.hasMore) return;
-    setWorkLoading(true);
-    try {
-      const next = await window.sanctuary.queryWorks({
-        ...workQuery,
-        offset: workResult.items.length,
-        limit: workResult.limit
-      });
-      setWorkResult((current) => ({
-        ...next,
-        offset: 0,
-        items: [...current.items, ...next.items]
-      }));
-    } catch (caught) {
-      showError(caught);
-    } finally {
-      setWorkLoading(false);
-    }
   }
 
   async function downloadCurrentArtwork() {
@@ -435,6 +445,21 @@ export function App() {
     }
   }
 
+  const quickActions: QuickAction[] = [
+    { id: "gallery", label: "打开图库", description: "继续浏览刚才的位置", shortcut: "Ctrl 1", keywords: ["浏览", "作品"], onSelect: openGallery },
+    { id: "search", label: "搜索图库", description: "按标题、画师或 Pixiv ID 找作品", shortcut: "Ctrl F", keywords: ["查找"], onSelect: () => {
+      setPendingSearchFocus(true); setActiveView("gallery"); void changeGalleryMode("flat");
+    } },
+    { id: "import", label: "导入本地图片", description: "将图片加入图库", shortcut: "Ctrl O", disabled: busy, disabledReason: "正在导入，请稍候", keywords: ["添加", "文件"], onSelect: importImages },
+    { id: "albums", label: "浏览相册", description: "管理相册与组合视图", keywords: ["分类", "画集"], onSelect: () => { setActiveView("gallery"); void changeGalleryMode("collections"); } },
+    { id: "organize", label: "整理与分类", description: "按标签查找、推荐相册分类", keywords: ["分析", "标签"], onSelect: () => { setAnalysisWorkIds([]); setActiveView("organize"); } },
+    { id: "explore", label: "打开探索", description: "浏览 Pixiv 并保存作品", shortcut: "Ctrl 2", keywords: ["下载", "收藏"], onSelect: () => setActiveView("explore") },
+    { id: "creation", label: "打开创作", description: "聊图、写设定与提示词", shortcut: "Ctrl 3", keywords: ["对话", "写作"], onSelect: () => setActiveView("inspiration") },
+    { id: "settings", label: "打开设置", description: "管理图库与存储", shortcut: "Ctrl 4", onSelect: () => openSettings("library") },
+    { id: "models", label: "本地模型", description: "安装或切换识别、画评与创作模型", keywords: ["安装", "AI"], onSelect: () => openSettings("models") },
+    { id: "appearance", label: "外观与显示", description: "主题、字体与显示性能", keywords: ["换肤", "流畅", "省电"], onSelect: () => openSettings("appearance") }
+  ];
+
   return (
     <div
       className={`app-shell ${activeView === "explore" ? "exploring" : ""}`}
@@ -451,6 +476,7 @@ export function App() {
         status={status}
         storageLocation={storageLocation}
         onOpenGallery={openGallery}
+        onQuickActions={openQuickActions}
         onViewChange={setActiveView}
         onDownloadCurrentArtwork={downloadCurrentArtwork}
         onPreviewBookmarks={previewAllBookmarks}
@@ -466,7 +492,9 @@ export function App() {
         }}
       />
 
-      <main ref={mainRef} className="animate-fade-in">
+      <main ref={mainRef} className="animate-fade-in" onScroll={(event) => {
+        if (activeView === "gallery") scrollPositions.current.set(scrollKey, event.currentTarget.scrollTop);
+      }}>
         {(activeView === "gallery" || activeView === "organize") && (
           <nav className="workspace-navigation" aria-label="图库工作区">
             <button type="button" data-nav="browse" aria-current={activeView === "gallery" ? "page" : undefined} onClick={() => void openGallery()}>浏览作品</button>
@@ -477,12 +505,13 @@ export function App() {
             }}>整理与分类</button>
           </nav>
         )}
+        <Suspense fallback={<section className="page-loading" role="status">正在打开…</section>}>
         {activeView === "gallery" ? (
           <GalleryView
             artworks={artworks}
             workResult={workResult}
             workQuery={workQuery}
-            workLoading={workLoading}
+            workLoading={workLoading || (galleryMode !== "flat" && artworksLoading)}
             collections={collections}
             savedCollectionViews={savedCollectionViews}
             artists={artists}
@@ -586,12 +615,16 @@ export function App() {
             state={exploreState}
             error={error}
             isDrawerOpen={Boolean(inspectorTarget)}
-            isModalOpen={Boolean(bookmarkPreview || collectionEditor)}
+            isModalOpen={Boolean(bookmarkPreview || collectionEditor || quickActionsOpen)}
+            focusOnShow={nativeFocusPending.current}
+            onFocusRestored={() => { nativeFocusPending.current = false; }}
             onStateChange={setExploreState}
             onError={showError}
           />
         )}
+        </Suspense>
       </main>
+      <Suspense fallback={null}>
       {inspectorTarget && (
         <ElementInspectorDrawer
           target={inspectorTarget}
@@ -617,6 +650,12 @@ export function App() {
           onClose={() => !startingBookmarkDownload && setBookmarkPreview(null)}
         />
       )}
+      </Suspense>
+      {quickActionsOpen && <QuickActions actions={quickActions} onClose={(reason) => {
+        nativeFocusPending.current = nativeQuickActions.current && reason !== "execute";
+        nativeQuickActions.current = false;
+        setQuickActionsOpen(false);
+      }} onError={showError} />}
     </div>
   );
 }
@@ -637,4 +676,8 @@ function waitForRendererIdle(): Promise<void> {
     }
     globalThis.setTimeout(resolveTask, 80);
   });
+}
+
+function hasBlockingOverlay(): boolean {
+  return Boolean(document.querySelector('.dialog-overlay, .cinema-lightbox-theater, [role="dialog"][aria-modal="true"], .element-inspector-drawer'));
 }

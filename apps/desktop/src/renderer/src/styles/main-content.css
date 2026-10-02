@@ -9,6 +9,9 @@ main {
   scroll-behavior: smooth;
 }
 
+.page-loading { padding: 36px 0; color: var(--ds-text-muted); font-size: 14px; }
+.library-loading { min-height: 220px; display: grid; place-items: center; color: var(--ds-text-muted); }
+
 .app-shell.exploring main {
   overflow: hidden;
   padding: 0;

@@ -357,7 +357,16 @@ export class LibraryDatabase {
       .get(path) as { id: string }).id;
     this.#syncLegacyArtworkToWork(artworkId);
 
-    const artwork = this.listArtworks().find((item) => item.path === path);
+    const rows = this.#database.prepare(
+      `SELECT a.id, a.path, a.file_name, a.imported_at,
+              a.assessment_json, a.decision_json, ca.collection_id,
+              a.source_platform, a.source_work_id, a.source_page_index,
+              a.author_id, a.author_name, a.work_title
+         FROM artworks a
+         LEFT JOIN collection_artworks ca ON ca.artwork_id = a.id
+        WHERE a.id = ?`
+    ).all(artworkId) as unknown as ArtworkRow[];
+    const artwork = mapArtworkRows(rows)[0];
     if (!artwork) throw new Error(`Failed to import artwork: ${path}`);
     return artwork;
   }
@@ -432,26 +441,7 @@ export class LibraryDatabase {
       )
       .all() as unknown as ArtworkRow[];
 
-    const byId = new Map<string, ArtworkRecord>();
-    for (const row of rows) {
-      const current = byId.get(row.id);
-      if (current) {
-        if (row.collection_id) current.collectionIds.push(row.collection_id);
-        continue;
-      }
-
-      byId.set(row.id, {
-        id: row.id,
-        path: row.path,
-        fileName: row.file_name,
-        importedAt: row.imported_at,
-        assessment: parseJson<VisionAssessment>(row.assessment_json),
-        decision: parseJson<FilterDecision>(row.decision_json),
-        collectionIds: row.collection_id ? [row.collection_id] : [],
-        source: parseArtworkSource(row)
-      });
-    }
-    return [...byId.values()];
+    return mapArtworkRows(rows);
   }
 
   listWorks(): WorkRecord[] {
@@ -523,15 +513,19 @@ export class LibraryDatabase {
     const limit = clampInteger(query.limit, 60, 1, 200);
     const offset = clampInteger(query.offset, 0, 0, 10_000_000);
     const direction = query.direction === "asc" ? "ASC" : "DESC";
+    const sortBy = query.sortBy ?? "savedAt";
     const sortExpressions: Record<NonNullable<WorkQuery["sortBy"]>, string> = {
       savedAt: "w.saved_at",
       publishedAt: "w.published_at",
       title: "w.title COLLATE NOCASE",
       artist: "ar.name COLLATE NOCASE",
       pageCount: "w.page_count",
-      byteLength: "total_byte_length"
+      byteLength: "(SELECT COALESCE(SUM(a.byte_length), 0) FROM assets a WHERE a.work_id = w.id)"
     };
-    const sortExpression = sortExpressions[query.sortBy ?? "savedAt"];
+    const sortExpression = sortExpressions[sortBy];
+    const nullableSort = sortBy === "publishedAt" || sortBy === "artist";
+    const pageSort = `sort_value ${direction}, w.id ASC`;
+    const resultSort = `page.sort_value${sortBy === "title" || sortBy === "artist" ? " COLLATE NOCASE" : ""} ${direction}, w.id ASC`;
     const clauses = ["w.deleted_at IS NULL"];
     const parameters: Array<string | number> = [];
     if (search) {
@@ -592,16 +586,24 @@ export class LibraryDatabase {
       .prepare(
         `SELECT COUNT(*) AS total, COALESCE(SUM(w.page_count), 0) AS total_pages
            FROM works w
-           LEFT JOIN artists ar ON ar.id = w.artist_id
+           ${search ? "LEFT JOIN artists ar ON ar.id = w.artist_id" : ""}
           WHERE ${where}`
       )
       .get(...parameters) as { total: number; total_pages: number };
     const rows = this.#database
       .prepare(
-        `SELECT w.id, w.source_platform, w.source_work_id, w.artist_id,
+        `WITH page AS MATERIALIZED (
+           SELECT w.id, ${sortExpression} AS sort_value
+             FROM works w
+             LEFT JOIN artists ar ON ar.id = w.artist_id
+            WHERE ${where}
+            ORDER BY ${nullableSort ? "(sort_value IS NULL) ASC, " : ""}${pageSort}
+            LIMIT ? OFFSET ?
+         )
+         SELECT w.id, w.source_platform, w.source_work_id, w.artist_id,
                 ar.name AS artist_name, w.title, w.work_type, w.published_at,
                 w.saved_at, w.favorite, w.page_count,
-                (SELECT COALESCE(SUM(a.byte_length), 0) FROM assets a WHERE a.work_id = w.id) AS total_byte_length,
+                ${sortBy === "byteLength" ? "page.sort_value" : "(SELECT COALESCE(SUM(a.byte_length), 0) FROM assets a WHERE a.work_id = w.id)"} AS total_byte_length,
                 w.ownership,
                 (SELECT GROUP_CONCAT(cw.collection_id, char(31)) FROM collection_works cw WHERE cw.work_id = w.id) AS collection_ids,
                 ca.id AS cover_id, ca.work_id AS cover_work_id,
@@ -612,12 +614,11 @@ export class LibraryDatabase {
                 ca.byte_length AS cover_byte_length, ca.content_hash AS cover_content_hash,
                 ca.thumbnail_path AS cover_thumbnail_path, ca.file_state AS cover_file_state,
                 ca.created_at AS cover_created_at, ca.updated_at AS cover_updated_at
-           FROM works w
+           FROM page
+           JOIN works w ON w.id = page.id
            LEFT JOIN artists ar ON ar.id = w.artist_id
            LEFT JOIN assets ca ON ca.id = w.cover_asset_id
-          WHERE ${where}
-          ORDER BY (${sortExpression} IS NULL) ASC, ${sortExpression} ${direction}, w.id ASC
-          LIMIT ? OFFSET ?`
+          ORDER BY ${nullableSort ? "(page.sort_value IS NULL) ASC, " : ""}${resultSort}`
       )
       .all(...parameters, limit, offset) as unknown as WorkListRow[];
     const total = Number(totalRow.total);
@@ -707,11 +708,14 @@ export class LibraryDatabase {
             AND thumbnail_path IS NOT NULL
           ORDER BY created_at, id`
       )
-      .all() as unknown as WorkAssetRow[];
-    return cachedRows
-      .filter((row) => !row.thumbnail_path || !existsSync(row.thumbnail_path))
-      .slice(0, safeLimit)
-      .map(mapWorkAsset);
+      .iterate() as unknown as Iterable<WorkAssetRow>;
+    const missingAssets: WorkAssetRecord[] = [];
+    for (const row of cachedRows) {
+      if (row.thumbnail_path && existsSync(row.thumbnail_path)) continue;
+      missingAssets.push(mapWorkAsset(row));
+      if (missingAssets.length >= safeLimit) break;
+    }
+    return missingAssets;
   }
 
   updateAssetThumbnail(assetId: string, thumbnailPath: string | null): boolean {
@@ -2209,6 +2213,16 @@ export class LibraryDatabase {
       CREATE INDEX IF NOT EXISTS idx_works_saved_at ON works(saved_at DESC, id);
       CREATE INDEX IF NOT EXISTS idx_works_artist ON works(artist_id, saved_at DESC);
       CREATE INDEX IF NOT EXISTS idx_assets_work ON assets(work_id, page_index);
+      CREATE INDEX IF NOT EXISTS idx_assets_thumbnail_path
+        ON assets(thumbnail_path) WHERE thumbnail_path IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_assets_pending_thumbnails
+        ON assets(created_at, id)
+        WHERE media_type = 'image' AND file_state = 'available' AND thumbnail_path IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_assets_cached_thumbnails
+        ON assets(created_at, id)
+        WHERE media_type = 'image' AND file_state = 'available' AND thumbnail_path IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_artists_avatar_local_path
+        ON artists(avatar_local_path) WHERE avatar_local_path IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_collection_works_work ON collection_works(work_id);
     `);
   }
@@ -2506,6 +2520,28 @@ export class LibraryDatabase {
 function parseJson<T>(value: string | null): T | null {
   if (!value) return null;
   return JSON.parse(value) as T;
+}
+
+function mapArtworkRows(rows: readonly ArtworkRow[]): ArtworkRecord[] {
+  const byId = new Map<string, ArtworkRecord>();
+  for (const row of rows) {
+    const current = byId.get(row.id);
+    if (current) {
+      if (row.collection_id) current.collectionIds.push(row.collection_id);
+      continue;
+    }
+    byId.set(row.id, {
+      id: row.id,
+      path: row.path,
+      fileName: row.file_name,
+      importedAt: row.imported_at,
+      assessment: parseJson<VisionAssessment>(row.assessment_json),
+      decision: parseJson<FilterDecision>(row.decision_json),
+      collectionIds: row.collection_id ? [row.collection_id] : [],
+      source: parseArtworkSource(row)
+    });
+  }
+  return [...byId.values()];
 }
 
 function parseArtworkSource(row: ArtworkRow): ArtworkSource | null {

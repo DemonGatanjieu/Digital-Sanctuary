@@ -5,9 +5,11 @@ import { tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { createServer } from "node:net";
+import { connectElectronMainInspector } from "./electron-smoke-support.mjs";
 
 // Run against a disposable library. No user files, downloads or model installations are changed.
 const port = await availablePort();
+const mainPort = await availablePort();
 const temporaryRoot = resolve(tmpdir());
 const userData = await mkdtemp(join(temporaryRoot, "sanctuary-navigation-"));
 const outputDir = resolve(".tmp/navigation-smoke");
@@ -55,15 +57,17 @@ database.prepare("INSERT INTO collections (id, name, created_at) VALUES ('fixtur
 database.close();
 
 const child = spawn(resolve("node_modules/electron/dist/electron.exe"),
-  [resolve("apps/desktop/out/main/index.js"), `--remote-debugging-port=${port}`, `--user-data-dir=${userData}`,
+  [`--inspect=127.0.0.1:${mainPort}`, resolve("apps/desktop/out/main/index.js"), `--remote-debugging-port=${port}`, `--user-data-dir=${userData}`,
     "--host-resolver-rules=MAP pixiv.net ~NOTFOUND, MAP *.pixiv.net ~NOTFOUND"],
   { env: { ...process.env, LOCALAPPDATA: join(userData, "LocalAppData") },
     stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
 let stderr = "";
 child.stderr.on("data", (chunk) => { stderr += String(chunk); });
 const checks = [];
+let mainInspector;
 
 try {
+  mainInspector = await connectElectronMainInspector(mainPort);
   const target = await waitForRenderer();
   const cdp = await connectCdp(target.webSocketDebuggerUrl);
   try {
@@ -91,6 +95,10 @@ try {
         Object.getOwnPropertyDescriptor(prototype, 'value').set.call(input, ${JSON.stringify(value)});
         input.dispatchEvent(new Event(input.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
       })()`);
+    }
+    async function key(key, code, modifiers = 0, target = cdp) {
+      await target.send("Input.dispatchKeyEvent", { type: "keyDown", key, code, modifiers });
+      await target.send("Input.dispatchKeyEvent", { type: "keyUp", key, code, modifiers });
     }
     async function checkLayout(name, screenshot = false) {
       // Inspect the scroll container as well as the document: inner overflow is otherwise missed.
@@ -126,6 +134,40 @@ try {
       ["gallery", "explore", "inspiration", "settings"]);
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
     await checkLayout("gallery-1280", true);
+
+    await key("k", "KeyK", 2);
+    await waitFor("document.activeElement?.className === 'quick-actions-search'");
+    await fill(".quick-actions-search", "模型");
+    await cdp.evaluate("document.querySelector('.quick-actions-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, isComposing: true }))");
+    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.quick-actions-dialog'))"), true);
+    await key("Enter", "Enter");
+    await waitFor("Boolean(document.querySelector('.settings-panel:not([hidden]) .model-center-page'))");
+    await click('[data-nav="gallery"]');
+    await waitFor("Boolean(document.querySelector('.work-search input'))");
+    await key("k", "KeyK", 2);
+    await fill(".quick-actions-search", "搜索图库");
+    await key("Enter", "Enter");
+    await waitFor("document.activeElement === document.querySelector('.work-search input')");
+    await key("k", "KeyK", 2);
+    await key("Escape", "Escape");
+    await waitFor("!document.querySelector('.quick-actions-dialog')");
+    await cdp.evaluate("document.querySelector('main').scrollTo({top:250,behavior:'instant'})");
+    await new Promise((done) => setTimeout(done, 100));
+    const galleryTop = await cdp.evaluate("document.querySelector('main').scrollTop");
+    await click('[data-nav="settings"]');
+    await waitFor("Boolean(document.querySelector('.settings-navigation'))");
+    // Simulate a work saved by native Pixiv controls, without a renderer download callback.
+    const changedLibrary = new DatabaseSync(join(userData, "library.db"));
+    try {
+      changedLibrary.prepare(`INSERT INTO works (id, title, work_type, saved_at, page_count,
+        ownership, created_at, updated_at) VALUES ('native-saved-fixture', '原生保存的新作品', 'local', ?, 0, 'referenced', ?, ?)`)
+        .run(timestamp, timestamp, timestamp);
+    } finally { changedLibrary.close(); }
+    await click('[data-nav="gallery"]');
+    await waitFor("Boolean(document.querySelector('.work-search input'))");
+    await waitFor("document.querySelectorAll('.work-library-card').length === 2");
+    assert.ok(Math.abs(await cdp.evaluate("document.querySelector('main').scrollTop") - galleryTop) <= 2, "gallery scroll position was not restored");
+    checks.push({ name: "quick-actions-IME-focus-routing-and-gallery-revalidation", galleryTop, worksOnReturn: 2 });
 
     await click(".work-select-toggle");
     await click(".work-card-check");
@@ -196,8 +238,17 @@ try {
       await checkLayout(`appearance-${theme}-900`);
     }
     await click('[data-nav="gallery"]');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    await waitFor("document.querySelectorAll('.work-library-card').length === 2");
     await checkLayout("gallery-900", true);
+    await key("k", "KeyK", 2);
+    await waitFor("Boolean(document.querySelector('.quick-actions-dialog'))");
+    await new Promise((done) => setTimeout(done, 300));
+    const palette = await cdp.evaluate("(() => { const el=document.querySelector('.quick-actions-dialog'); const r=el.getBoundingClientRect(); return {width:r.width,right:r.right,bottom:r.bottom,clientWidth:el.clientWidth,scrollWidth:el.scrollWidth}; })()");
+    const paletteShot = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });
+    await writeFile(join(outputDir, "quick-actions-900.png"), Buffer.from(paletteShot.data, "base64"));
+    assert.ok(palette.right <= 900 && palette.bottom <= 620 && palette.scrollWidth <= palette.clientWidth + 2, `quick actions overflowed the narrow window: ${JSON.stringify(palette)}`);
+    await key("Escape", "Escape");
+    checks.push({ name: "quick-actions-900", ...palette });
 
     // Keep the remote site offline while checking the real native view lifecycle.
     await click('[data-nav="explore"]');
@@ -219,6 +270,26 @@ try {
       const bounds = await cdp.evaluate("(() => { const rect = document.querySelector('.explore-surface').getBoundingClientRect(); return { width: Math.round(rect.width), height: Math.round(rect.height) }; })()");
       const viewport = await native.evaluate("({ width: innerWidth, height: innerHeight, visibility: document.visibilityState })");
       assert.ok(Math.abs(bounds.width - viewport.width) <= 2 && Math.abs(bounds.height - viewport.height) <= 2, "native view bounds do not match the exploration surface");
+      // Native shortcuts go through Electron host input; CDP skips before-input-event.
+      await mainInspector.evaluate("process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').BrowserWindow.getAllWindows()[0].focus()");
+      await cdp.evaluate("window.sanctuary.focusExplore()");
+      let nativeContents;
+      const focusStarted = Date.now();
+      while (Date.now() - focusStarted < 10_000) {
+        nativeContents = (await mainInspector.listWebContents()).find((entry) => entry.url.includes("pixiv.net") && entry.focused);
+        if (nativeContents) break;
+        await new Promise((done) => setTimeout(done, 80));
+      }
+      assert.ok(nativeContents, "native exploration did not receive keyboard focus");
+      await mainInspector.sendHostKey(nativeContents.id, "K", ["control"]);
+      await waitFor("document.activeElement?.className === 'quick-actions-search'");
+      assert.equal(await native.evaluate("document.visibilityState"), "hidden");
+      await key("Escape", "Escape");
+      await waitFor("!document.querySelector('.quick-actions-dialog')");
+      await new Promise((done) => setTimeout(done, 100));
+      assert.equal(await native.evaluate("document.visibilityState"), "visible");
+      assert.equal(await native.evaluate("document.hasFocus()"), true, "native exploration focus was not restored");
+      checks.push({ name: "native-quick-actions-hide-cancel-and-restore-focus" });
       await click('[data-nav="settings"]');
       await waitFor("Boolean(document.querySelector('.settings-navigation'))");
       assert.equal(await native.evaluate("document.visibilityState"), "hidden");
@@ -237,6 +308,7 @@ try {
   if (stderr.trim()) console.error(stderr.trim());
   process.exitCode = 1;
 } finally {
+  mainInspector?.close();
   child.kill();
   await new Promise((done) => {
     if (child.exitCode !== null) done();

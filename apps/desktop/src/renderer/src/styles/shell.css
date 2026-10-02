@@ -107,6 +107,26 @@
 }
 
 /* Main Navigation Items */
+.sidebar-quick-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-card-subtle);
+  color: var(--ds-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.sidebar-quick-actions kbd { font-size: 10px; white-space: nowrap; color: var(--ds-text-muted); }
+.sidebar-quick-actions:hover { color: var(--ds-primary); border-color: var(--ds-primary-border); }
+.sidebar-quick-actions:focus-visible { outline: 2px solid var(--ds-primary); outline-offset: 3px; }
+
 .sidebar > nav {
   display: grid;
   gap: 6px;
