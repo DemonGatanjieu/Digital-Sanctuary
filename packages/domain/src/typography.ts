@@ -1,6 +1,6 @@
 /**
  * Typography System Domain Models & Contracts
- * Specification defined in TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_FOR_GEMINI.md
+ * Specification defined in docs/plans/archive/2026-08-15-typography-system-and-custom-fonts-complete.md
  */
 
 export type TypographySlot = "body" | "display" | "editorial" | "mono";

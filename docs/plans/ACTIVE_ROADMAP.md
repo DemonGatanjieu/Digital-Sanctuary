@@ -102,10 +102,12 @@
 - 产品化重构 P0～P11：已归档；
 - 主题系统与 GitHub 主题商店：已完成并归档；
 - AI 技术画像、外部视觉 adapter、雷达 UI：基础架构已归档；模型中心与大图直达运行入口属于当前增量；
-- 排版系统与自定义字体：已完成；旧执行计划只保留为历史资料，不再是当前施工任务；
+- 排版系统与自定义字体：已完成并归档为 [`archive/2026-08-15-typography-system-and-custom-fonts-complete.md`](./archive/2026-08-15-typography-system-and-custom-fonts-complete.md)；验收报告在 `docs/reviews/typography/`。
+- 画册 3D 翻页、装裱、双页对开与闪烁根治：已完成并归档；技术分析见 [`archive/2026-08-15-photobook-flicker-technical-analysis.md`](./archive/2026-08-15-photobook-flicker-technical-analysis.md)。
 - 全产品视觉审计 Phase 1～6：已完成，报告保存在 `docs/reviews/visual-audit/2026-08-15/`；
 - 语义搜索仅完成任务拆分和 ADR，不等于功能已经实现。
 - 个人标签偏好与 Prompt Bridge P1～P4：已完成并归档；区域遮罩的“未过门、不实现”是本次评审结论。
+- 元素透视前端精修：已完成并归档为 [`archive/2026-08-24-element-inspector-frontend-polish-complete.md`](./archive/2026-08-24-element-inspector-frontend-polish-complete.md)；验收证据在 `docs/reviews/element-inspector-polish/2026-08-24/`。
 
 ## 维护规则
 

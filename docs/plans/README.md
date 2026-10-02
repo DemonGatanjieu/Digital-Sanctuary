@@ -8,9 +8,7 @@
 
 ## 当前任务与提案
 
-- [`TASK_ELEMENT_INSPECTOR_FRONTEND_POLISH_FOR_GEMINI.md`](./TASK_ELEMENT_INSPECTOR_FRONTEND_POLISH_FOR_GEMINI.md)：已授权给 Gemini 的元素透视前端精修任务；后端边界、百分比语义与验收留痕要求已锁定。
-- [`TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_FOR_GEMINI.md`](./TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_FOR_GEMINI.md)：经过架构评审、可由 Gemini 分阶段执行的排版系统任务。
-- [`TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_IMPLEMENTATION_PLAN.md`](./TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_IMPLEMENTATION_PLAN.md)：排版需求来源草案；冲突时以上述执行版为准。
+- [`TASK_LOCAL_AI_PLAYGROUND_AND_WIDGET_WORKSHOP.md`](./TASK_LOCAL_AI_PLAYGROUND_AND_WIDGET_WORKSHOP.md)：后续方向；本地灵感台之后的自由工作台与安全小组件，尚未整包授权施工。
 - [`TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md`](./TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md)：排队中的语义搜索架构提案，尚未授权施工。
 
 ## 历史归档
@@ -22,7 +20,14 @@
 - [`archive/2026-08-14-theme-system-backend.md`](./archive/2026-08-14-theme-system-backend.md)：已经完成的主题后端任务。
 - [`archive/2026-08-14-task-ai-radar-and-external-vision-implementation-plan.md`](./archive/2026-08-14-task-ai-radar-and-external-vision-implementation-plan.md)：已经完成的 AI 雷达与外部视觉实施规划。
 - [`archive/2026-08-15-full-product-visual-audit.md`](./archive/2026-08-15-full-product-visual-audit.md)：已经完成的全产品视觉审计任务书；验收证据仍在 `docs/reviews/visual-audit/2026-08-15/`。
+- [`archive/2026-08-15-typography-system-and-custom-fonts-complete.md`](./archive/2026-08-15-typography-system-and-custom-fonts-complete.md)：已经完成的排版系统执行版；验收报告在 `docs/reviews/typography/`。
+- [`archive/2026-08-15-typography-system-implementation-plan.md`](./archive/2026-08-15-typography-system-implementation-plan.md)：排版需求来源草案，冲突时以执行版为准。
+- [`archive/2026-08-15-photobook-3d-page-flip-and-photo-mount-complete.md`](./archive/2026-08-15-photobook-3d-page-flip-and-photo-mount-complete.md)：已经完成的画册 3D 翻页与装裱任务。
+- [`archive/2026-08-15-photobook-double-spread-and-floating-toc-complete.md`](./archive/2026-08-15-photobook-double-spread-and-floating-toc-complete.md)：已经完成的双页对开与浮动目录任务。
+- [`archive/2026-08-15-photobook-flicker-free-3d-engine-redesign.md`](./archive/2026-08-15-photobook-flicker-free-3d-engine-redesign.md)：已经完成的零闪烁翻页引擎重构方案。
+- [`archive/2026-08-15-photobook-flicker-technical-analysis.md`](./archive/2026-08-15-photobook-flicker-technical-analysis.md)：画册闪烁根因分析白皮书，只用于追溯。
 - [`archive/2026-08-24-personal-tag-preference-and-prompt-bridge-complete.md`](./archive/2026-08-24-personal-tag-preference-and-prompt-bridge-complete.md)：已完成的探索双向偏好、标签调音台、ComfyUI 本地桥接与区域遮罩独立评审。
+- [`archive/2026-08-24-element-inspector-frontend-polish-complete.md`](./archive/2026-08-24-element-inspector-frontend-polish-complete.md)：已经完成的元素透视前端精修；验收证据在 `docs/reviews/element-inspector-polish/2026-08-24/`。
 
 归档文档只用于追溯，不代表仍待实现；其中与当前代码冲突的内容以根目录 [`ARCHITECTURE.md`](../../ARCHITECTURE.md)、[`Project_Vision.md`](../../Project_Vision.md) 和现行路线为准。
 

@@ -1,6 +1,6 @@
 # 纯净领域排版系统与自定义字体升级验收报告（Typography Review Report）
 
-- **任务计划**：`TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_FOR_GEMINI.md`
+- **任务计划**：`docs/plans/archive/2026-08-15-typography-system-and-custom-fonts-complete.md`
 - **实施完成时间**：2026-08-15
 - **基线 Commit**：`9625fe2`
 - **状态**：**Phase 0 ～ Phase 6 全部圆满完成并通过全量自动化门禁**

@@ -1,8 +1,10 @@
 # 排版系统与自定义字体实施规划（Gemini 执行版）
 
+> 归档状态：已完成。下文“待实施”是施工当时的原文，不再表示待办。验收见 `docs/reviews/typography/`。
+
 > 状态：待实施  
 > 评审日期：2026-08-15  
-> 需求来源：`docs/plans/TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_IMPLEMENTATION_PLAN.md`  
+> 需求来源：`docs/plans/archive/2026-08-15-typography-system-implementation-plan.md`  
 > 适用平台：Windows 优先，保留跨平台退化路径  
 > 执行原则：按阶段实施；一阶段、一验证、一提交；本文件与来源计划冲突时以本文件为准。
 
@@ -619,7 +621,7 @@ npm.cmd run verify：pass/fail
 
 ## 15. Phase 0 可直接复制指令
 
-> 请执行 `docs/plans/TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_FOR_GEMINI.md`，本轮只完成 Phase 0。先验证 Electron 43 当前 Local Font Access 权限/安全上下文行为、`sanctuary-font` 最小协议加载和字体解析器选择，再冻结类型与 MVP 格式矩阵。不要写设置 UI，不要批量改 CSS，不要下载或提交字体文件。运行 `npm.cmd run verify`，提交探针与研究记录后停止，按任务书格式汇报。
+> 请执行 `docs/plans/archive/2026-08-15-typography-system-and-custom-fonts-complete.md`，本轮只完成 Phase 0。先验证 Electron 43 当前 Local Font Access 权限/安全上下文行为、`sanctuary-font` 最小协议加载和字体解析器选择，再冻结类型与 MVP 格式矩阵。不要写设置 UI，不要批量改 CSS，不要下载或提交字体文件。运行 `npm.cmd run verify`，提交探针与研究记录后停止，按任务书格式汇报。
 
 ---
 

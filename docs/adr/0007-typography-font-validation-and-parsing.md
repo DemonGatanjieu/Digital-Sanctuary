@@ -4,7 +4,7 @@
 已通过（Phase 0 决策）
 
 ## 背景
-依据 `TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS_FOR_GEMINI.md`，应用需要支持用户导入本地第三方 `.ttf` / `.otf` 字体文件，并由主进程建立受控沙箱索引 (`userData/fonts/`)、计算 SHA-256 去重，并通过安全协议 `sanctuary-font://custom/<id>` 按需加载至渲染层。
+依据 [`archive/2026-08-15-typography-system-and-custom-fonts-complete.md`](../plans/archive/2026-08-15-typography-system-and-custom-fonts-complete.md)，应用需要支持用户导入本地第三方 `.ttf` / `.otf` 字体文件，并由主进程建立受控沙箱索引 (`userData/fonts/`)、计算 SHA-256 去重，并通过安全协议 `sanctuary-font://custom/<id>` 按需加载至渲染层。
 
 字体文件属于**非可信二进制输入**，可能包含畸形表偏移、超长字符串、伪造扩展名或利用解析漏洞的攻击载荷。因此必须确立安全、轻量且具备确定性退化能力的验证与加载方案。
 

@@ -15,3 +15,4 @@
 | [KI-0009](./KI-0009-packaged-model-failure-masquerades-as-blocked.md) | 代码已修复 / 待重新打包验收 | 安装包模型故障曾被表现成全部探索图片遭到拦截 |
 | [KI-0010](./KI-0010-radar-label-windows-encoding.md) | 已修复 / 自动兼容旧缓存 / 待重启目视验收 | Windows 代码页曾让 Python 技术画像的中文轴名在 JSONL 协议中乱码 |
 | [KI-0011](./KI-0011-adaptive-radar-model-contract-drift.md) | 已修复 / 待本地模型目视验收 | 轻量评论模型的中文 key、理由字段别名和多选维度曾被严格门禁全部拒绝 |
+| [KI-0012](./KI-0012-local-art-critic-json-shape.md) | 已修复 / Gemma E2B 原图实测通过 | 本地评论模型曾把 JSON 包装漂移显示成“无法解析为 JSON” |

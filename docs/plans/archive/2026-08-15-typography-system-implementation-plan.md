@@ -1,5 +1,7 @@
 # 纯净领域排版系统升级与自定义字体支持架构计划（Typography System & Custom Fonts）
 
+> 归档状态：已完成。下文“待用户批准后实施”是施工当时的原文，不再表示待办。执行版见同目录 `2026-08-15-typography-system-and-custom-fonts-complete.md`。
+
 - **任务代号**：`TASK_TYPOGRAPHY_SYSTEM_AND_CUSTOM_FONTS`
 - **计划状态**：已完成需求对齐，待用户批准后实施
 - **基线 Commit**：`dedb39b3be5f714a3b67a07a2d729d835c0877b3`

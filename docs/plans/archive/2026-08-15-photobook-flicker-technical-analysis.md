@@ -1,5 +1,7 @@
 # 《纯净领域》画册翻页视觉闪烁（Flicker）深度技术剖析与终极根治方案
 
+> 归档状态：已完成对应修复后的历史分析，只用于追溯，不是现行施工任务。
+
 > **文档性质**：图形学渲染管线与 React 状态机深度分析报告  
 > **适用对象**：图形学工程师、Chromium 内核开发者、前端架构师、高级 AI 代码模型  
 > **基准代码**：`apps/desktop/src/renderer/src/CollectionGallery.tsx` & `collections.css`
