@@ -37,6 +37,7 @@ export function GalleryView({
   avatarRepairMessage,
   error,
   onImport,
+  onOpenExplore,
   onCreateCollection,
   onEditCollection,
   onSaveSavedView,
@@ -68,6 +69,7 @@ export function GalleryView({
   avatarRepairMessage: string;
   error: string;
   onImport: () => void;
+  onOpenExplore: () => void;
   onCreateCollection: () => void;
   onEditCollection: (collection: CollectionRecord) => void;
   onSaveSavedView: (draft: SavedCollectionViewDraft, id?: string) => Promise<void>;
@@ -124,19 +126,20 @@ export function GalleryView({
 
   return (
     <>
-      <header className="topbar">
+      <header className="topbar gallery-heading">
         <div>
           <p className="eyebrow">LOCAL-FIRST LIBRARY</p>
-          <h1>你的数字庇护所</h1>
+          <h1>图库</h1>
+          <p className="page-description">保存喜欢的作品，按作品、相册或画师浏览。</p>
         </div>
         <div className="header-actions">
           <SegmentedControl
             label="画廊布局"
             value={mode}
             options={[
-              { value: "flat", label: "画廊全景" },
-              { value: "collections", label: "相册画集" },
-              { value: "author-work", label: "画师馆藏" }
+              { value: "flat", label: "全部作品" },
+              { value: "collections", label: "相册" },
+              { value: "author-work", label: "画师" }
             ]}
             onChange={(nextMode) => nextMode === "flat" ? showAllWorks() : onModeChange(nextMode)}
           />
@@ -151,8 +154,8 @@ export function GalleryView({
           {mode === "collections" && (
             <Button onClick={() => setIsCreatingSavedView(true)}>新建相册组合</Button>
           )}
-          <Button onClick={onCreateCollection}>新建相册</Button>
-          <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在审查…">导入图片</Button>
+          {mode === "collections" && <Button onClick={onCreateCollection}>新建相册</Button>}
+          <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在导入…">导入图片</Button>
         </div>
       </header>
 
@@ -168,10 +171,13 @@ export function GalleryView({
       {workResult.total === 0 && !workQuery.search ? (
         <section className="empty-state">
           <div className="empty-orbit"><span>✦</span></div>
-          <p className="eyebrow">FIRST VERTICAL SLICE</p>
+          <p className="eyebrow">YOUR FIRST ARTWORK</p>
           <h2>从一张真正喜欢的图片开始</h2>
-          <p>图片保留在原位置；纯净领域只建立索引、审查结果和分类关系。</p>
-          <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在审查…">选择本地图片</Button>
+          <p>导入本地图片，或去 Pixiv 保存作品。导入的图片保留在原位置，之后可随时整理到相册。</p>
+          <div className="library-start-actions">
+            <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在导入…">导入本地图片</Button>
+            <Button onClick={onOpenExplore}>去 Pixiv 找作品</Button>
+          </div>
         </section>
       ) : mode === "collections" ? (
         selectedCollection ? (
@@ -202,7 +208,7 @@ export function GalleryView({
               <div className="section-header-row">
                 <div>
                   <h3 className="section-title">组合视图 ({savedCollectionViews.length})</h3>
-                  <p className="section-subtext">虚拟布尔筛选（AND / OR / NOT），不改变原分类与文件</p>
+                  <p className="section-subtext">把多个相册一起查看，可选择同时包含、任意包含或排除</p>
                 </div>
                 <Button variant="ghost" onClick={() => setIsCreatingSavedView(true)}>
                   + 新建组合

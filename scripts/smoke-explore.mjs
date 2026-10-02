@@ -31,8 +31,7 @@ await new Promise((resolve, reject) => {
 
 const clicked = await evaluate(`(() => {
   if (document.querySelector(".explore-page")) return true;
-  const button = Array.from(document.querySelectorAll("button"))
-    .find((candidate) => candidate.textContent.trim() === "探索");
+  const button = document.querySelector('[data-nav="explore"]');
   if (!button) return false;
   button.click();
   return true;

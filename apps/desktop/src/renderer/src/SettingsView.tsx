@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  DEFAULT_LIBRARY_PREFERENCES,
   ELEMENT_BLACKLIST_GROUPS,
   type AppearancePreferences,
   type CustomElementGroup,
@@ -17,9 +16,15 @@ import { ThemeSettingsSection } from "./ThemeSettingsSection";
 import { TypographySettingsSection } from "./typography/TypographySettingsSection";
 import { VisionSettingsSection } from "./VisionSettingsSection";
 import { ComfyUiSettingsSection } from "./ComfyUiSettingsSection";
+import { ModelCenterView } from "./ModelCenterView";
+import { InteractiveCompassDial } from "./InteractiveCompassDial";
+import { SETTINGS_SECTIONS, restoreDefaultDownloadLocation, type SettingsSection } from "./app-navigation";
 import type { PersonalPreferenceProfileView } from "../../preload/index";
 
 interface SettingsViewProps {
+  section: SettingsSection;
+  onSectionChange: (section: SettingsSection) => void;
+  onError: (error: unknown) => void;
   settings: ElementFilterSetting[];
   appearance: AppearancePreferences;
   libraryPreferences: LibraryPreferences;
@@ -40,6 +45,9 @@ interface SettingsViewProps {
 }
 
 export function SettingsView({
+  section,
+  onSectionChange,
+  onError,
   settings,
   appearance,
   libraryPreferences,
@@ -68,6 +76,7 @@ export function SettingsView({
   const [sandboxResult, setSandboxResult] = useState<RuleSandboxResult | null>(null);
   const [backupMessage, setBackupMessage] = useState("");
   const elementGroups = useMemo(() => [...ELEMENT_BLACKLIST_GROUPS, ...customGroups], [customGroups]);
+  const currentSection = SETTINGS_SECTIONS.find((item) => item.id === section)!;
 
   async function createCustomGroup() {
     const tags = splitLabels(customTags);
@@ -93,6 +102,8 @@ export function SettingsView({
     setSandboxBusy(true);
     try {
       setSandboxResult(await window.sanctuary.testFilterImage());
+    } catch (caught) {
+      onError(caught);
     } finally {
       setSandboxBusy(false);
     }
@@ -104,16 +115,29 @@ export function SettingsView({
         <div>
           <p className="eyebrow">PREFERENCES</p>
           <h1>设置</h1>
-          <p className="page-description">调整画廊呈现、存储位置和探索空间的元素拦截。</p>
+          <p className="page-description">按用途配置应用。日常浏览和创作可直接从左侧进入。</p>
         </div>
       </header>
       {error && <AppNotice tone="error">{error}</AppNotice>}
-
+      <nav className="settings-navigation" aria-label="设置分类">
+        {SETTINGS_SECTIONS.map((item) => (
+          <button key={item.id} type="button" data-settings={item.id} aria-current={section === item.id ? "page" : undefined} onClick={() => onSectionChange(item.id)}>
+            {item.label}
+          </button>
+        ))}
+      </nav>
+      <div className="settings-section-intro">
+        <h2>{currentSection.label}</h2>
+        <p>{currentSection.description}</p>
+      </div>
+      <SettingsPanel active={section === "models"}><ModelCenterView embedded onError={onError} /></SettingsPanel>
+      <SettingsPanel active={section === "connections"}><VisionSettingsSection /><ComfyUiSettingsSection /></SettingsPanel>
+      <SettingsPanel active={section === "appearance"}>
       <ThemeSettingsSection />
-      <TypographySettingsSection />
-      <VisionSettingsSection />
-      <ComfyUiSettingsSection />
-
+      <section className="appearance-theme-dial">
+        <div><h3>拨盘切换主题</h3><p>拖动罗盘，切换四套内置主题。</p></div>
+        <InteractiveCompassDial mode="hero" />
+      </section>
       <section className="user-profile-card">
         <header>
           <div>
@@ -198,10 +222,11 @@ export function SettingsView({
           </label>
         </div>
       </section>
-
-      <SectionHeading eyebrow="LIBRARY DEFAULTS" title="画廊与存储" description="只改变默认呈现和保存位置，不改变内容信任边界。" />
+      <TypographySettingsSection />
+      </SettingsPanel>
+      <SettingsPanel active={section === "library"}>
       <section className="library-preferences-card">
-        <PreferenceSelect label="默认视图" value={libraryPreferences.defaultView} onChange={(value) => void onLibraryPreferencesChange({ ...libraryPreferences, defaultView: value as LibraryPreferences["defaultView"] })} options={[["flat", "平铺"], ["collections", "分类"], ["author-work", "作者 · 作品"]]} />
+        <PreferenceSelect label="默认视图" value={libraryPreferences.defaultView} onChange={(value) => void onLibraryPreferencesChange({ ...libraryPreferences, defaultView: value as LibraryPreferences["defaultView"] })} options={[["flat", "全部作品"], ["collections", "相册"], ["author-work", "画师"]]} />
         <PreferenceSelect label="默认排序" value={libraryPreferences.defaultSortBy} onChange={(value) => void onLibraryPreferencesChange({ ...libraryPreferences, defaultSortBy: value as LibraryPreferences["defaultSortBy"] })} options={[["savedAt", "保存时间"], ["publishedAt", "发布时间"], ["title", "标题"], ["artist", "作者"], ["pageCount", "页数"], ["byteLength", "大小"]]} />
         <PreferenceSelect label="排序方向" value={libraryPreferences.defaultSortDirection} onChange={(value) => void onLibraryPreferencesChange({ ...libraryPreferences, defaultSortDirection: value as "asc" | "desc" })} options={[["desc", "降序"], ["asc", "升序"]]} />
         <PreferenceSelect label="网格密度" value={libraryPreferences.gridDensity} onChange={(value) => void onLibraryPreferencesChange({ ...libraryPreferences, gridDensity: value as "comfortable" | "compact" })} options={[["comfortable", "舒适"], ["compact", "紧凑"]]} />
@@ -266,7 +291,7 @@ export function SettingsView({
             <Button onClick={() => void onChooseDownloadDirectory()}>更改存储盘 / 目录</Button>
             <Button variant="secondary" onClick={() => void onOpenStorageDirectory?.()}>在资源管理器中打开</Button>
             <Button variant="secondary" onClick={() => void onCreateBackup().then((path) => path && setBackupMessage(`备份已保存到 ${path}`))}>备份数据库</Button>
-            <Button variant="ghost" onClick={() => void onLibraryPreferencesChange(DEFAULT_LIBRARY_PREFERENCES)}>恢复默认位置</Button>
+            <Button variant="ghost" onClick={() => void onLibraryPreferencesChange(restoreDefaultDownloadLocation(libraryPreferences))}>恢复默认位置</Button>
           </div>
           {storageMessage && (
             <AppNotice className="storage-notice" tone="success" onDismiss={() => setStorageMessage("")}>
@@ -276,7 +301,8 @@ export function SettingsView({
         </div>
         {backupMessage && <AppNotice className="storage-backup-notice" tone="success" onDismiss={() => setBackupMessage("")}>{backupMessage}</AppNotice>}
       </section>
-
+      </SettingsPanel>
+      <SettingsPanel active={section === "protection"}>
       <SectionHeading eyebrow="PERSONAL LEARNING" title="探索个人偏好" description="只由你明确点击“少看类似”时学习；不会分析收藏、下载或本地画廊行为。" />
       <PersonalPreferenceSection />
 
@@ -311,7 +337,6 @@ export function SettingsView({
           );
         })}
       </section>
-
       <section className="custom-rule-builder">
         <div><p className="eyebrow">CUSTOM GROUP</p><h2>新增自定义元素组</h2></div>
         <input value={customName} maxLength={80} placeholder="元素组名称" onChange={(event) => setCustomName(event.target.value)} />
@@ -340,8 +365,19 @@ export function SettingsView({
           </div>
         )}
       </section>
+      </SettingsPanel>
     </>
   );
+}
+
+// Load a category on first visit and keep its drafts while switching categories.
+function SettingsPanel({ active, children }: { active: boolean; children: ReactNode }) {
+  const [visited, setVisited] = useState(active);
+  useEffect(() => {
+    if (active) setVisited(true);
+  }, [active]);
+  if (!active && !visited) return null;
+  return <div className="settings-panel" hidden={!active}>{children}</div>;
 }
 
 function PersonalPreferenceSection() {

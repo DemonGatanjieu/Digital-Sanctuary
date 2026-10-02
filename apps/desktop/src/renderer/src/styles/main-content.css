@@ -47,6 +47,58 @@ h1 {
   gap: 10px;
 }
 
+.workspace-navigation,
+.settings-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.workspace-navigation button,
+.settings-navigation button {
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-card);
+  color: var(--ds-text-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: color var(--ds-transition-fast), background var(--ds-transition-fast), border-color var(--ds-transition-fast);
+}
+
+.workspace-navigation button:hover,
+.settings-navigation button:hover,
+.workspace-navigation button[aria-current="page"],
+.settings-navigation button[aria-current="page"] {
+  color: var(--ds-primary);
+  background: var(--ds-primary-subtle);
+  border-color: var(--ds-primary-border);
+}
+
+.workspace-navigation button[aria-current="page"],
+.settings-navigation button[aria-current="page"] { font-weight: 650; }
+
+.workspace-navigation button:focus-visible,
+.settings-navigation button:focus-visible {
+  outline: 2px solid var(--ds-primary);
+  outline-offset: 3px;
+}
+
+.library-start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+@media (max-width: 1250px) {
+  .gallery-heading { align-items: flex-start; flex-direction: column; }
+  .gallery-heading .header-actions { justify-content: flex-start; }
+}
+
 .avatar-repair-control {
   display: grid;
   justify-items: end;

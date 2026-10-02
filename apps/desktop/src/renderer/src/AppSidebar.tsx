@@ -1,7 +1,8 @@
 import type { AppearancePreferences, StorageLocationInfo } from "@sanctuary/domain";
 import type { ExploreState } from "../../preload/index";
 import { downloadPhaseLabel } from "./ExploreView";
-import { SegmentedControl } from "./SegmentedControl";
+import { MAIN_NAVIGATION, mainViewFor, type ActiveView, type SettingsSection } from "./app-navigation";
+export type { ActiveView } from "./app-navigation";
 
 export interface AppStatus {
   visionEngine: string;
@@ -11,8 +12,6 @@ export interface AppStatus {
   visionError: string;
   modelBacked: boolean;
 }
-
-export type ActiveView = "gallery" | "organize" | "models" | "inspiration" | "explore" | "settings";
 
 export function AppSidebar({
   activeView,
@@ -25,7 +24,7 @@ export function AppSidebar({
   onViewChange,
   onDownloadCurrentArtwork,
   onPreviewBookmarks,
-  onAppearanceChange,
+  onOpenSettings,
   onChooseDownloadDirectory,
   onOpenStorageDirectory
 }: {
@@ -39,10 +38,13 @@ export function AppSidebar({
   onViewChange: (view: ActiveView) => void;
   onDownloadCurrentArtwork: () => void | Promise<void>;
   onPreviewBookmarks: () => void | Promise<void>;
-  onAppearanceChange: (appearance: AppearancePreferences) => void | Promise<void>;
+  onOpenSettings: (section: SettingsSection) => void;
   onChooseDownloadDirectory?: () => void | Promise<unknown>;
   onOpenStorageDirectory?: () => void | Promise<unknown>;
 }) {
+  const mainView = mainViewFor(activeView);
+  const protectionBypassed = exploreState.protectionStatus === "bypassed";
+  const protectionReady = Boolean(status?.visionReady && status.modelBacked && !protectionBypassed);
   return (
     <aside className="sidebar">
       <div
@@ -50,8 +52,13 @@ export function AppSidebar({
         role="button"
         tabIndex={0}
         title="点击前往设置中心更换头像与个性化主题"
-        onClick={() => onViewChange("settings")}
-        onKeyDown={(e) => e.key === "Enter" && onViewChange("settings")}
+        onClick={() => onOpenSettings("appearance")}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpenSettings("appearance");
+          }
+        }}
       >
         {appearance.customAvatarUrl ? (
           <img src={appearance.customAvatarUrl} alt="User Avatar" className="user-avatar-mark" />
@@ -65,25 +72,18 @@ export function AppSidebar({
       </div>
 
 
-      <nav>
-        <button aria-current={activeView === "gallery" ? "page" : undefined} className={`nav-item ${activeView === "gallery" ? "active" : ""}`} data-nav="gallery" onClick={() => void onOpenGallery()}>
-          画廊
-        </button>
-        <button aria-current={activeView === "organize" ? "page" : undefined} className={`nav-item ${activeView === "organize" ? "active" : ""}`} data-nav="organize" title="智能清洗排查与模型整理工坊" onClick={() => onViewChange("organize")}>
-          智能工坊
-        </button>
-        <button aria-current={activeView === "models" ? "page" : undefined} className={`nav-item ${activeView === "models" ? "active" : ""}`} data-nav="models" onClick={() => onViewChange("models")}>
-          模型中心
-        </button>
-        <button aria-current={activeView === "inspiration" ? "page" : undefined} className={`nav-item ${activeView === "inspiration" ? "active" : ""}`} data-nav="inspiration" title="使用当前本地模型读图、聊天和辅助创作" onClick={() => onViewChange("inspiration")}>
-          本地灵感台
-        </button>
-        <button aria-current={activeView === "explore" ? "page" : undefined} className={`nav-item ${activeView === "explore" ? "active" : ""}`} data-nav="explore" onClick={() => onViewChange("explore")}>
-          探索
-        </button>
-        <button aria-current={activeView === "settings" ? "page" : undefined} className={`nav-item ${activeView === "settings" ? "active" : ""}`} data-nav="settings" onClick={() => onViewChange("settings")}>
-          设置
-        </button>
+      <nav aria-label="主导航">
+        {MAIN_NAVIGATION.map((item) => (
+          <button
+            key={item.id}
+            aria-current={mainView === item.id ? "page" : undefined}
+            className={`nav-item ${mainView === item.id ? "active" : ""}`}
+            data-nav={item.id}
+            onClick={() => item.id === "gallery" ? void onOpenGallery() : onViewChange(item.id)}
+          >
+            <span className="nav-copy"><strong>{item.label}</strong><small>{item.description}</small></span>
+          </button>
+        ))}
       </nav>
 
       {activeView === "explore" && (
@@ -109,7 +109,7 @@ export function AppSidebar({
             <strong>下载全部收藏</strong>
             <small>
               {exploreState.pageKind === "bookmarks"
-                ? "用户信任 · 不执行 AI 审查"
+                ? "先预览范围，再开始下载"
                 : "进入收藏作品页后可用"}
             </small>
           </button>
@@ -158,35 +158,13 @@ export function AppSidebar({
       )}
 
       <div className="sidebar-spacer" />
-      <section className="display-profile-control" aria-label="显示性能档位">
+      <button type="button" className="engine-card" onClick={() => protectionBypassed ? onViewChange("explore") : onOpenSettings("protection")} title={protectionBypassed ? "进入探索恢复保护" : "查看探索保护设置"}>
+        <span className={`status-dot ${protectionReady ? "online" : ""}`} />
         <div>
-          <span>显示档位</span>
-          <small>{appearance.displayProfile === "quality" ? "完整氛围" : appearance.displayProfile === "balanced" ? "日常推荐" : "减少特效"}</small>
+          <strong>{protectionBypassed ? "本次无保护浏览" : protectionReady ? "探索保护已就绪" : status?.visionState === "starting" || !status ? "探索保护准备中" : "探索保护需检查"}</strong>
+          <small>{protectionBypassed ? "点击进入探索恢复保护" : "管理过滤规则与个人偏好"}</small>
         </div>
-        <SegmentedControl
-          compact
-          label="显示性能档位"
-          value={appearance.displayProfile}
-          options={[
-            { value: "quality", label: "精", title: "精致" },
-            { value: "balanced", label: "衡", title: "均衡" },
-            { value: "efficient", label: "省", title: "省电" }
-          ]}
-          onChange={(profile) => void onAppearanceChange({ ...appearance, displayProfile: profile })}
-        />
-      </section>
-      <div className="engine-card">
-        <span className={`status-dot ${status?.visionReady ? "online" : ""}`} />
-        <div>
-          <small>视觉引擎 · {status?.visionProvider ?? "检测中"}</small>
-          <strong>{status?.visionEngine ?? "连接中"}</strong>
-        </div>
-      </div>
-      <p className="probe-warning">
-        {status?.modelBacked
-          ? "WD Tagger 元素雷达 · 不使用年龄分级"
-          : "开发探针，不具备真实内容审查能力"}
-      </p>
+      </button>
     </aside>
   );
 }

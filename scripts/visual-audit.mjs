@@ -626,6 +626,10 @@ try {
   // 3. Compass Dial Interaction
   console.log("[audit] 3. Compass Dial Hero...");
   await auditScenario("03_compass_dial_hero", async () => {
+    await cdp.evaluate(`document.querySelector('[data-nav="settings"]')?.click()`);
+    await new Promise((r) => setTimeout(r, 300));
+    await cdp.evaluate(`document.querySelector('[data-settings="appearance"]')?.click()`);
+    await new Promise((r) => setTimeout(r, 300));
     await cdp.evaluate(`(() => {
       window.scrollTo(0, 0);
       const dial = document.querySelector('.interactive-compass-dial-card');
@@ -634,10 +638,12 @@ try {
   }, "W3", "default");
 
   // 4. Collections / Albums View
+  await cdp.evaluate(`document.querySelector('[data-nav="gallery"]')?.click()`);
+  await new Promise((r) => setTimeout(r, 300));
   console.log("[audit] 4. Collections & Saved Views...");
   await auditScenario("04_albums_grid", async () => {
     await cdp.evaluate(`(() => {
-      const btn = Array.from(document.querySelectorAll('button, a, .segmented-control-option')).find(el => el.textContent.includes('相册画集') || el.textContent.includes('画集'));
+      const btn = Array.from(document.querySelectorAll('[aria-label="画廊布局"] button')).find(el => el.textContent.trim() === '相册');
       btn?.click();
     })()`);
   }, "W3", "default");
@@ -686,7 +692,7 @@ try {
     })()`);
     await new Promise((r) => setTimeout(r, 400));
     await cdp.evaluate(`(() => {
-      const btn = Array.from(document.querySelectorAll('button, a, .segmented-control-option')).find(el => el.textContent.includes('画师馆藏') || el.textContent.includes('画师'));
+      const btn = Array.from(document.querySelectorAll('[aria-label="画廊布局"] button')).find(el => el.textContent.trim() === '画师');
       btn?.click();
     })()`);
   }, "W3", "default");
@@ -696,7 +702,7 @@ try {
   await auditScenario("07_lightbox_open", async () => {
     // Switch to flat gallery view
     await cdp.evaluate(`(() => {
-      const btn = Array.from(document.querySelectorAll('button, a, .segmented-control-option')).find(el => el.textContent.includes('画廊全景'));
+      const btn = Array.from(document.querySelectorAll('button, a, .segmented-control-option')).find(el => el.textContent.includes('全部作品') || el.textContent.includes('画廊全景'));
       btn?.click();
     })()`);
     await new Promise((r) => setTimeout(r, 600));
@@ -734,7 +740,7 @@ try {
   console.log("[audit] 8. Settings View & Vision Providers...");
   await auditScenario("08_settings_view", async () => {
     await cdp.evaluate(`(() => {
-      const btn = Array.from(document.querySelectorAll('.nav-item, button')).find(el => el.textContent.includes('设置') || el.textContent.includes('首选项'));
+      const btn = document.querySelector('[data-nav="settings"]');
       btn?.click();
     })()`);
   }, "W3", "default");
@@ -743,6 +749,8 @@ try {
 
   // Settings scroll to Typography & Fonts Section
   await auditScenario("08_settings_typography_section", async () => {
+    await cdp.evaluate(`document.querySelector('[data-settings="appearance"]')?.click()`);
+    await new Promise((r) => setTimeout(r, 400));
     await cdp.evaluate(`(() => {
       const typoSection = document.querySelector('.typography-settings-section');
       typoSection?.scrollIntoView();
@@ -751,6 +759,8 @@ try {
 
   // Settings scroll to External AI Vision Providers Section
   await auditScenario("08_settings_vision_section", async () => {
+    await cdp.evaluate(`document.querySelector('[data-settings="connections"]')?.click()`);
+    await new Promise((r) => setTimeout(r, 400));
     await cdp.evaluate(`(() => {
       const visionSection = document.querySelector('.vision-settings-section');
       visionSection?.scrollIntoView();
@@ -760,8 +770,10 @@ try {
   // 9. Model Analysis View
   console.log("[audit] 9. Model Analysis View...");
   await auditScenario("09_analysis_view", async () => {
+    await cdp.evaluate(`document.querySelector('[data-nav="gallery"]')?.click()`);
+    await new Promise((r) => setTimeout(r, 400));
     await cdp.evaluate(`(() => {
-      const btn = Array.from(document.querySelectorAll('.nav-item, button')).find(el => el.textContent.includes('模型整理') || el.textContent.includes('整理'));
+      const btn = document.querySelector('[data-nav="organize"]');
       btn?.click();
     })()`);
   }, "W3", "default");
@@ -770,7 +782,7 @@ try {
   console.log("[audit] 10. Explore View & Safety HUD...");
   await auditScenario("10_explore_view", async () => {
     await cdp.evaluate(`(() => {
-      const btn = Array.from(document.querySelectorAll('.nav-item, button')).find(el => el.textContent.includes('探索'));
+      const btn = document.querySelector('[data-nav="explore"]');
       btn?.click();
     })()`);
   }, "W3", "default");
@@ -779,9 +791,11 @@ try {
   console.log("[audit] 11. New Collection Dialog Modal...");
   await auditScenario("11_new_collection_dialog", async () => {
     await cdp.evaluate(`(() => {
-      const navGallery = Array.from(document.querySelectorAll('.nav-item, button')).find(el => el.textContent.includes('画廊'));
+      const navGallery = document.querySelector('[data-nav="gallery"]');
       navGallery?.click();
     })()`);
+    await new Promise((r) => setTimeout(r, 400));
+    await cdp.evaluate(`Array.from(document.querySelectorAll('[aria-label="画廊布局"] button')).find(el => el.textContent.trim() === '相册')?.click()`);
     await new Promise((r) => setTimeout(r, 400));
     await cdp.evaluate(`(() => {
       const newColBtn = Array.from(document.querySelectorAll('button')).find(el => el.textContent.includes('新建相册') && !el.textContent.includes('组合'));
@@ -800,7 +814,7 @@ try {
   console.log("[audit] 12. Saved View Editor Modal...");
   await auditScenario("12_saved_view_editor_dialog", async () => {
     await cdp.evaluate(`(() => {
-      const colTab = Array.from(document.querySelectorAll('button, a, .segmented-control-option')).find(el => el.textContent.includes('相册画集'));
+      const colTab = Array.from(document.querySelectorAll('[aria-label="画廊布局"] button')).find(el => el.textContent.trim() === '相册');
       colTab?.click();
     })()`);
     await new Promise((r) => setTimeout(r, 400));

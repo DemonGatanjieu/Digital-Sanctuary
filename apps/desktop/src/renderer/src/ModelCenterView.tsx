@@ -14,7 +14,7 @@ const CAPABILITIES: { id: ModelCapability; label: string; description: string }[
   { id: "semantic_embedding", label: "相似搜索", description: "为未来的自然语言与以图搜图准备" }
 ];
 
-export function ModelCenterView({ onError }: { onError: (error: unknown) => void }) {
+export function ModelCenterView({ onError, embedded = false }: { onError: (error: unknown) => void; embedded?: boolean }) {
   const [snapshot, setSnapshot] = useState<ModelCenterSnapshot | null>(null);
   const [activeCapability, setActiveCapability] = useState<ModelCapability>("element_tagging");
   const [busyModelId, setBusyModelId] = useState("");
@@ -97,11 +97,10 @@ export function ModelCenterView({ onError }: { onError: (error: unknown) => void
 
   return (
     <section className="model-center-page">
-      <header className="topbar model-center-heading">
+      <header className={`${embedded ? "model-center-embedded-heading" : "topbar"} model-center-heading`}>
         <div>
-          <p className="eyebrow">LOCAL VISION ENGINE LIBRARY</p>
-          <h1>模型中心</h1>
-          <p className="page-description">按能力安装和切换模型。只使用受控清单中的权重与固定运行时，不执行模型仓库中的脚本。</p>
+          {!embedded && <><p className="eyebrow">LOCAL VISION ENGINE LIBRARY</p><h1>本地模型</h1></>}
+          <p className="page-description">基础识别模型随应用提供。画评和创作模型可按需安装，安装后再选择使用。</p>
         </div>
         <Button variant="secondary" size="small" onClick={() => void window.sanctuary.openModelsDirectory()}>
           打开模型目录

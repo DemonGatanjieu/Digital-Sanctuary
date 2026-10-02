@@ -23,6 +23,8 @@
   box-shadow: 2px 0 16px rgba(15, 23, 42, 0.02);
   z-index: 10;
   user-select: none;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .app-shell.exploring .sidebar {
@@ -105,7 +107,7 @@
 }
 
 /* Main Navigation Items */
-nav {
+.sidebar > nav {
   display: grid;
   gap: 6px;
 }
@@ -124,8 +126,18 @@ nav {
   font-weight: 550;
   font-size: 13.5px;
   position: relative;
-  transition: all var(--ds-transition-normal);
+  min-height: 60px;
+  transition: background var(--ds-transition-normal), color var(--ds-transition-normal), border-color var(--ds-transition-normal);
 }
+
+.nav-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.nav-copy strong { font-size: 13.5px; font-weight: 650; }
+.nav-copy small { color: var(--ds-text-muted); font-size: 10px; line-height: 1.5; }
 
 .nav-item:hover:not(:disabled) {
   color: var(--ds-text-heading);
@@ -152,6 +164,7 @@ nav {
 .nav-item[data-nav="organize"]::before { content: '🧠'; }
 .nav-item[data-nav="explore"]::before { content: '🧭'; }
 .nav-item[data-nav="settings"]::before { content: '⚙️'; }
+.nav-item[data-nav="inspiration"]::before { content: '✦'; }
 
 .nav-item.active::after {
   content: '';
@@ -174,6 +187,8 @@ nav {
 /* Explore Actions in Sidebar */
 .explore-sidebar-actions {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 10px;
   margin-top: 24px;
   padding-top: 18px;
@@ -274,6 +289,8 @@ nav {
 }
 
 .storage-path-summary {
+  min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -397,11 +414,22 @@ nav {
   background: var(--ds-bg-card);
   box-shadow: var(--ds-shadow-xs);
   transition: all var(--ds-transition-normal);
+  margin-top: 20px;
+  min-height: 52px;
+  text-align: left;
+  cursor: pointer;
 }
 
 .engine-card:hover {
   border-color: var(--ds-primary-border);
   box-shadow: var(--ds-shadow-sm);
+}
+
+.brand-row:focus-visible,
+.nav-item:focus-visible,
+.engine-card:focus-visible {
+  outline: 2px solid var(--ds-primary);
+  outline-offset: 3px;
 }
 
 .engine-card div {

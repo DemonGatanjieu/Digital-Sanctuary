@@ -88,7 +88,7 @@ export function AnalysisView({
   onApplied: () => Promise<void>;
   onError: (error: unknown) => void;
 }) {
-  const [tab, setTab] = useState<StudioTab>("triage");
+  const [tab, setTab] = useState<StudioTab>(selectedWorkIds.length ? "suggestions" : "triage");
 
   // Shared Scope State
   const [scopeType, setScopeType] = useState<AnalysisScope["type"]>(selectedWorkIds.length ? "selected" : "all");
@@ -208,7 +208,7 @@ export function AnalysisView({
       setSelectedTriageIds(new Set());
       setHasSearched(true);
       if (results.length === 0) {
-        setNotice("在当前已分析的画库中未匹配到符合条件的画作。若未进行过批量模型分析，可先在「分类打标建议」中运行分析任务。");
+        setNotice("在当前已分析的图库中未匹配到符合条件的作品。若未进行过模型分析，可先在「推荐相册分类」中运行分析任务。");
       }
     } catch (err) {
       onError(err);
@@ -335,19 +335,19 @@ export function AnalysisView({
             <span className="studio-pulse-orb" />
             <p className="eyebrow">INTELLIGENT STUDIO</p>
           </div>
-          <h1>智能工坊</h1>
+          <h1>整理与分类</h1>
           <p className="page-description">
-            本地视觉特征清洗排查与相册打标建议 · 完全由你主动触发，绝不自动篡改或隐藏已下载的画作。
+            按标签查找作品，或让模型推荐相册分类。先预览范围，再决定如何处理。
           </p>
         </div>
 
         <div className="studio-topbar-controls">
           <SegmentedControl
-            label="工坊模式"
+            label="整理方式"
             value={tab}
             options={[
-              { value: "triage", label: "🧹 灵动排查台", title: "按特征标签排查并批量处理图片" },
-              { value: "suggestions", label: "📑 分类打标建议", title: "由模型自动为作品生成相册分类建议" }
+              { value: "triage", label: "按标签查找", title: "按特征标签查找并批量处理图片" },
+              { value: "suggestions", label: "推荐相册分类", title: "先运行模型分析，再确认相册分类建议" }
             ]}
             onChange={(val) => setTab(val as StudioTab)}
           />
@@ -660,7 +660,7 @@ export function AnalysisView({
                 <p>
                   当前检索范围内没有图片达到设定特征的 {Math.round(minConfidence * 100)}% 置信度。
                   <br />
-                  您可以适当调低灵敏度阈值重试，或先在「分类打标建议」中为画库进行一次批量分析。
+                  可以适当调低灵敏度阈值重试，或先在「推荐相册分类」中为图库进行一次分析。
                 </p>
               </div>
             ) : (
@@ -1023,4 +1023,3 @@ function scopeLabel(scope: AnalysisScope, collections: CollectionRecord[], artis
   if (scope.type === "artist") return `作者 · ${artists.find((item) => item.id === scope.artistId)?.name ?? "未知作者"}`;
   return "整个画廊";
 }
-

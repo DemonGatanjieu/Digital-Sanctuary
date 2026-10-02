@@ -14,7 +14,6 @@ import type {
 import { DialogOverlay } from "./DialogOverlay";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
-import { InteractiveCompassDial } from "./InteractiveCompassDial";
 import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 
@@ -167,9 +166,6 @@ export function WorkLibrary({
             <strong>{featuredWork.title}</strong>
             <small>{featuredWork.artistName ?? "本地作品"} · {featuredWork.pageCount} 页</small>
             <button type="button" onClick={() => void openWork(featuredWork)}>继续欣赏</button>
-          </div>
-          <div className="work-ambient-interactive-slot">
-            <InteractiveCompassDial mode="hero" />
           </div>
           <img className="work-ambient-cover" src={workImageUrl(featuredWork.coverAsset.thumbnailPath ?? featuredWork.coverAsset.path)} alt="" />
         </section>
@@ -400,7 +396,7 @@ export function WorkLibrary({
             ♡ 喜欢
           </button>
           <button type="button" className="work-analyze-selected" disabled={selectedIds.size === 0} onClick={() => onAnalyzeWorks([...selectedIds])}>
-            模型整理…
+            推荐相册分类…
           </button>
           <button type="button" className="work-delete-button" disabled={selectedIds.size === 0} onClick={() => void previewDeletion()}>
             移出画廊…

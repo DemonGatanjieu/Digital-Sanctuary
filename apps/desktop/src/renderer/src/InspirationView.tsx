@@ -38,6 +38,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   const [error, setError] = useState("");
   const [galleryPickerOpen, setGalleryPickerOpen] = useState(false);
   const [models, setModels] = useState<InstalledModelView[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
   const [defaultModelId, setDefaultModelId] = useState("");
   const [modelId, setModelId] = useState("");
   const [settings, setSettings] = useState<InspirationGenerationSettings>({ ...DEFAULT_INSPIRATION_SETTINGS });
@@ -65,7 +66,8 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
         setDefaultModelId(preferred);
         setModelId((current) => current || preferred);
       })
-      .catch((caught) => setError(messageOf(caught)));
+      .catch((caught) => setError(messageOf(caught)))
+      .finally(() => setModelsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -118,7 +120,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
 
   async function send() {
     const message = draft.trim();
-    if (!message || requestId) return;
+    if (!message || requestId || modelsLoading || models.length === 0) return;
     const nextRequestId = crypto.randomUUID();
     setRequestId(nextRequestId);
     setPendingTurn({ conversationId: selected?.id ?? null, userMessage: message });
@@ -152,7 +154,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   }
 
   async function regenerate() {
-    if (!selected || requestId) return;
+    if (!selected || requestId || modelsLoading || models.length === 0) return;
     const nextRequestId = crypto.randomUUID();
     setRequestId(nextRequestId);
     setPendingTurn({ conversationId: selected.id, userMessage: null });
@@ -224,9 +226,16 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   return (
     <section className="inspiration-view">
       <header className="inspiration-header">
-        <div><p className="eyebrow">LOCAL CREATIVE COMPANION</p><h1>本地灵感台</h1><p>让已经安装的视觉模型陪你读图、聊设定和写片段；图片与对话只留在本机。</p></div>
+        <div><p className="eyebrow">LOCAL CREATIVE COMPANION</p><h1>创作</h1><p>加入一张参考图，聊画面、写设定或整理提示词。图片与对话只留在本机。</p></div>
         <button type="button" className="inspiration-new" onClick={beginNew}>＋ 新对话</button>
       </header>
+
+      {!modelsLoading && models.length === 0 && (
+        <div className="inspiration-no-model inspiration-setup-notice" role="status">
+          <p>先安装一个创作模型，就可以在本机聊图和写作。</p>
+          <button type="button" onClick={onOpenModelCenter}>安装创作模型</button>
+        </div>
+      )}
 
       <div className="inspiration-layout">
         <aside className="inspiration-sessions">
@@ -288,12 +297,12 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
               {requestId ? (
                 <button type="button" className="inspiration-stop" onClick={() => void window.sanctuary.cancelInspirationMessage(requestId)}>停止</button>
               ) : (
-                <button type="button" className="inspiration-send" disabled={!draft.trim()} onClick={() => void send()}>发送</button>
+                <button type="button" className="inspiration-send" disabled={!draft.trim() || modelsLoading || models.length === 0} onClick={() => void send()}>发送</button>
               )}
             </div>
           </div>
           {selected?.messages.at(-1)?.role === "assistant" && !requestId && (
-            <button type="button" className="inspiration-regenerate" onClick={() => void regenerate()}>↻ 换一种回答</button>
+            <button type="button" className="inspiration-regenerate" disabled={modelsLoading || models.length === 0} onClick={() => void regenerate()}>↻ 换一种回答</button>
           )}
         </article>
 
@@ -309,7 +318,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
                 <small className="inspiration-model-hint">{modelHint(models.find((model) => model.id === modelId))}</small>
               </>
             ) : (
-              <div className="inspiration-no-model"><p>还没有安装可对话的视觉模型。</p><button type="button" onClick={onOpenModelCenter}>前往模型中心</button></div>
+              <p className="inspiration-muted">{modelsLoading ? "正在读取本地模型…" : "安装模型后可在这里选择。"}</p>
             )}
             <ModelSettingControl<InspirationCreativity>
               label="回答气质"

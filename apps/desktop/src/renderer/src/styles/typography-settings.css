@@ -90,6 +90,8 @@
 
 .slot-select {
   flex: 1;
+  min-width: 0;
+  width: 100%;
   background: var(--ds-bg-card-subtle);
   border: 1px solid var(--ds-border-light);
   border-radius: var(--ds-radius-md);

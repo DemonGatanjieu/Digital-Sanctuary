@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type AppearancePreferences,
   type ArtistRecord,
@@ -20,11 +20,11 @@ import { BookmarkDownloadDialog } from "./BookmarkDownloadDialog";
 import { ElementInspectorDrawer, type ElementInspectorTarget } from "./ElementInspectorDrawer";
 import { SettingsView } from "./SettingsView";
 import { AnalysisView } from "./AnalysisView";
-import { ModelCenterView } from "./ModelCenterView";
 import { ExploreView, initialExploreState } from "./ExploreView";
 import { InspirationView } from "./InspirationView";
 import { AppSidebar, type ActiveView, type AppStatus } from "./AppSidebar";
 import { GalleryView, type GalleryMode } from "./GalleryView";
+import type { SettingsSection } from "./app-navigation";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
 
 const EMPTY_WORK_RESULT: WorkQueryResult = {
@@ -44,6 +44,8 @@ const DEFAULT_APPEARANCE: AppearancePreferences = {
 
 export function App() {
   const [activeView, setActiveView] = useState<ActiveView>("gallery");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>("library");
+  const mainRef = useRef<HTMLElement>(null);
   const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
   const [workResult, setWorkResult] = useState<WorkQueryResult>(EMPTY_WORK_RESULT);
   const [workQuery, setWorkQuery] = useState<WorkQuery>({
@@ -79,6 +81,10 @@ export function App() {
   const showError = useCallback((caught: unknown) => {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0, behavior: "instant" });
+  }, [activeView, settingsSection]);
 
   const refreshWorks = useCallback(async (query: WorkQuery = workQuery) => {
     setWorkResult(await window.sanctuary.queryWorks(query));
@@ -332,6 +338,11 @@ export function App() {
     }
   }
 
+  function openSettings(section: SettingsSection) {
+    setSettingsSection(section);
+    setActiveView("settings");
+  }
+
   async function changeGalleryMode(mode: GalleryMode) {
     setGalleryMode(mode);
     if (mode === "flat" || artworks.length > 0) return;
@@ -443,7 +454,7 @@ export function App() {
         onViewChange={setActiveView}
         onDownloadCurrentArtwork={downloadCurrentArtwork}
         onPreviewBookmarks={previewAllBookmarks}
-        onAppearanceChange={updateAppearance}
+        onOpenSettings={openSettings}
         onChooseDownloadDirectory={async () => {
           const res = await window.sanctuary.chooseDownloadDirectory();
           setLibraryPreferences(res.preferences);
@@ -455,7 +466,17 @@ export function App() {
         }}
       />
 
-      <main className="animate-fade-in">
+      <main ref={mainRef} className="animate-fade-in">
+        {(activeView === "gallery" || activeView === "organize") && (
+          <nav className="workspace-navigation" aria-label="图库工作区">
+            <button type="button" data-nav="browse" aria-current={activeView === "gallery" ? "page" : undefined} onClick={() => void openGallery()}>浏览作品</button>
+            <button type="button" data-nav="organize" aria-current={activeView === "organize" ? "page" : undefined} onClick={() => {
+              if (activeView === "organize") return;
+              setAnalysisWorkIds([]);
+              setActiveView("organize");
+            }}>整理与分类</button>
+          </nav>
+        )}
         {activeView === "gallery" ? (
           <GalleryView
             artworks={artworks}
@@ -472,6 +493,7 @@ export function App() {
             avatarRepairMessage={avatarRepairMessage}
             error={error}
             onImport={importImages}
+            onOpenExplore={() => setActiveView("explore")}
             onCreateCollection={() => setCollectionEditor("new")}
             onEditCollection={setCollectionEditor}
             onSaveSavedView={saveSavedCollectionView}
@@ -513,16 +535,17 @@ export function App() {
             onApplied={refreshLibrary}
             onError={showError}
           />
-        ) : activeView === "models" ? (
-          <ModelCenterView onError={showError} />
         ) : activeView === "inspiration" ? (
           <InspirationView
             launch={inspirationLaunch}
             onLaunchConsumed={() => setInspirationLaunch(null)}
-            onOpenModelCenter={() => setActiveView("models")}
+            onOpenModelCenter={() => openSettings("models")}
           />
         ) : activeView === "settings" ? (
           <SettingsView
+            section={settingsSection}
+            onSectionChange={setSettingsSection}
+            onError={showError}
             settings={filterSettings}
             appearance={appearance}
             libraryPreferences={libraryPreferences}
