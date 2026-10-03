@@ -36,6 +36,8 @@ try {
           await new Promise((resolve) => setTimeout(resolve, 25));
         }
       };
+      await waitUntil(() => Boolean(document.querySelector('[data-nav="gallery"]')));
+      document.querySelector('[data-nav="gallery"]').click();
       await waitUntil(() => document.querySelectorAll(".work-library-card").length >= 60);
       const firstPageMs = performance.now();
       const sampleFrame = async () => {

@@ -41,6 +41,7 @@ import type {
   TypographyFontDescriptor,
   TypographyPreferencesV1,
   TriageQueryResultItem,
+  ExploreTriageResult,
   VisionAssessment,
   InspectArtworkPage,
   InspectArtworkResponse,
@@ -244,6 +245,7 @@ export interface SanctuaryApi {
   inspectArtwork(params: { workId?: string; artworkId?: string; url?: string; pageIndex?: number }): Promise<InspectArtworkResponse | null>;
   addCustomBlacklistTag(payload: { tag: string; threshold?: number; action?: "blur" | "hide"; groupName?: string }): Promise<CustomElementGroup[]>;
   queryTriageWorks(params: { tags: string[]; minConfidence?: number; scope?: AnalysisScope }): Promise<TriageQueryResultItem[]>;
+  queryTriageByExploreRules(scope: AnalysisScope): Promise<ExploreTriageResult>;
   showExplore(bounds: ExploreBounds): Promise<ExploreState>;
   setExploreBounds(bounds: ExploreBounds): Promise<boolean>;
   hideExplore(): Promise<void>;
@@ -306,6 +308,8 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("filters:add-blacklist-tag", payload) as Promise<CustomElementGroup[]>,
   queryTriageWorks: (params) =>
     ipcRenderer.invoke("analysis:triage-query", params) as Promise<TriageQueryResultItem[]>,
+  queryTriageByExploreRules: (scope) =>
+    ipcRenderer.invoke("analysis:triage-explore-rules", scope) as Promise<ExploreTriageResult>,
   generateThumbnails: () =>
     ipcRenderer.invoke("library:generate-thumbnails") as Promise<ThumbnailBatchResult>,
   createLibraryBackup: () =>

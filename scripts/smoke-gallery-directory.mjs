@@ -120,6 +120,7 @@ async function runFixture(metadataWorks) {
       await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key, code: key });
     }
 
+    await click('[data-nav="gallery"]');
     await waitFor("document.querySelectorAll('.album-card-book').length === 3");
     await waitFor("document.querySelectorAll('.saved-view-card').length === 12");
     const firstReadyMs = await cdp.evaluate("Math.round(performance.now())");

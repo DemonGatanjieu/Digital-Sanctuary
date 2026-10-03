@@ -72,6 +72,7 @@ try {
   cdp = await connectCdp((await waitForTarget(rendererPort)).webSocketDebuggerUrl);
   // Exercise all four production animations independently of the host OS motion preference.
   await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
+  await click('[data-nav="gallery"]');
   await waitFor("document.querySelectorAll('.album-card-book').length === 63");
 
   for (const width of [1280, 900]) {

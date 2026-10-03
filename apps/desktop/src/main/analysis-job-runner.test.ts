@@ -18,7 +18,8 @@ describe("runAnalysisJob", () => {
     const store = fakeStore(item, finish, complete, assessment);
     const classify = vi.fn();
     try {
-      await runAnalysisJob("job", store, { engine: "test", classify });
+      await runAnalysisJob("job", store, { engine: "test", engineVersion: "1", classify });
+      expect(store.getCachedAssetAnalysis).toHaveBeenCalledWith("asset", "1", "test", "1");
       expect(classify).not.toHaveBeenCalled();
       expect(complete).toHaveBeenCalledWith(item, assessment, true);
       expect(finish).toHaveBeenCalledWith("job", "completed");

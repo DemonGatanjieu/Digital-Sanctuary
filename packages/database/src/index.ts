@@ -13,6 +13,7 @@ import type {
   CollectionRecord,
   ElementFilterSetting,
   FilterDecision,
+  FilterRule,
   ArtworkSource,
   SavedCollectionView,
   SavedCollectionViewDraft,
@@ -51,6 +52,14 @@ import {
   getVisionSuite,
   isElementFilterSetting
 } from "@sanctuary/domain";
+
+function analysisScopePredicate(scope: AnalysisScope): { sql: string; params: string[] } {
+  const alive = "w.deleted_at IS NULL";
+  if (scope.type === "selected") return { sql: scope.workIds.length ? `${alive} AND w.id IN (${scope.workIds.map(() => "?").join(",")})` : "0", params: scope.workIds };
+  if (scope.type === "artist") return { sql: `${alive} AND w.artist_id = ?`, params: [scope.artistId] };
+  if (scope.type === "collection") return { sql: `${alive} AND EXISTS (SELECT 1 FROM collection_works cw WHERE cw.work_id = w.id AND cw.collection_id = ?)`, params: [scope.collectionId] };
+  return { sql: alive, params: [] };
+}
 
 interface ArtworkRow {
   id: string;
@@ -1539,32 +1548,32 @@ export class LibraryDatabase {
     return Number(this.#database.prepare("DELETE FROM remote_image_reviews").run().changes);
   }
 
-  previewAnalysisScope(scope: AnalysisScope, engine: string): AnalysisScopePreview {
-    const workIds = this.#workIdsForAnalysisScope(scope);
-    if (workIds.length === 0) return { scope, workCount: 0, assetCount: 0, cachedAssetCount: 0 };
-    const placeholders = workIds.map(() => "?").join(",");
+  previewAnalysisScope(scope: AnalysisScope, engine: string, engineVersion?: string): AnalysisScopePreview {
+    const predicate = analysisScopePredicate(scope);
+    const countRow = this.#database.prepare("SELECT COUNT(*) AS count FROM works w WHERE " + predicate.sql).get(...predicate.params) as { count: number };
+    if (!countRow.count) return { scope, workCount: 0, assetCount: 0, cachedAssetCount: 0 };
     const isVisionSuite = engine.startsWith("technical_visual_") || engine.startsWith("fine_art_") || engine.startsWith("character_presence_");
     const wherePage = isVisionSuite ? " AND a.page_index = 0" : "";
     const query = isVisionSuite
-      ? `SELECT COUNT(*) AS asset_count,
-                COALESCE(SUM(CASE WHEN vr.asset_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS cached_count
-           FROM assets a
+      ? `SELECT COUNT(DISTINCT a.id) AS asset_count,
+                COUNT(DISTINCT CASE WHEN vr.asset_id IS NOT NULL THEN a.id END) AS cached_count
+           FROM assets a JOIN works w ON w.id = a.work_id
            LEFT JOIN vision_evaluation_results vr
              ON vr.asset_id = a.id AND vr.suite_id = ? AND vr.asset_version = a.updated_at AND vr.status = 'success'
-          WHERE a.work_id IN (${placeholders})
+          WHERE ${predicate.sql}
             AND a.media_type = 'image' AND a.file_state = 'available'${wherePage}`
-      : `SELECT COUNT(*) AS asset_count,
-                COALESCE(SUM(CASE WHEN ar.asset_id IS NOT NULL THEN 1 ELSE 0 END), 0) AS cached_count
-           FROM assets a
+      : `SELECT COUNT(DISTINCT a.id) AS asset_count,
+                COUNT(DISTINCT CASE WHEN ar.asset_id IS NOT NULL THEN a.id END) AS cached_count
+           FROM assets a JOIN works w ON w.id = a.work_id
            LEFT JOIN analysis_asset_results ar
-             ON ar.asset_id = a.id AND ar.engine = ? AND ar.asset_updated_at = a.updated_at
-          WHERE a.work_id IN (${placeholders})
+             ON ar.asset_id = a.id AND ar.engine = ? AND ar.asset_updated_at = a.updated_at${engineVersion ? " AND ar.engine_version = ?" : ""}
+          WHERE ${predicate.sql}
             AND a.media_type = 'image' AND a.file_state = 'available'${wherePage}`;
 
-    const row = this.#database.prepare(query).get(engine, ...workIds) as { asset_count: number; cached_count: number };
+    const row = this.#database.prepare(query).get(engine, ...(!isVisionSuite && engineVersion ? [engineVersion] : []), ...predicate.params) as { asset_count: number; cached_count: number };
     return {
       scope,
-      workCount: workIds.length,
+      workCount: Number(countRow.count),
       assetCount: Number(row.asset_count),
       cachedAssetCount: Number(row.cached_count)
     };
@@ -1663,10 +1672,10 @@ export class LibraryDatabase {
     return { id: row.id, jobId: row.job_id, workId: row.work_id, assetId: row.asset_id, path: row.path, assetUpdatedAt: row.updated_at };
   }
 
-  getCachedAssetAnalysis(assetId: string, assetUpdatedAt: string, engine: string): VisionAssessment | null {
+  getCachedAssetAnalysis(assetId: string, assetUpdatedAt: string, engine: string, engineVersion?: string): VisionAssessment | null {
     const row = this.#database.prepare(
-      "SELECT assessment_json FROM analysis_asset_results WHERE asset_id = ? AND asset_updated_at = ? AND engine = ?"
-    ).get(assetId, assetUpdatedAt, engine) as { assessment_json: string } | undefined;
+      `SELECT assessment_json FROM analysis_asset_results WHERE asset_id = ? AND asset_updated_at = ? AND engine = ?${engineVersion ? " AND engine_version = ?" : ""}`
+    ).get(assetId, assetUpdatedAt, engine, ...(engineVersion ? [engineVersion] : [])) as { assessment_json: string } | undefined;
     return row ? parseJson<VisionAssessment>(row.assessment_json) : null;
   }
 
@@ -1841,54 +1850,60 @@ export class LibraryDatabase {
     minConfidence = 0.4,
     scope?: AnalysisScope
   ): TriageQueryResultItem[] {
-    if (!tags.length) return [];
-    const normalizedTags = tags.map((t) => t.trim().toLowerCase().replaceAll(" ", "_"));
-    const workIds = scope ? this.#workIdsForAnalysisScope(scope) : null;
-    if (scope && workIds?.length === 0) return [];
+    return this.queryWorksByFilterRules(tags.map((tag) => ({
+      id: tag, name: tag, label: tag.trim().toLowerCase().replaceAll(" ", "_"),
+      minimumConfidence: minConfidence, enabled: true, action: "hide", priority: 0
+    })), scope);
+  }
 
-    const whereWorkIds = workIds && workIds.length > 0
-      ? `AND a.work_id IN (${workIds.map(() => "?").join(",")})`
-      : "";
-
-    const query = `
-      SELECT DISTINCT a.work_id, ar.assessment_json
+  queryWorksByFilterRules(
+    rules: readonly FilterRule[], scope?: AnalysisScope,
+    identity?: { engine: string; engineVersion: string }
+  ): TriageQueryResultItem[] {
+    const thresholds = new Map<string, number>();
+    for (const rule of rules) {
+      if (!rule.enabled) continue;
+      thresholds.set(rule.label, Math.min(thresholds.get(rule.label) ?? 1, rule.minimumConfidence));
+    }
+    if (!thresholds.size) return [];
+    const conditions = ["w.deleted_at IS NULL", "a.media_type = 'image'", "a.file_state = 'available'",
+      "ar.asset_updated_at = a.updated_at"];
+    const params: Array<string | number> = [...thresholds].flatMap(([tag, threshold]) => [tag, threshold]);
+    if (scope?.type === "selected") {
+      if (!scope.workIds.length) return [];
+      conditions.push(`w.id IN (${scope.workIds.map(() => "?").join(",")})`);
+      params.push(...scope.workIds);
+    } else if (scope?.type === "artist") {
+      conditions.push("w.artist_id = ?"); params.push(scope.artistId);
+    } else if (scope?.type === "collection") {
+      conditions.push("EXISTS (SELECT 1 FROM collection_works cw WHERE cw.work_id = w.id AND cw.collection_id = ?)");
+      params.push(scope.collectionId);
+    }
+    if (identity) {
+      conditions.push("ar.engine = ?", "ar.engine_version = ?");
+      params.push(identity.engine, identity.engineVersion);
+    }
+    // Match in SQLite; unrelated assessments and full label payloads stay in the store.
+    const safeJson = "CASE WHEN json_valid(ar.assessment_json) THEN ar.assessment_json ELSE '{}' END";
+    const rows = this.#database.prepare(`
+      WITH wanted(tag, threshold) AS (VALUES ${[...thresholds].map(() => "(?, ?)").join(",")})
+      SELECT a.work_id, labels.key AS tag, MAX(labels.value) AS confidence
         FROM analysis_asset_results ar
         JOIN assets a ON a.id = ar.asset_id
-       WHERE a.media_type = 'image' AND a.file_state = 'available' ${whereWorkIds}
-    `;
-
-    const rows = (workIds && workIds.length > 0
-      ? this.#database.prepare(query).all(...workIds)
-      : this.#database.prepare(query).all()) as Array<{ work_id: string; assessment_json: string }>;
-
+        JOIN works w ON w.id = a.work_id
+        JOIN json_each(${safeJson}, '$.labels') labels
+        JOIN wanted ON wanted.tag = labels.key
+       WHERE ${conditions.join(" AND ")}
+         AND json_extract(${safeJson}, '$.status') = 'complete'
+         AND labels.type IN ('integer', 'real') AND labels.value BETWEEN wanted.threshold AND 1
+       GROUP BY a.work_id, labels.key
+       ORDER BY a.work_id, confidence DESC, labels.key
+    `).all(...params) as Array<{ work_id: string; tag: string; confidence: number }>;
     const resultMap = new Map<string, Array<{ tag: string; confidence: number }>>();
-
     for (const row of rows) {
-      try {
-        const assessment = JSON.parse(row.assessment_json);
-        const labels: Record<string, number> = assessment?.labels || {};
-        const matched: Array<{ tag: string; confidence: number }> = [];
-
-        for (const tag of normalizedTags) {
-          const conf = labels[tag];
-          if (typeof conf === "number" && conf >= minConfidence) {
-            matched.push({ tag, confidence: conf });
-          }
-        }
-
-        if (matched.length > 0) {
-          const current = resultMap.get(row.work_id) || [];
-          for (const m of matched) {
-            const existing = current.find((item) => item.tag === m.tag);
-            if (!existing) {
-              current.push(m);
-            } else if (m.confidence > existing.confidence) {
-              existing.confidence = m.confidence;
-            }
-          }
-          resultMap.set(row.work_id, current);
-        }
-      } catch {}
+      const matched = resultMap.get(row.work_id) ?? [];
+      matched.push({ tag: row.tag, confidence: row.confidence });
+      resultMap.set(row.work_id, matched);
     }
 
     if (resultMap.size === 0) return [];

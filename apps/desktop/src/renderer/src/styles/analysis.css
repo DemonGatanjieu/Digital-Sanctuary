@@ -129,6 +129,26 @@
   align-items: start;
 }
 
+/* Daily organizing starts with a task; detailed inputs are opened deliberately. */
+.organize-simple .studio-topbar { margin-bottom: 0; }
+.organize-simple > .ui-segmented { margin-bottom: 0; background: var(--ds-bg-card); border-color: var(--ds-border-light); }
+.organize-simple > .ui-segmented button.active { background: var(--ds-primary-subtle); color: var(--ds-primary); }
+.organize-simple .studio-control-deck { position: static; gap: 12px; padding: 18px 20px; }
+.organize-simple .studio-control-deck h2 { margin: 0; font-size: 18px; }
+.organize-scope-summary { margin: 0; color: var(--ds-text-heading); font-weight: 650; }
+.organize-field { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; color: var(--ds-text-body); font-size: 13px; }
+.organize-field select, .organize-field input:not([type="range"]) { min-width: 0; width: 100%; min-height: 40px; padding: 8px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-sm); background: var(--ds-bg-card); color: var(--ds-text-heading); }
+.organize-rule-summary p, .organize-query-coverage p { color: var(--ds-text-secondary); font-size: 13px; line-height: 1.7; margin: 10px 0; }
+.organize-feature-choices { display: grid; gap: 8px; }
+.organize-feature-choices button { display: flex; flex-direction: column; gap: 5px; text-align: left; padding: 12px; min-height: 60px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); background: var(--ds-bg-card); color: var(--ds-text-heading); cursor: pointer; }
+.organize-feature-choices button[aria-pressed="true"] { border-color: var(--ds-primary); background: var(--ds-primary-subtle); }
+.organize-feature-choices small { color: var(--ds-text-secondary); line-height: 1.5; }
+.organize-simple .studio-workbench-header { flex-wrap: wrap; }
+.organize-simple .studio-batch-select-wrap, .organize-simple .studio-batch-delete-btn { min-height: 40px !important; }
+.organize-simple .studio-card-checkbox { width: 40px; height: 40px; }
+.organize-simple .studio-card-tags { padding: 8px 0; }
+.organize-simple .studio-cards-grid + .button { margin-top: 18px; }
+
 @media (max-width: 1080px) {
   .studio-layout {
     grid-template-columns: 1fr;

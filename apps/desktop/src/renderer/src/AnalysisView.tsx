@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AnalysisJob,
   AnalysisScope,
@@ -6,15 +6,18 @@ import type {
   ArtistRecord,
   CollectionRecord,
   TriageQueryResultItem,
-  WorkDeletionPreview
+  WorkDeletionPreview,
+  ExploreTriageResult
 } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import type { AppStatus } from "./AppSidebar";
 import { Button } from "./Button";
 import { SegmentedControl } from "./SegmentedControl";
 import { DialogOverlay } from "./DialogOverlay";
+import { SettingsDisclosure } from "./SettingsDisclosure";
+import { TRIAGE_SELECTION_LIMIT, toggleTriageSelection, visibleTriageSelection } from "./organize-selection";
 
-type StudioTab = "triage" | "suggestions";
+type StudioTab = "triage" | "features" | "suggestions";
 
 interface FeaturePreset {
   id: string;
@@ -60,17 +63,6 @@ const FEATURE_PRESETS: FeaturePreset[] = [
   }
 ];
 
-const POPULAR_TAG_SUGGESTIONS = [
-  "glasses",
-  "swimsuit",
-  "weapon",
-  "wings",
-  "animal_ears",
-  "school_uniform",
-  "comic",
-  "scenery"
-];
-
 export function AnalysisView({
   collections,
   artists,
@@ -78,7 +70,9 @@ export function AnalysisView({
   status,
   error,
   onApplied,
-  onError
+  onError,
+  onOpenProtection,
+  onRulesChanged
 }: {
   collections: CollectionRecord[];
   artists: ArtistRecord[];
@@ -87,6 +81,8 @@ export function AnalysisView({
   error: string;
   onApplied: () => Promise<void>;
   onError: (error: unknown) => void;
+  onOpenProtection: () => void;
+  onRulesChanged?: () => Promise<void>;
 }) {
   const [tab, setTab] = useState<StudioTab>(selectedWorkIds.length ? "suggestions" : "triage");
 
@@ -112,6 +108,12 @@ export function AnalysisView({
   const [hasSearched, setHasSearched] = useState(false);
   const [deletionPreview, setDeletionPreview] = useState<WorkDeletionPreview | null>(null);
   const [deletingWorks, setDeletingWorks] = useState(false);
+  const [ruleQuery, setRuleQuery] = useState<ExploreTriageResult | null>(null);
+  const [queryError, setQueryError] = useState("");
+  const [resultLimit, setResultLimit] = useState(40);
+  const alive = useRef(true);
+  const queryPending = useRef(false);
+  const queryGeneration = useRef(0);
 
   const scope = useMemo<AnalysisScope>(() => {
     if (scopeType === "selected") return { type: "selected", workIds: selectedWorkIds };
@@ -119,26 +121,43 @@ export function AnalysisView({
     if (scopeType === "collection") return { type: "collection", collectionId };
     return { type: "all" };
   }, [artistId, collectionId, scopeType, selectedWorkIds]);
+  const queryKey = JSON.stringify([scope, tab, activePresetId, customTagInput, minConfidence]);
+  const latestQueryKey = useRef(queryKey);
+  latestQueryKey.current = queryKey;
 
   async function refreshJobs() {
-    setJobs(await window.sanctuary.listAnalysisJobs());
+    const next = await window.sanctuary.listAnalysisJobs();
+    if (alive.current) setJobs(next);
   }
 
   useEffect(() => {
+    alive.current = true;
     void refreshJobs().catch(onError);
+    return () => { alive.current = false; queryGeneration.current++; };
+  }, [onError]);
+  const hasPendingJobs = jobs.some((job) => job.status === "queued" || job.status === "running");
+  useEffect(() => {
+    if (!hasPendingJobs) return;
     const timer = window.setInterval(() => void refreshJobs().catch(onError), 1_200);
     return () => window.clearInterval(timer);
-  }, [onError]);
+  }, [hasPendingJobs, onError]);
 
   useEffect(() => {
     setPreview(null);
   }, [scope]);
+  useEffect(() => {
+    queryGeneration.current++;
+    setQueryError("");
+    setHasSearched(false); setTriageResults([]); setSelectedTriageIds(new Set()); setRuleQuery(null); setResultLimit(40);
+  }, [queryKey]);
 
   async function previewScope() {
+    const requestedScope = JSON.stringify(scope);
     setBusy(true);
     setNotice("");
     try {
-      setPreview(await window.sanctuary.previewAnalysis(scope));
+      const next = await window.sanctuary.previewAnalysis(scope);
+      if (alive.current && JSON.stringify(scope) === requestedScope && latestQueryKey.current === queryKey) setPreview(next);
     } catch (err) {
       onError(err);
     } finally {
@@ -147,7 +166,7 @@ export function AnalysisView({
   }
 
   async function startJob() {
-    if (!preview || preview.assetCount === 0) return;
+    if (!preview || preview.assetCount === 0 || JSON.stringify(preview.scope) !== JSON.stringify(scope)) return;
     setBusy(true);
     try {
       const job = await window.sanctuary.createAnalysisJob(preview.scope);
@@ -181,9 +200,20 @@ export function AnalysisView({
 
   // Triage Search
   async function runTriageQuery() {
+    if (queryPending.current) return;
+    queryPending.current = true;
+    const generation = ++queryGeneration.current;
+    const requestedKey = queryKey;
     setSearchingTriage(true);
+    setQueryError("");
     setNotice("");
     try {
+      if (tab === "triage") {
+        const result = await window.sanctuary.queryTriageByExploreRules(scope);
+        if (!alive.current || generation !== queryGeneration.current || requestedKey !== latestQueryKey.current) return;
+        setRuleQuery(result); setTriageResults(result.items); setSelectedTriageIds(new Set()); setHasSearched(true); setResultLimit(40);
+        return;
+      }
       let targetTags: string[] = [];
       if (activePresetId === "custom") {
         targetTags = customTagInput.split(/[\s,]+/).map((t) => t.trim()).filter(Boolean);
@@ -203,7 +233,7 @@ export function AnalysisView({
         minConfidence,
         scope
       });
-
+      if (!alive.current || generation !== queryGeneration.current || requestedKey !== latestQueryKey.current) return;
       setTriageResults(results);
       setSelectedTriageIds(new Set());
       setHasSearched(true);
@@ -211,9 +241,10 @@ export function AnalysisView({
         setNotice("在当前已分析的图库中未匹配到符合条件的作品。若未进行过模型分析，可先在「推荐相册分类」中运行分析任务。");
       }
     } catch (err) {
-      onError(err);
+      if (alive.current && requestedKey === latestQueryKey.current) setQueryError(err instanceof Error ? err.message : "查找失败，请重试。");
     } finally {
-      setSearchingTriage(false);
+      queryPending.current = false;
+      if (alive.current) setSearchingTriage(false);
     }
   }
 
@@ -237,11 +268,12 @@ export function AnalysisView({
     setDeletingWorks(true);
     try {
       const result = await window.sanctuary.confirmWorkDeletion(deletionPreview.token);
-      setNotice(`已成功处理 ${result.completedWorkIds.length} 个作品（${result.trashedFileCount} 个文件已移入系统回收站）。`);
       setDeletionPreview(null);
       setSelectedTriageIds(new Set());
       await onApplied();
       await runTriageQuery();
+      setSelectedTriageIds(new Set(result.failures.map((item) => item.workId)));
+      setNotice(`已处理 ${result.completedWorkIds.length} 个作品，${result.trashedFileCount} 个托管文件移入回收站。${result.failures.length ? `另有 ${result.failures.length} 件未完成，已保留选择供重试。` : ""}`);
     } catch (err) {
       onError(err);
     } finally {
@@ -254,10 +286,16 @@ export function AnalysisView({
     if (!targetCollectionId || selectedTriageIds.size === 0) return;
     setBusy(true);
     try {
-      await Promise.all([...selectedTriageIds].map((id) => window.sanctuary.addWorkToCollection(id, targetCollectionId)));
+      const selected = [...selectedTriageIds];
+      const failed: string[] = [];
+      for (let offset = 0; offset < selected.length; offset += 8) {
+        const batch = selected.slice(offset, offset + 8);
+        const outcomes = await Promise.allSettled(batch.map((id) => window.sanctuary.addWorkToCollection(id, targetCollectionId)));
+        outcomes.forEach((outcome, index) => { if (outcome.status === "rejected") failed.push(batch[index]!); });
+      }
       const colName = collections.find((c) => c.id === targetCollectionId)?.name ?? "目标相册";
-      setNotice(`已将 ${selectedTriageIds.size} 个画作批量归档至《${colName}》。`);
-      setSelectedTriageIds(new Set());
+      setNotice(`已将 ${selected.length - failed.length} 件作品加入《${colName}》。${failed.length ? `另有 ${failed.length} 件失败，已保留选择供重试。` : ""}`);
+      setSelectedTriageIds(new Set(failed));
       await onApplied();
     } catch (err) {
       onError(err);
@@ -286,6 +324,7 @@ export function AnalysisView({
           groupName: "用户自定义拦截"
         });
       }
+      await onRulesChanged?.();
       setNotice(`已将标签 [${targetTags.join(", ")}] 同步加入全局探索拦截黑名单！`);
     } catch (err) {
       onError(err);
@@ -295,512 +334,82 @@ export function AnalysisView({
   }
 
   const toggleSelectTriageItem = (id: string) => {
-    setSelectedTriageIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelectedTriageIds((current) => toggleTriageSelection(current, id));
   };
 
+  const selectableTriageIds = useMemo(() => visibleTriageSelection(
+    triageResults.slice(0, Math.min(resultLimit, TRIAGE_SELECTION_LIMIT)).map((item) => item.work.id), resultLimit
+  ), [triageResults, resultLimit]);
+  const allVisibleSelected = selectableTriageIds.size > 0 && [...selectableTriageIds].every((id) => selectedTriageIds.has(id));
   const selectAllTriage = () => {
-    if (selectedTriageIds.size === triageResults.length) {
+    if (allVisibleSelected) {
       setSelectedTriageIds(new Set());
     } else {
-      setSelectedTriageIds(new Set(triageResults.map((r) => r.work.id)));
+      setSelectedTriageIds(selectableTriageIds);
     }
   };
 
-  const appendCustomTag = (tag: string) => {
-    setCustomTagInput((prev) => {
-      const existing = prev.split(/[\s,]+/).map((t) => t.trim()).filter(Boolean);
-      if (existing.includes(tag)) return prev;
-      return existing.length ? `${existing.join(", ")}, ${tag}` : tag;
-    });
-  };
-
-  const SCOPE_OPTIONS = [
-    { id: "all" as const, label: "全部画库", hint: "全量本地作品", icon: "🌐" },
-    { id: "selected" as const, label: "画廊已选", hint: selectedWorkIds.length ? `${selectedWorkIds.length} 项已选` : "需先在画廊多选", icon: "✨", disabled: !selectedWorkIds.length },
-    { id: "collection" as const, label: "指定相册", hint: "按相册范围", icon: "📁", disabled: !collections.length },
-    { id: "artist" as const, label: "指定画师", hint: "按作者作品", icon: "👤", disabled: !artists.length }
-  ];
-
-  return (
-    <div className="studio-root">
-      {/* Top Header */}
-      <header className="topbar studio-topbar">
-        <div className="studio-topbar-title">
-          <div className="studio-brand-badge">
-            <span className="studio-pulse-orb" />
-            <p className="eyebrow">INTELLIGENT STUDIO</p>
+  const scopeControls = <>
+    <p className="organize-scope-summary">{scopeLabel(scope, collections, artists)}{scopeType === "selected" ? " · " + selectedWorkIds.length + " 项已选" : ""}</p>
+    <SettingsDisclosure title="更换整理范围" name="organize-scope">
+      <label className="organize-field">整理范围<select aria-label="整理范围" value={scopeType} disabled={busy}
+        onChange={(event) => setScopeType(event.target.value as AnalysisScope["type"])}>
+        <option value="all">全部图库</option><option value="selected" disabled={!selectedWorkIds.length}>画廊已选</option>
+        <option value="collection" disabled={!collections.length}>指定相册</option><option value="artist" disabled={!artists.length}>指定画师</option>
+      </select></label>
+      {scopeType === "collection" && <label className="organize-field">相册<select aria-label="整理相册" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
+        {collections.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select></label>}
+      {scopeType === "artist" && <label className="organize-field">画师<select aria-label="整理画师" value={artistId} onChange={(event) => setArtistId(event.target.value)}>
+        {artists.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select></label>}
+    </SettingsDisclosure>
+  </>;
+  const invalidScope = (scopeType === "selected" && !selectedWorkIds.length) || (scopeType === "artist" && !artistId) || (scopeType === "collection" && !collectionId);
+  return <div className="studio-root organize-simple">
+    <header className="topbar studio-topbar">
+      <div><h1>整理与分类</h1><p className="page-description">先找出作品，再决定怎样整理。</p></div>
+    </header>
+    {error && <AppNotice tone="error">{error}</AppNotice>}
+    {queryError && <AppNotice tone="error" onDismiss={() => setQueryError("")}>{queryError}</AppNotice>}
+    {notice && <AppNotice tone="info" onDismiss={() => setNotice("")}>{notice}</AppNotice>}
+    <SegmentedControl label="整理方式" value={tab} options={[
+      {value: "triage", label: "按探索规则排查"}, {value: "features", label: "按特征查找"}, {value: "suggestions", label: "推荐相册分类"}
+    ]} onChange={(value) => { if (!busy && !deletingWorks) setTab(value as StudioTab); }} />
+    <div className="studio-layout">
+      <section className="analysis-scope-card studio-control-deck">
+        {tab === "suggestions" && <h2>选择要整理的范围</h2>}
+        {scopeControls}
+        {tab === "triage" ? <>
+          <div className="organize-rule-summary"><strong>默认使用探索的元素规则</strong>
+            <p>复用已启用的内容、各自阈值与自定义标签。只列出命中的本地作品，处理前由你选择。</p>
+            <Button variant="ghost" size="small" onClick={onOpenProtection}>在探索调整规则</Button>
           </div>
-          <h1>整理与分类</h1>
-          <p className="page-description">
-            按标签查找作品，或让模型推荐相册分类。先预览范围，再决定如何处理。
-          </p>
-        </div>
-
-        <div className="studio-topbar-controls">
-          <SegmentedControl
-            label="整理方式"
-            value={tab}
-            options={[
-              { value: "triage", label: "按标签查找", title: "按特征标签查找并批量处理图片" },
-              { value: "suggestions", label: "推荐相册分类", title: "先运行模型分析，再确认相册分类建议" }
-            ]}
-            onChange={(val) => setTab(val as StudioTab)}
-          />
-
-          <div className="studio-engine-badge" title="当前视觉引擎驱动状态">
-            <div className="studio-engine-status-indicator" />
-            <div className="studio-engine-info">
-              <span>{status?.visionProvider ?? "准备中"}</span>
-              <strong>{status?.visionEngine ?? "视觉引擎"}</strong>
-            </div>
+          <Button variant="primary" className="studio-primary-action-btn" busy={searchingTriage} disabled={busy || invalidScope} onClick={() => void runTriageQuery()}>查找需要关注的作品</Button>
+          {ruleQuery && <div className="organize-query-coverage">
+            <p>{ruleQuery.ruleNames.length ? "本次使用：" + ruleQuery.ruleNames.join("、") : "探索元素规则均已关闭。"}</p>
+            <p>当前模型已分析 {ruleQuery.preview.cachedAssetCount} / {ruleQuery.preview.assetCount} 张图片</p>
+            {ruleQuery.preview.cachedAssetCount < ruleQuery.preview.assetCount && <Button variant="secondary" size="small" onClick={() => setTab("suggestions")}>补充图片分析</Button>}
+          </div>}
+        </> : tab === "features" ? <>
+          <div className="organize-feature-choices" aria-label="查找特征">
+            {FEATURE_PRESETS.map((preset) => <button type="button" key={preset.id} aria-pressed={activePresetId === preset.id}
+              onClick={() => setActivePresetId(preset.id)}><strong>{preset.name}</strong><small>{preset.description}</small></button>)}
           </div>
-        </div>
-      </header>
-
-      {error && <AppNotice tone="error">{error}</AppNotice>}
-      {notice && <AppNotice tone="success" onDismiss={() => setNotice("")}>{notice}</AppNotice>}
-
-      {tab === "triage" ? (
-        /* =================== TAB 1: 智能清洗与排查 (灵动排查台) =================== */
-        <div className="studio-layout">
-          {/* Left Column: Control Deck (Retains .analysis-scope-card for benchmark & smoke tests) */}
-          <section className="analysis-scope-card studio-control-deck">
-            <div className="studio-deck-header">
-              <div>
-                <p className="eyebrow">CONTROL DECK · 控制台</p>
-                <h2>排查配置与条件</h2>
-              </div>
-              <span className="studio-safe-pill" title="所有检索均为只读安全查询">🛡️ 安全沙箱</span>
-            </div>
-
-            {/* Step 1: Scan Scope */}
-            <div className="studio-section-block">
-              <span className="studio-block-label">1 · 扫描范围</span>
-              <div className="studio-scope-grid">
-                {SCOPE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    disabled={opt.disabled}
-                    className={`studio-scope-btn ${scopeType === opt.id ? "active" : ""}`}
-                    onClick={() => setScopeType(opt.id)}
-                  >
-                    <span className="studio-scope-icon">{opt.icon}</span>
-                    <span className="studio-scope-texts">
-                      <strong>{opt.label}</strong>
-                      <small>{opt.hint}</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {scopeType === "collection" && (
-                <div className="studio-subselect-frame">
-                  <span className="studio-subselect-icon">📁</span>
-                  <select
-                    className="studio-native-select"
-                    value={collectionId}
-                    onChange={(e) => setCollectionId(e.target.value)}
-                  >
-                    {collections.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {scopeType === "artist" && (
-                <div className="studio-subselect-frame">
-                  <span className="studio-subselect-icon">👤</span>
-                  <select
-                    className="studio-native-select"
-                    value={artistId}
-                    onChange={(e) => setArtistId(e.target.value)}
-                  >
-                    {artists.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {/* Step 2: Feature Presets */}
-            <div className="studio-section-block">
-              <span className="studio-block-label">2 · 目标特征</span>
-              <div className="studio-presets-grid">
-                {FEATURE_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className={`studio-preset-card ${activePresetId === preset.id ? "active" : ""}`}
-                    onClick={() => setActivePresetId(preset.id)}
-                  >
-                    <div className="studio-preset-card-top">
-                      <span className="studio-preset-card-icon">{preset.icon}</span>
-                      <div className="studio-preset-card-title-wrap">
-                        <strong>{preset.name}</strong>
-                        <small>{preset.badge}</small>
-                      </div>
-                    </div>
-                    <div className="studio-preset-tags-preview">
-                      {preset.tags.slice(0, 2).map((t) => (
-                        <span key={t} className="studio-mini-tag">{t}</span>
-                      ))}
-                      {preset.tags.length > 2 && (
-                        <span className="studio-mini-tag">+{preset.tags.length - 2}</span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                className={`studio-preset-card studio-custom-trigger ${activePresetId === "custom" ? "active" : ""}`}
-                onClick={() => setActivePresetId("custom")}
-              >
-                <div className="studio-preset-card-top">
-                  <span className="studio-preset-card-icon">🔍</span>
-                  <div className="studio-preset-card-title-wrap">
-                    <strong>自定义特征标签</strong>
-                    <small>输入任意 WD Tag 关键词自由排查</small>
-                  </div>
-                  <span className="studio-preset-badge">自由探索</span>
-                </div>
-              </button>
-
-              {activePresetId === "custom" && (
-                <div className="studio-custom-panel">
-                  <input
-                    type="text"
-                    className="studio-custom-input"
-                    placeholder="输入 Tag 英文关键词，如 cat_ears, swimsuit, monochrome"
-                    value={customTagInput}
-                    onChange={(e) => setCustomTagInput(e.target.value)}
-                  />
-                  <div className="studio-custom-hints">
-                    <span>快捷标签：</span>
-                    {POPULAR_TAG_SUGGESTIONS.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        className="studio-hint-tag-btn"
-                        onClick={() => appendCustomTag(tag)}
-                      >
-                        +{tag}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Step 3: Confidence Slider */}
-            <div className="studio-section-block">
-              <div className="studio-slider-header">
-                <span className="studio-block-label">3 · 检出阈值灵敏度</span>
-                <span className="studio-slider-value-pill">{Math.round(minConfidence * 100)}%</span>
-              </div>
-              <input
-                type="range"
-                min="0.1"
-                max="0.9"
-                step="0.05"
-                value={minConfidence}
-                onChange={(e) => setMinConfidence(Number(e.target.value))}
-                className="studio-slider-input"
-              />
-              <div className="studio-slider-hints-row">
-                <span>10% 宽松</span>
-                <span className="studio-slider-qualitative">
-                  {minConfidence < 0.3
-                    ? "宽松检出 · 覆盖面广"
-                    : minConfidence <= 0.6
-                    ? "均衡推荐 · 兼顾准度与召回"
-                    : "严格确信 · 仅高置信度"}
-                </span>
-                <span>90% 严苛</span>
-              </div>
-            </div>
-
-            {/* Action Bottom Bar */}
-            <div className="studio-deck-actions">
-              <Button
-                variant="primary"
-                className="studio-primary-action-btn"
-                busy={searchingTriage}
-                busyLabel="正在扫描排查..."
-                onClick={() => void runTriageQuery()}
-              >
-                ⚡ 开始特征排查
-              </Button>
-
-              <button
-                type="button"
-                className="studio-shield-action-btn"
-                title="将当前选择的目标特征同步加入全局探索拦截规则（不会修改本地画库）"
-                onClick={() => void addTriageTagsToBlacklist()}
-              >
-                <span className="studio-shield-icon">🛡️</span>
-                <span>同步此特征至探索拦截黑名单</span>
-              </button>
-            </div>
-          </section>
-
-          {/* Right Column: Stage Workbench */}
-          <section className="studio-stage-workbench">
-            <header className="studio-workbench-header">
-              <div className="studio-workbench-title-box">
-                <div className="studio-workbench-heading-row">
-                  <span className="studio-badge-indicator" />
-                  <h2>排查结果与画作展台</h2>
-                </div>
-                <div className="studio-results-counter">
-                  <span>共命中</span>
-                  <strong>{triageResults.length}</strong>
-                  <span>个作品</span>
-                  {selectedTriageIds.size > 0 && (
-                    <span className="studio-selected-badge">
-                      已选中 <b>{selectedTriageIds.size}</b> 项
-                      <button
-                        type="button"
-                        className="studio-badge-clear"
-                        onClick={() => setSelectedTriageIds(new Set())}
-                        title="取消全部勾选"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {triageResults.length > 0 && (
-                <div className="studio-batch-toolbar">
-                  <Button
-                    size="small"
-                    variant="ghost"
-                    className="studio-batch-btn"
-                    onClick={selectAllTriage}
-                  >
-                    {selectedTriageIds.size === triageResults.length ? "取消全选" : `全选 (${triageResults.length})`}
-                  </Button>
-
-                  <div className="studio-batch-select-wrap">
-                    <select
-                      className="studio-batch-select"
-                      value=""
-                      disabled={selectedTriageIds.size === 0 || collections.length === 0}
-                      onChange={(e) => void assignTriageToCollection(e.target.value)}
-                    >
-                      <option value="">📁 批量归档至相册…</option>
-                      {collections.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <Button
-                    size="small"
-                    variant="danger-soft"
-                    className="studio-batch-delete-btn"
-                    disabled={selectedTriageIds.size === 0}
-                    onClick={() => void prepareTriageDeletion()}
-                  >
-                    🗑️ 移入回收站 ({selectedTriageIds.size})
-                  </Button>
-                </div>
-              )}
-            </header>
-
-            {!hasSearched ? (
-              <div className="studio-empty-hero">
-                <div className="studio-empty-orb">
-                  <span className="studio-empty-orb-icon">🧭</span>
-                </div>
-                <h3>配置参数并开启特征排查</h3>
-                <p>
-                  选择左侧的扫描范围与特征预设，点击“开始特征排查”即可快速检索目标画作。
-                  <br />
-                  检索基于本地离线视觉数据，安全且零网络开销，绝不更改您的原始图片。
-                </p>
-                <div className="studio-workflow-steps">
-                  <div className="studio-step-node">
-                    <span>1</span>
-                    <em>选择范围</em>
-                  </div>
-                  <div className="studio-step-connector">⋯</div>
-                  <div className="studio-step-node">
-                    <span>2</span>
-                    <em>选定特征</em>
-                  </div>
-                  <div className="studio-step-connector">⋯</div>
-                  <div className="studio-step-node">
-                    <span>3</span>
-                    <em>批量归档 / 清理</em>
-                  </div>
-                </div>
-              </div>
-            ) : triageResults.length === 0 ? (
-              <div className="studio-empty-hero">
-                <div className="studio-empty-orb">
-                  <span className="studio-empty-orb-icon">🍃</span>
-                </div>
-                <h3>未发现符合目标特征的画作</h3>
-                <p>
-                  当前检索范围内没有图片达到设定特征的 {Math.round(minConfidence * 100)}% 置信度。
-                  <br />
-                  可以适当调低灵敏度阈值重试，或先在「推荐相册分类」中为图库进行一次分析。
-                </p>
-              </div>
-            ) : (
-              <div className="studio-cards-grid">
-                {triageResults.map((item) => {
-                  const isChecked = selectedTriageIds.has(item.work.id);
-                  const coverPath = item.work.coverAsset?.thumbnailPath ?? item.work.coverAsset?.path ?? "";
-                  const imageUrl = coverPath ? `sanctuary-image://local/${encodeURIComponent(coverPath)}` : "";
-                  const topTag = item.matchedTags[0];
-
-                  return (
-                    <article
-                      key={item.work.id}
-                      className={`studio-work-card ${isChecked ? "selected" : ""}`}
-                      onClick={() => toggleSelectTriageItem(item.work.id)}
-                    >
-                      <div className="studio-card-media">
-                        {imageUrl ? (
-                          <img src={imageUrl} alt="" loading="lazy" />
-                        ) : (
-                          <div className="work-cover-missing">◇</div>
-                        )}
-                        {topTag && (
-                          <span className="studio-card-top-badge">
-                            {topTag.tag.replaceAll("_", " ")} {Math.round(topTag.confidence * 100)}%
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          className="studio-card-checkbox"
-                          aria-label={isChecked ? "取消勾选" : "勾选"}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleSelectTriageItem(item.work.id);
-                          }}
-                        >
-                          {isChecked && <span className="studio-check-symbol">✓</span>}
-                        </button>
-                      </div>
-
-                      <div className="studio-card-info">
-                        <strong className="studio-card-title" title={item.work.title}>
-                          {item.work.title}
-                        </strong>
-                        <small className="studio-card-artist" title={item.work.artistName ?? ""}>
-                          {item.work.artistName ?? "本地画作"}
-                        </small>
-
-                        <div className="studio-card-tags">
-                          {item.matchedTags.map((mt) => (
-                            <span key={mt.tag} className="studio-card-tag-pill">
-                              {mt.tag.replaceAll("_", " ")} <em>{Math.round(mt.confidence * 100)}%</em>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </div>
-      ) : (
-        /* =================== TAB 2: 分类打标建议 (模型流水线) =================== */
-        <div className="studio-layout">
-          {/* Left Column: Scope & Estimator Deck (Retains .analysis-scope-card) */}
-          <section className="analysis-scope-card studio-control-deck">
-            <div className="studio-deck-header">
-              <div>
-                <p className="eyebrow">PIPELINE DECK · 任务分发</p>
-                <h2>选择要整理的范围</h2>
-              </div>
-              <span className="studio-safe-pill">模型按需启动</span>
-            </div>
-
-            <div className="studio-section-block">
-              <span className="studio-block-label">1 · 分析范围</span>
-              <div className="studio-scope-grid">
-                {SCOPE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    disabled={opt.disabled}
-                    className={`studio-scope-btn ${scopeType === opt.id ? "active" : ""}`}
-                    onClick={() => setScopeType(opt.id)}
-                  >
-                    <span className="studio-scope-icon">{opt.icon}</span>
-                    <span className="studio-scope-texts">
-                      <strong>{opt.label}</strong>
-                      <small>{opt.hint}</small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              {scopeType === "collection" && (
-                <div className="studio-subselect-frame">
-                  <span className="studio-subselect-icon">📁</span>
-                  <select
-                    className="studio-native-select"
-                    value={collectionId}
-                    onChange={(e) => setCollectionId(e.target.value)}
-                  >
-                    {collections.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {scopeType === "artist" && (
-                <div className="studio-subselect-frame">
-                  <span className="studio-subselect-icon">👤</span>
-                  <select
-                    className="studio-native-select"
-                    value={artistId}
-                    onChange={(e) => setArtistId(e.target.value)}
-                  >
-                    {artists.map((a) => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <div className="studio-deck-actions">
-              <Button
-                busy={busy}
-                busyLabel="正在测算…"
-                disabled={(scopeType === "selected" && !selectedWorkIds.length) || (scopeType === "artist" && !artistId) || (scopeType === "collection" && !collectionId)}
-                onClick={() => void previewScope()}
-                className="studio-preview-action-btn"
-              >
-                📊 测算任务工作量
-              </Button>
-            </div>
-
-            {preview && (
+          <SettingsDisclosure title="高级查找选项" description="自定义标签与精确阈值。" name="organize-features">
+            <label className="organize-field">查找方式<select aria-label="特征查找方式" value={activePresetId} onChange={(event) => setActivePresetId(event.target.value)}>
+              {FEATURE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}<option value="custom">自定义标签</option>
+            </select></label>
+            {activePresetId === "custom" && <label className="organize-field">识别标签<input aria-label="自定义特征标签" placeholder="英文标签，逗号分隔" value={customTagInput} onChange={(event) => setCustomTagInput(event.target.value)} /></label>}
+            <label className="organize-field">检出阈值 {Math.round(minConfidence * 100)}%<input aria-label="特征检出阈值" type="range" min="0.1" max="0.9" step="0.05" value={minConfidence} onChange={(event) => setMinConfidence(Number(event.target.value))} /></label>
+            <p className="protection-section-hint">这些参数只影响本次查找。阈值越低，越容易找到不确定的结果。</p>
+            <Button variant="secondary" size="small" disabled={busy} onClick={() => void addTriageTagsToBlacklist()}>将当前特征加入探索规则</Button>
+          </SettingsDisclosure>
+          <Button variant="primary" className="studio-primary-action-btn" busy={searchingTriage} disabled={busy || invalidScope} onClick={() => void runTriageQuery()}>查找作品</Button>
+        </> : <>
+          <p className="protection-section-hint">先预览作品数量，再决定是否运行本地分析。完成后勾选想采用的相册建议。</p>
+          <Button className="studio-preview-action-btn" busy={busy} disabled={invalidScope} onClick={() => void previewScope()}>预览分析范围</Button>
+                      {preview && JSON.stringify(preview.scope) === JSON.stringify(scope) && (
               <div className="studio-estimator-card">
                 <div className="studio-estimator-header">
                   <span className="studio-estimator-icon">⚡</span>
@@ -836,26 +445,28 @@ export function AnalysisView({
                   variant="primary"
                   busy={busy}
                   busyLabel="正在创建任务…"
-                  disabled={preview.assetCount === 0}
+                  disabled={preview.assetCount === 0 || !status?.visionReady || !status.modelBacked}
                   onClick={() => void startJob()}
                   className="studio-launch-action-btn"
                 >
-                  🚀 启动分类整理流水线
+                  开始图片分析
                 </Button>
+                {(!status?.visionReady || !status.modelBacked) && <Button variant="secondary" size="small" onClick={onOpenProtection}>检查识别模型</Button>}
               </div>
             )}
-          </section>
 
-          {/* Right Column: Job Center & Suggestions */}
+        </>}
+      </section>
+      {tab === "suggestions" ? <>          {/* Right Column: Job Center & Suggestions */}
           <section className="studio-stage-workbench">
             <header className="studio-workbench-header">
               <div className="studio-workbench-title-box">
                 <div className="studio-workbench-heading-row">
                   <span className="studio-badge-indicator" />
-                  <h2>任务中心与分类打标</h2>
+                  <h2>分析任务与相册建议</h2>
                 </div>
                 <span className="studio-workbench-sub">
-                  分析结果与下载信任完全分离；未勾选的建议仅留作特征记录。
+                  分析结束后，由你选择采用哪些相册建议。
                 </span>
               </div>
             </header>
@@ -868,9 +479,9 @@ export function AnalysisView({
                   </div>
                   <h3>还没有整理任务</h3>
                   <p>
-                    在左侧选择画库范围并预览测算后，即可一键下发后台分析流水线。
+                    先预览分析范围，确认数量后再开始。
                     <br />
-                    所有任务不会在后台静默偷跑，完全透明可控。
+                    分析进度会保存；运行中的任务可以取消。
                   </p>
                 </div>
               ) : (
@@ -928,7 +539,7 @@ export function AnalysisView({
                           </div>
 
                           {job.suggestions.length === 0 ? (
-                            <p className="studio-no-suggestions">没有达到 55% 置信度的通用聚类标签建议。</p>
+                            <p className="studio-no-suggestions">这次分析没有生成足够明确的相册建议。</p>
                           ) : (
                             <div className="studio-suggestions-grid">
                               {job.suggestions.map((suggestion) => {
@@ -952,9 +563,7 @@ export function AnalysisView({
                                     />
                                     <div className="studio-suggestion-info">
                                       <strong>{suggestion.label.replaceAll("_", " ")}</strong>
-                                      <small>
-                                        {suggestion.workIds.length} 个作品 · 平均 {Math.round(suggestion.averageConfidence * 100)}%
-                                      </small>
+                                  <small>{suggestion.workIds.length} 个作品</small>
                                     </div>
                                   </label>
                                 );
@@ -981,14 +590,182 @@ export function AnalysisView({
               )}
             </div>
           </section>
-        </div>
-      )}
+</> : <>          {/* Right Column: Stage Workbench */}
+          <section className="studio-stage-workbench">
+            <header className="studio-workbench-header">
+              <div className="studio-workbench-title-box">
+                <div className="studio-workbench-heading-row">
+                  <span className="studio-badge-indicator" />
+                  <h2>查找结果</h2>
+                </div>
+                <div className="studio-results-counter">
+                  <span>共命中</span>
+                  <strong>{triageResults.length}</strong>
+                  <span>个作品</span>
+                  {selectedTriageIds.size > 0 && (
+                    <span className="studio-selected-badge">
+                      已选中 <b>{selectedTriageIds.size}</b> 项
+                      <button
+                        type="button"
+                        className="studio-badge-clear"
+                        onClick={() => setSelectedTriageIds(new Set())}
+                        title="取消全部勾选"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  )}
+                </div>
+              </div>
 
+              {triageResults.length > 0 && (
+                <div className="studio-batch-toolbar">
+                  <Button
+                    size="small"
+                    variant="ghost"
+                    className="studio-batch-btn"
+                    disabled={busy}
+                    onClick={selectAllTriage}
+                  >
+                    {allVisibleSelected ? "取消全选" : `选择已展示的 ${selectableTriageIds.size} 件`}
+                  </Button>
+
+                  <div className="studio-batch-select-wrap">
+                    <select
+                      className="studio-batch-select"
+                      value=""
+                      disabled={busy || selectedTriageIds.size === 0 || collections.length === 0}
+                      onChange={(e) => void assignTriageToCollection(e.target.value)}
+                    >
+                      <option value="">📁 批量归档至相册…</option>
+                      {collections.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <Button
+                    size="small"
+                    variant="danger-soft"
+                    className="studio-batch-delete-btn"
+                    disabled={busy || selectedTriageIds.size === 0}
+                    onClick={() => void prepareTriageDeletion()}
+                  >
+                    🗑️ 移入回收站 ({selectedTriageIds.size})
+                  </Button>
+                </div>
+              )}
+              {selectedTriageIds.size >= TRIAGE_SELECTION_LIMIT && <p className="organize-scope-summary">每批最多选择 500 件，请先处理这一批，或缩小整理范围。</p>}
+            </header>
+
+            {!hasSearched ? (
+              <div className="studio-empty-hero">
+                <div className="studio-empty-orb">
+                  <span className="studio-empty-orb-icon">🧭</span>
+                </div>
+                <h3>{tab === "triage" ? "用你的探索规则检查图库" : "找出同一类作品"}</h3>
+                <p>
+                  {tab === "triage" ? "点击查找，先看看哪些已分析作品命中了当前元素规则。" : "选择一种特征，点击查找；需要精确调整时再展开高级选项。"}
+                  <br />
+                  查找使用已有图片分析。你选择处理方式后才会改变图库。
+                </p>
+                <div className="studio-workflow-steps">
+                  <div className="studio-step-node">
+                    <span>1</span>
+                    <em>选择范围</em>
+                  </div>
+                  <div className="studio-step-connector">⋯</div>
+                  <div className="studio-step-node">
+                    <span>2</span>
+                    <em>查看结果</em>
+                  </div>
+                  <div className="studio-step-connector">⋯</div>
+                  <div className="studio-step-node">
+                    <span>3</span>
+                    <em>选择处理方式</em>
+                  </div>
+                </div>
+              </div>
+            ) : triageResults.length === 0 ? (
+              <div className="studio-empty-hero">
+                <div className="studio-empty-orb">
+                  <span className="studio-empty-orb-icon">🍃</span>
+                </div>
+                <h3>{ruleQuery?.ruleNames.length === 0 ? "还没有启用探索元素规则" : ruleQuery && ruleQuery.preview.cachedAssetCount < ruleQuery.preview.assetCount ? "已分析的图片中没有命中" : "没有找到符合条件的作品"}</h3>
+                <p>
+                  {ruleQuery ? ruleQuery.preview.assetCount === 0 ? "这个范围还没有可分析的图片。" : ruleQuery.preview.cachedAssetCount < ruleQuery.preview.assetCount ? "仍有图片没有当前模型的分析结果；补充分析后再来查找。" : "当前已分析图片没有命中所选规则。" : "已分析图片没有达到本次查找条件。"}
+                  <br />
+                  {tab === "features" && "也可以换一种特征，或到推荐相册分类补充图片分析。"}
+                </p>
+              </div>
+            ) : (
+              <div className="studio-cards-grid">
+                {triageResults.slice(0, resultLimit).map((item) => {
+                  const isChecked = selectedTriageIds.has(item.work.id);
+                  const coverPath = item.work.coverAsset?.thumbnailPath ?? item.work.coverAsset?.path ?? "";
+                  const imageUrl = coverPath ? `sanctuary-image://local/${encodeURIComponent(coverPath)}` : "";
+                  const topTag = item.matchedTags[0];
+
+                  return (
+                    <article
+                      key={item.work.id}
+                      className={`studio-work-card ${isChecked ? "selected" : ""}`}
+                      onClick={() => { if (!busy) toggleSelectTriageItem(item.work.id); }}
+                    >
+                      <div className="studio-card-media">
+                        {imageUrl ? (
+                          <img src={imageUrl} alt="" loading="lazy" />
+                        ) : (
+                          <div className="work-cover-missing">◇</div>
+                        )}
+                        {topTag && (
+                          <span className="studio-card-top-badge">
+                            {tab === "triage" ? "命中探索元素规则" : "匹配所选特征"}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="studio-card-checkbox"
+                          aria-label={isChecked ? "取消勾选" : "勾选"}
+                          disabled={busy || (!isChecked && selectedTriageIds.size >= TRIAGE_SELECTION_LIMIT)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelectTriageItem(item.work.id);
+                          }}
+                        >
+                          {isChecked && <span className="studio-check-symbol">✓</span>}
+                        </button>
+                      </div>
+
+                      <div className="studio-card-info">
+                        <strong className="studio-card-title" title={item.work.title}>
+                          {item.work.title}
+                        </strong>
+                        <small className="studio-card-artist" title={item.work.artistName ?? ""}>
+                          {item.work.artistName ?? "本地画作"}
+                        </small>
+
+                        <details className="studio-card-tags" onClick={(event) => event.stopPropagation()}><summary>识别依据</summary>
+                          {item.matchedTags.map((mt) => (
+                            <span key={mt.tag} className="studio-card-tag-pill">
+                              {mt.tag.replaceAll("_", " ")} <em>{Math.round(mt.confidence * 100)}%</em>
+                            </span>
+                          ))}
+                        </details>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+            {triageResults.length > resultLimit && <Button variant="secondary" disabled={busy} onClick={() => setResultLimit((limit) => limit + 40)}>显示更多作品</Button>}
+          </section></>}
+    </div>
       {/* Work Deletion Dialog for Triage */}
       {deletionPreview && (
         <DialogOverlay busy={deletingWorks} onClose={() => setDeletionPreview(null)}>
           <section className="dialog-surface work-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="triage-delete-title">
-            <p className="eyebrow">BATCH DELETE PREVIEW</p>
+            <p className="eyebrow">处理预览</p>
             <h2 id="triage-delete-title">确认处理排查出的 {deletionPreview.items.length} 个作品？</h2>
             <div className="work-delete-summary">
               <div><strong>{deletionPreview.managedWorkCount}</strong><span>托管作品</span><small>文件移至 Windows 回收站</small></div>
@@ -1009,8 +786,7 @@ export function AnalysisView({
           </section>
         </DialogOverlay>
       )}
-    </div>
-  );
+    </div>;
 }
 
 function statusLabel(status: AnalysisJob["status"]): string {

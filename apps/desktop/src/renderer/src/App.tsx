@@ -18,6 +18,7 @@ import { ExploreView, initialExploreState } from "./ExploreView";
 import { AppSidebar, type ActiveView, type AppStatus } from "./AppSidebar";
 import { GalleryView, type GalleryMode } from "./GalleryView";
 import type { SettingsSection } from "./app-navigation";
+import type { HomeDestination } from "./HomeView";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
 import { useLibraryQuery } from "./useLibraryQuery";
 import { useGalleryDirectory } from "./useGalleryDirectory";
@@ -28,6 +29,7 @@ import { AppNotice } from "./AppNotice";
 import { applyWorkPreset, clearWorkCollectionFilters, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
 
 const SettingsView = lazy(() => import("./SettingsView").then((module) => ({ default: module.SettingsView })));
+const HomeView = lazy(() => import("./HomeView").then((module) => ({ default: module.HomeView })));
 const ExploreProtectionPanel = lazy(() => import("./ExploreProtectionPanel").then((module) => ({ default: module.ExploreProtectionPanel })));
 const AnalysisView = lazy(() => import("./AnalysisView").then((module) => ({ default: module.AnalysisView })));
 const InspirationView = lazy(() => import("./InspirationView").then((module) => ({ default: module.InspirationView })));
@@ -41,7 +43,7 @@ const DEFAULT_APPEARANCE: AppearancePreferences = {
 };
 
 export function App() {
-  const [activeView, setActiveViewState] = useState<ActiveView>("gallery");
+  const [activeView, setActiveViewState] = useState<ActiveView>("home");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("library");
   const mainRef = useRef<HTMLElement>(null);
   const [galleryScope, setGalleryScopeState] = useState<GalleryScope | null>(null);
@@ -58,7 +60,7 @@ export function App() {
   const nativeFocusPending = useRef(false);
   const blockingAppOverlay = useRef(false);
   const scrollPositions = useRef(new Map<string, number>());
-  const previousView = useRef<ActiveView>("gallery");
+  const previousView = useRef<ActiveView>("home");
   const [collectionEditor, setCollectionEditor] = useState<CollectionRecord | "new" | null>(null);
   const [collectionSaving, setCollectionSaving] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreferences>(DEFAULT_APPEARANCE);
@@ -189,9 +191,9 @@ export function App() {
       else if (key === "f" && activeView === "gallery" && galleryMode === "flat") {
         const input = document.querySelector<HTMLInputElement>(".work-search input");
         if (input) { event.preventDefault(); input.focus(); input.select(); }
-      } else if (["1", "2", "3", "4"].includes(key)) {
+      } else if (["0", "1", "2", "3", "4"].includes(key)) {
         event.preventDefault();
-        setActiveView(({ "1": "gallery", "2": "explore", "3": "inspiration", "4": "settings" } as const)[key as "1" | "2" | "3" | "4"]);
+        setActiveView(({ "0": "home", "1": "gallery", "2": "explore", "3": "inspiration", "4": "settings" } as const)[key as "0" | "1" | "2" | "3" | "4"]);
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -310,9 +312,10 @@ export function App() {
     setBusy(true);
     setError("");
     try {
-      await window.sanctuary.importImages();
+      const imported = await window.sanctuary.importImages();
       await refreshLibrary();
       setThumbnailRevision((current) => current + 1);
+      if (imported.length && navigationState.current.activeView === "home") setActiveView("gallery");
     } catch (caught) {
       showError(caught);
     } finally {
@@ -519,6 +522,7 @@ export function App() {
   }
 
   const quickActions: QuickAction[] = [
+    { id: "home", label: "回到开始", description: "选择今天想做的事", shortcut: "Ctrl 0", keywords: ["首页", "引导"], onSelect: () => setActiveView("home") },
     { id: "gallery", label: "打开图库", description: "继续浏览刚才的位置", shortcut: "Ctrl 1", keywords: ["浏览", "作品"], onSelect: openGallery },
     { id: "favorites", label: "喜欢的作品", description: "浏览图库中标记喜欢的作品", keywords: ["收藏", "喜爱"], onSelect: () => openWorkPreset("favorites") },
     { id: "recent", label: "最近浏览", description: "找到看过的作品，继续上次阅读", keywords: ["历史", "继续", "阅读"], onSelect: () => openWorkPreset("recent") },
@@ -528,7 +532,7 @@ export function App() {
     } },
     { id: "import", label: "导入本地图片", description: "将图片加入图库", shortcut: "Ctrl O", disabled: busy, disabledReason: "正在导入，请稍候", keywords: ["添加", "文件"], onSelect: importImages },
     { id: "albums", label: "浏览相册", description: "管理相册与组合视图", keywords: ["分类", "画集"], onSelect: () => { setActiveView("gallery"); void changeGalleryMode("collections"); } },
-    { id: "organize", label: "整理与分类", description: "按标签查找、推荐相册分类", keywords: ["分析", "标签"], onSelect: () => { setAnalysisWorkIds([]); setActiveView("organize"); } },
+    { id: "organize", label: "整理与分类", description: "按探索规则排查、查找特征、推荐相册分类", keywords: ["分析", "标签"], onSelect: () => { setAnalysisWorkIds([]); setActiveView("organize"); } },
     { id: "explore", label: "打开探索", description: "浏览 Pixiv 并保存作品", shortcut: "Ctrl 2", keywords: ["下载", "收藏"], onSelect: () => setActiveView("explore") },
     { id: "protection", label: "浏览保护", description: "在探索调整拦截内容与识别模型", keywords: ["规则", "过滤", "阈值"], onSelect: openProtection },
     { id: "creation", label: "打开创作", description: "聊图、写设定与提示词", shortcut: "Ctrl 3", keywords: ["对话", "写作"], onSelect: () => setActiveView("inspiration") },
@@ -583,7 +587,17 @@ export function App() {
           </nav>
         )}
         <Suspense fallback={<section className="page-loading" role="status">正在打开…</section>}>
-        {activeView === "gallery" ? (
+        {activeView === "home" ? (
+          <>
+          {error && <AppNotice tone="error">{error}</AppNotice>}
+          <HomeView workCount={workResult.total} importing={busy} onImport={importImages}
+            onSelect={(destination: HomeDestination) => {
+              if (destination === "gallery") { void openGallery(); return; }
+              if (destination === "organize") setAnalysisWorkIds([]);
+              setActiveView(destination);
+            }} />
+          </>
+        ) : activeView === "gallery" ? (
           <GalleryView
             collectionSummaries={directory.collectionSummaries}
             artistSummaries={directory.artistSummaries}
@@ -656,6 +670,11 @@ export function App() {
             status={status}
             error={error}
             onApplied={refreshLibrary}
+            onOpenProtection={openProtection}
+            onRulesChanged={async () => {
+              const [settings, groups] = await Promise.all([window.sanctuary.listFilterSettings(), window.sanctuary.listCustomElementGroups()]);
+              setFilterSettings(settings); setCustomElementGroups(groups);
+            }}
             onError={showError}
           />
         ) : activeView === "inspiration" ? (

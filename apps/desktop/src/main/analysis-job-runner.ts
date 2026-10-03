@@ -12,7 +12,7 @@ export interface AnalysisJobStore {
   isAnalysisCancellationRequested(jobId: string): boolean;
   startAnalysisJob(jobId: string): boolean;
   claimNextAnalysisItem(jobId: string): AnalysisQueueItem | null;
-  getCachedAssetAnalysis(assetId: string, assetUpdatedAt: string, engine: string): VisionAssessment | null;
+  getCachedAssetAnalysis(assetId: string, assetUpdatedAt: string, engine: string, engineVersion?: string): VisionAssessment | null;
   getCachedVisionEvaluation?(
     assetId: string,
     kind: string,
@@ -29,6 +29,7 @@ export interface AnalysisJobStore {
 
 export interface AnalysisVisionClient {
   engine: string;
+  engineVersion?: string;
   classify(path: string, timeoutMs?: number): Promise<VisionAssessment>;
   computeTechnicalProfile?(path: string, timeoutMs?: number): Promise<TechnicalProfilePayload>;
 }
@@ -113,7 +114,7 @@ export async function runAnalysisJob(jobId: string, store: AnalysisJobStore, cli
           store.failAnalysisItem(item, messageFrom(error));
         }
       } else {
-        const cached = store.getCachedAssetAnalysis(item.assetId, item.assetUpdatedAt, client.engine);
+        const cached = store.getCachedAssetAnalysis(item.assetId, item.assetUpdatedAt, client.engine, client.engineVersion);
         if (cached) {
           store.completeAnalysisItem(item, cached, true);
           continue;

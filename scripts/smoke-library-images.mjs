@@ -90,6 +90,11 @@ try {
   try {
     const result = await cdp.evaluate(`(async () => {
       const started = performance.now();
+      while (!document.querySelector('[data-nav="gallery"]')) {
+        if (performance.now() - started > 10000) throw new Error("navigation did not render");
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      document.querySelector('[data-nav="gallery"]').click();
       let image;
       while (!(image = document.querySelector(".work-ambient-cover")) || !image.currentSrc) {
         if (performance.now() - started > 10000) {

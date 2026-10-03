@@ -4,12 +4,16 @@ import type { IpcMain } from "electron";
 import type { LibraryDatabase } from "@sanctuary/database";
 import {
   getVisionSuite,
+  buildElementFilterRules,
+  isCustomElementGroup,
   isAnalysisScope,
   validateDimensionScores,
   type AnalysisApplyResult,
   type AnalysisJob,
   type AnalysisScopePreview,
   type ExternalVisionPublicConfig,
+  type FilterRule,
+  type ExploreTriageResult,
   type VisionEvaluationRequest,
   type VisionEvaluationResult
 } from "@sanctuary/domain";
@@ -27,12 +31,13 @@ export function registerAnalysisIpc(
   vision: VisionClient,
   scheduler: AnalysisJobScheduler,
   externalVisionService?: ExternalVisionService,
-  localArtCriticService?: LocalArtCriticService
+  localArtCriticService?: LocalArtCriticService,
+  explorationRules?: () => FilterRule[]
 ): void {
   ipc.handle("analysis:preview", (_event, value: unknown, engineValue?: unknown): AnalysisScopePreview => {
     if (!isAnalysisScope(value)) throw new Error("Invalid analysis scope");
     const engine = typeof engineValue === "string" && engineValue ? engineValue : vision.engine;
-    return database.previewAnalysisScope(value, engine);
+    return database.previewAnalysisScope(value, engine, engine === vision.engine ? vision.engineVersion : undefined);
   });
 
   ipc.handle("analysis:create", (_event, value: unknown, engineValue?: unknown): AnalysisJob => {
@@ -100,6 +105,19 @@ export function registerAnalysisIpc(
       : 0.4;
     const safeScope = isAnalysisScope(scope) ? scope : undefined;
     return database.queryWorksByTags(tags, safeConfidence, safeScope);
+  });
+
+  ipc.handle("analysis:triage-explore-rules", (_event, scope: unknown): ExploreTriageResult => {
+    if (!isAnalysisScope(scope)) throw new Error("无效的整理范围");
+    const storedGroups = database.getPreference<unknown>("filters.custom-groups");
+    const rules = (explorationRules?.() ?? buildElementFilterRules(database.listElementFilterSettings(),
+      Array.isArray(storedGroups) ? storedGroups.filter(isCustomElementGroup) : []))
+      .filter((rule) => rule.enabled);
+    return {
+      items: database.queryWorksByFilterRules(rules, scope, { engine: vision.engine, engineVersion: vision.engineVersion }),
+      preview: database.previewAnalysisScope(scope, vision.engine, vision.engineVersion),
+      ruleNames: [...new Set(rules.map((rule) => rule.name.split("：")[0]!))]
+    };
   });
 
   // Vision & External AI Radar Handlers

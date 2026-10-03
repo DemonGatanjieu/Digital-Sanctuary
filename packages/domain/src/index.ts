@@ -455,6 +455,12 @@ export interface TriageQueryResultItem {
   matchedTags: Array<{ tag: string; confidence: number }>;
 }
 
+export interface ExploreTriageResult {
+  items: TriageQueryResultItem[];
+  preview: AnalysisScopePreview;
+  ruleNames: string[];
+}
+
 export const ELEMENT_BLACKLIST_GROUPS: ElementBlacklistGroup[] = [
   {
     id: "guro",

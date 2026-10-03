@@ -1,0 +1,17 @@
+.home-view { max-width: 1060px; margin: 0 auto; padding: clamp(20px, 5vh, 60px) 0; }
+.home-heading { margin-bottom: 30px; }
+.home-heading h1 { margin: 8px 0 12px; font-size: clamp(28px, 3.6vw, 44px); color: var(--ds-text-heading); }
+.home-task-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.home-task-card { display: flex; align-items: center; gap: 18px; min-width: 0; min-height: 146px; padding: 24px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-xl); background: var(--ds-bg-card); color: var(--ds-text-heading); text-align: left; cursor: pointer; box-shadow: var(--ds-shadow-xs); transition: border-color var(--ds-transition-fast), box-shadow var(--ds-transition-fast); }
+.home-task-card:hover, .home-task-card:focus-visible { border-color: var(--ds-primary); box-shadow: var(--ds-shadow-md); }
+.home-task-card:focus-visible { outline: 2px solid var(--ds-primary); outline-offset: 3px; }
+.home-task-symbol { display: grid; place-items: center; flex: 0 0 48px; height: 48px; border-radius: var(--ds-radius-lg); background: var(--ds-primary-subtle); color: var(--ds-primary); font-size: 28px; }
+.home-task-copy { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.home-task-copy strong { font-size: 18px; }
+.home-task-copy small { color: var(--ds-text-secondary); font-size: 13px; line-height: 1.6; }
+.home-task-arrow { margin-left: auto; color: var(--ds-primary); }
+.home-library-entry { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 14px; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--ds-border-light); }
+.home-library-entry p { color: var(--ds-text-secondary); font-size: 13px; }
+.home-library-entry .ui-button--secondary { color: var(--ds-text-heading); background: var(--ds-bg-card); }
+@media (max-width: 980px) { .home-view { padding: 16px 0; } .home-heading { margin-bottom: 20px; } .home-task-card { min-height: 136px; padding: 18px; gap: 12px; } .home-task-symbol { flex-basis: 36px; height: 40px; font-size: 24px; } .home-task-copy strong { font-size: 16px; } }
+@media (max-width: 720px) { .home-task-grid { grid-template-columns: 1fr; } .home-task-card { min-height: 104px; } }

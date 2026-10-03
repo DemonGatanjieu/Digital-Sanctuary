@@ -130,9 +130,108 @@ try {
       checks.push({ name, ...metrics });
     }
 
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    await waitFor("document.querySelectorAll('.home-task-card').length === 4");
     assert.deepEqual(await cdp.evaluate("Array.from(document.querySelectorAll('.sidebar nav button')).map(el => el.dataset.nav)"),
-      ["gallery", "explore", "inspiration", "settings"]);
+      ["home", "gallery", "explore", "inspiration", "settings"]);
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
+    await checkLayout("home-1280", true);
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width: 900, height: 620, deviceScaleFactor: 1, mobile: false });
+    await checkLayout("home-900", true);
+    await click('[data-home-task="organize"]');
+    await waitFor("document.querySelector('.studio-root')?.innerText.includes('默认使用探索的元素规则')");
+    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.studio-root input[type=range]'))"), false);
+    assert.equal(await cdp.evaluate("Boolean(document.querySelector('[aria-label=\"自定义特征标签\"]'))"), false);
+    assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.listAnalysisJobs()).length)()"), 0);
+    await click('.studio-primary-action-btn');
+    await waitFor("document.querySelector('.organize-query-coverage')?.innerText.includes('0 / 1')");
+    assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.listAnalysisJobs()).length)()"), 0);
+    assert.equal(await cdp.evaluate("document.querySelector('.studio-empty-hero h3').textContent"), "已分析的图片中没有命中");
+    await checkLayout("organize-simple-rules-900", true);
+    assert.ok(await cdp.evaluate("document.querySelector('.studio-primary-action-btn').getBoundingClientRect().bottom <= innerHeight"), "default organize action is below the first screen");
+    // Controlled results cover UI races; the default empty query above uses production SQLite/IPC.
+    const triageWork = await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({limit:1})).items[0])()");
+    await mainInspector.evaluate(`(() => {
+      const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain;
+      const state = globalThis.__organizeSmoke = { originals: new Map(), queryCalls: [], tagCalls: [], holdNext:false, failNext:false,
+        failAssignmentOnce:false, release:null, reply:{items:[{work:${JSON.stringify(triageWork)},matchedTags:[{tag:'blood',confidence:.88}]}],
+        preview:{scope:{type:'all'},workCount:1,assetCount:1,cachedAssetCount:1},ruleNames:['血腥']} };
+      for (const channel of ['analysis:triage-explore-rules','analysis:triage-query','collections:add-work']) {
+        const original = ipc._invokeHandlers.get(channel); state.originals.set(channel,original); ipc.removeHandler(channel);
+        ipc.handle(channel, async (...args) => {
+          if (channel === 'collections:add-work' && state.failAssignmentOnce) { state.failAssignmentOnce=false; throw Error('受控入册失败'); }
+          if (channel === 'analysis:triage-query') state.tagCalls.push(args[1]);
+          if (channel !== 'analysis:triage-explore-rules') return original(...args);
+          state.queryCalls.push(args[1]);
+          const response = state.reply ?? await original(...args);
+          if (state.failNext) { state.failNext=false; throw Error('受控排查失败'); }
+          if (state.holdNext) { state.holdNext=false; await new Promise(done => { state.release=()=>{state.release=null;done();}; }); }
+          return response;
+        });
+      }
+    })()`);
+    try {
+      await click('.studio-primary-action-btn');
+      await waitFor("document.querySelectorAll('.studio-work-card').length === 1");
+      await click('.studio-card-checkbox');
+      await click('.studio-batch-delete-btn');
+      await waitFor("Boolean(document.querySelector('.work-delete-dialog'))");
+      assert.equal(await cdp.evaluate("document.querySelector('.work-delete-dialog').textContent.includes('仅移除索引')"), true);
+      await click('.work-delete-dialog footer button:first-child');
+      await waitFor("!document.querySelector('.work-delete-dialog')");
+      assert.ok(await cdp.evaluate("window.sanctuary.getWork('fixture-work')"), "cancelled deletion changed the library");
+      await mainInspector.evaluate("__organizeSmoke.failAssignmentOnce=true");
+      await fill('.studio-batch-select', 'fixture-collection');
+      await waitFor("document.querySelector('.app-notice')?.textContent.includes('1 件失败')");
+      assert.equal(await cdp.evaluate("document.querySelectorAll('.studio-work-card.selected').length"), 1);
+      await fill('.studio-batch-select', 'fixture-collection');
+      await waitFor("document.querySelector('.app-notice')?.textContent.includes('已将 1 件作品') && !document.querySelector('.studio-work-card.selected')");
+      await cdp.evaluate("window.sanctuary.removeWorkFromCollection('fixture-work','fixture-collection')");
+      await mainInspector.evaluate("__organizeSmoke.holdNext=true");
+      await click('.studio-primary-action-btn');
+      await waitFor("Boolean(__organizeSmoke.release)", mainInspector);
+      await cdp.evaluate("Array.from(document.querySelectorAll('.analysis-scope-card button')).find(button=>button.textContent.includes('更换整理范围')).click()");
+      await fill('[aria-label="整理范围"]', 'collection');
+      await waitFor("document.querySelector('.organize-scope-summary').textContent.includes('练习相册')");
+      await mainInspector.evaluate("__organizeSmoke.release(); __organizeSmoke.reply=null; __organizeSmoke.failNext=true");
+      await waitFor("!document.querySelector('.studio-primary-action-btn').disabled");
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.organize-query-coverage'))"), false, "old-scope response returned after configuration changed");
+      await click('.studio-primary-action-btn');
+      await waitFor("document.querySelector('.app-notice')?.textContent.includes('受控排查失败')");
+      await click('.studio-primary-action-btn');
+      await waitFor("document.querySelector('.organize-query-coverage')?.textContent.includes('0 / 0')");
+      assert.equal(await cdp.evaluate("document.querySelector('.studio-root').textContent.includes('受控排查失败')"), false);
+      checks.push({name:"organize-results-cancel-delete-partial-archive-retry-stale-scope-and-query-retry"});
+      const storedRules = await cdp.evaluate("window.sanctuary.listFilterSettings()");
+      await click('[aria-label="整理方式"] button:nth-child(2)');
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('input[type=range]'))"), false);
+      await cdp.evaluate("Array.from(document.querySelectorAll('.analysis-scope-card button')).find(button=>button.textContent.includes('高级查找选项')).click()");
+      await fill('[aria-label="特征查找方式"]', 'custom');
+      await fill('[aria-label="自定义特征标签"]', 'blood, guro');
+      await fill('[aria-label="特征检出阈值"]', '0.7');
+      await click('.studio-primary-action-btn');
+      await waitFor("__organizeSmoke.tagCalls.length===1", mainInspector);
+      assert.deepEqual(await mainInspector.evaluate("__organizeSmoke.tagCalls[0]"), {tags:['blood','guro'],minConfidence:.7,scope:{type:'collection',collectionId:'fixture-collection'}});
+      assert.deepEqual(await cdp.evaluate("window.sanctuary.listFilterSettings()"), storedRules, "local search parameters mutated exploration rules");
+      await checkLayout("organize-feature-advanced-900", true);
+      checks.push({name:"feature-search-advanced-inputs-are-local-and-explicit"});
+    } finally {
+      await mainInspector.evaluate(`(() => { const state=globalThis.__organizeSmoke;
+        const ipc=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').ipcMain;
+        state.release?.(); for(const [channel,original] of state.originals){ipc.removeHandler(channel);ipc.handle(channel,original);}
+        delete globalThis.__organizeSmoke;
+      })()`);
+    }
+    await click('[data-nav="home"]');
+    await click('[data-home-task="explore"]');
+    await waitFor("Boolean(document.querySelector('.explore-workspace'))");
+    await click('[data-nav="home"]');
+    await click('[data-home-task="inspiration"]');
+    await waitFor("Boolean(document.querySelector('.inspiration-chat'))");
+    await key("0", "Digit0", 2);
+    await waitFor("Boolean(document.querySelector('.home-task-grid'))");
+    await click('[data-home-task="gallery"]');
+    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    checks.push({ name: "home-task-routing-Ctrl0-and-safe-default-organizing" });
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
     await checkLayout("gallery-1280", true);
 
@@ -281,6 +380,13 @@ try {
       await cdp.evaluate(`window.sanctuary.setActiveTheme(${JSON.stringify(theme)})`);
       await new Promise((done) => setTimeout(done, 200));
       await checkLayout(`appearance-${theme}-900`);
+      await click('[data-nav="home"]');
+      await checkLayout(`home-${theme}-900`, true);
+      await click('[data-home-task="organize"]');
+      await waitFor("document.querySelector('.studio-root')?.textContent.includes('默认使用探索的元素规则')");
+      await checkLayout(`organize-${theme}-900`, true);
+      await click('[data-nav="settings"]');
+      await waitFor("Boolean(document.querySelector('.settings-panel:not([hidden]) .theme-settings-container'))");
     }
     await click('[data-nav="gallery"]');
     await waitFor("document.querySelectorAll('.work-library-card').length === 2");
@@ -533,7 +639,29 @@ try {
       checks.push({ name: "offline-native-exploration-bounds-hide-and-resume", viewport, bounds });
       await click('[data-nav="gallery"]');
     } finally { native.close(); }
-    console.log(JSON.stringify({ status: "passed", checks, screenshots: outputDir }, null, 2));
+    const homeImportPath = join(userData, "首页导入.png");
+    await writeFile(homeImportPath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
+    await mainInspector.evaluate(`(() => {
+      const dialog=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').dialog;
+      const state=globalThis.__homeImportSmoke={original:dialog.showOpenDialog,calls:0};
+      dialog.showOpenDialog=async()=>++state.calls===1?{canceled:false,filePaths:[${JSON.stringify(homeImportPath)}]}:{canceled:true,filePaths:[]};
+    })()`);
+    try {
+      const beforeImport = await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()");
+      await click('[data-nav="home"]');
+      await click('.home-library-entry button');
+      await waitFor("document.querySelector('[data-nav=gallery]')?.getAttribute('aria-current')==='page'");
+      await waitFor(`(async () => (await window.sanctuary.queryWorks({})).total === ${beforeImport + 1})()`);
+      await click('[data-nav="home"]');
+      await click('.home-library-entry button');
+      await waitFor("__homeImportSmoke.calls===2", mainInspector);
+      await waitFor("Boolean(document.querySelector('.home-library-entry button')) && !document.querySelector('.home-library-entry button').disabled");
+      assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()"), beforeImport+1);
+      checks.push({name:"home-import-success-navigation-and-cancellation"});
+    } finally {
+      await mainInspector.evaluate("process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').dialog.showOpenDialog=__homeImportSmoke.original; delete globalThis.__homeImportSmoke");
+    }
+    console.log(JSON.stringify({ status: "passed", checkCount:checks.length, checks, screenshots: outputDir }, null, 2));
   } finally { cdp.close(); }
 } catch (error) {
   console.error(error instanceof Error ? error.stack : error);

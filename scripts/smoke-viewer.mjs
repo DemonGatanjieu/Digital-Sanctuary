@@ -217,6 +217,7 @@ try {
     }
 
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 900, height: 620, deviceScaleFactor: 1, mobile: false });
+    await click('[data-nav="gallery"]');
     await waitFor("document.querySelectorAll('.work-library-card').length === 1");
     await changeControl('[aria-label="排序字段"]', 'title');
     await click('.work-sort-direction');
@@ -275,17 +276,19 @@ try {
 
     await cdp.evaluate("(async () => window.sanctuary.updateLibraryPreferences({ ...(await window.sanctuary.getLibraryPreferences()), defaultView: 'collections' }))()");
     await cdp.send("Page.reload");
+    await click('[data-home-task="gallery"]');
     await waitFor("Boolean(document.querySelector('.collection-card'))");
     await click(".collection-card");
     await waitFor("Boolean(document.querySelector('.album-fullscreen-theater'))");
     await clickText('[aria-label="画册模式"] button', "典藏网格");
     await waitFor("document.querySelectorAll('.collection-detail-grid .art-preview-button').length === 3");
-    checks.push({ name: "default-album-startup-loads-all-three-legacy-pages" });
+    checks.push({ name: "default-album-after-home-loads-all-three-legacy-pages" });
     await key("Escape");
     await cdp.evaluate("(async () => window.sanctuary.updateLibraryPreferences({ ...(await window.sanctuary.getLibraryPreferences()), defaultView: 'author-work' }))()");
     await cdp.send("Page.reload");
+    await click('[data-home-task="gallery"]');
     await waitFor("document.querySelectorAll('.author-browser-card').length === 1");
-    checks.push({ name: "default-artist-startup-loads-legacy-pages" });
+    checks.push({ name: "default-artist-after-home-loads-legacy-pages" });
 
     await clickText('[aria-label="画廊布局"] button', "全部作品");
     await waitFor("document.querySelectorAll('.work-library-card').length === 1");
@@ -472,6 +475,7 @@ try {
     const restartedTarget = await waitForRenderer();
     cdp = await connectCdp(restartedTarget.webSocketDebuggerUrl);
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 900, height: 620, deviceScaleFactor: 1, mobile: false });
+    await click('[data-home-task="gallery"]');
     await waitFor("document.querySelectorAll('.work-library-card').length === 1");
     await click('.work-cover-button');
     await imageReady();

@@ -33,10 +33,10 @@ function sidebarMarkup(status: AppStatus | null = null, exploreState = initialEx
 }
 
 describe("task-based navigation", () => {
-  it("keeps organization under the active library and exposes four primary destinations", () => {
+  it("keeps organization under the library and adds a home entry without shifting existing destinations", () => {
     const markup = sidebarMarkup();
     expect([...markup.matchAll(/data-nav="([^"]+)"/g)].map((match) => match[1]))
-      .toEqual(["gallery", "explore", "inspiration", "settings"]);
+      .toEqual(["home", "gallery", "explore", "inspiration", "settings"]);
     expect(markup).toMatch(/aria-current="page"[^>]+data-nav="gallery"/);
     expect(markup).not.toContain("显示性能档位");
   });
@@ -93,7 +93,7 @@ describe("task-based navigation", () => {
 
   it("opens classification suggestions for the selected works without starting analysis", () => {
     const markup = renderToStaticMarkup(<AnalysisView collections={[]} artists={[]} selectedWorkIds={["work-1"]}
-      status={null} error="" onApplied={resolve} onError={ignore} />);
+      status={null} error="" onApplied={resolve} onError={ignore} onOpenProtection={ignore} />);
     expect(markup).toContain("选择要整理的范围");
     expect(markup).toContain("1 项已选");
     expect(markup).not.toContain("排查配置与条件");

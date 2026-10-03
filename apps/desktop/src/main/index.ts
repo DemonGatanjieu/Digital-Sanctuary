@@ -598,7 +598,8 @@ function localImageUrl(imagePath: string): string {
 
 function registerIpc(): void {
   if (!database || !vision || !themeManager || !themeStore || !comfyUiService || !modelCenter) throw new Error("Application services are unavailable");
-  registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService, localArtCriticService);
+  registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService, localArtCriticService,
+    () => buildElementFilterRules(database!.listElementFilterSettings(), customElementGroups(), adaptiveThresholdOverrides()));
   registerInspirationIpc(ipcMain, database, localArtCriticService, () => mainWindow);
   registerModelCenterIpc({
     ipc: ipcMain,
@@ -729,7 +730,7 @@ function registerIpc(): void {
         { name: "图片", extensions: ["jpg", "jpeg", "png", "webp", "gif", "avif"] }
       ]
     });
-    if (selected.canceled) return database.listArtworks();
+    if (selected.canceled || selected.filePaths.length === 0) return [];
 
     for (const imagePath of selected.filePaths) {
       const artwork = database.importArtwork(imagePath);
