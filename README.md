@@ -105,9 +105,12 @@ npm.cmd run smoke:installer
 
 ## 设计文档
 
+- [产品与交互指导原则](docs/design/PRODUCT_PRINCIPLES.md)：按任务组织功能、渐进展开复杂度、清晰文案与操作反馈，是后续设计和评审的共同依据。
 - `Project_Vision.md`：产品愿景。
 - `docs/plans/ACTIVE_ROADMAP.md`：唯一现行实施路线。
 - `docs/plans/archive/`：已结束的路线比较、启动草稿和建仓前目录设想，仅供追溯。
+
+涉及产品、界面、操作流程、引导或反馈的修改，开发者和智能体应先阅读产品指导原则，并按受影响的任务路径检查交付结果。原则与具体功能的实现状态分开维护，不能把指导性例子当作新增功能的施工授权。
 - `docs/adr/`：已经确定的首版架构决策。
 - `docs/research/`：模型与安全浏览技术探针结论。
 - `docs/known-issues/`：已确认、暂不阻塞推进的问题与临时处理。
