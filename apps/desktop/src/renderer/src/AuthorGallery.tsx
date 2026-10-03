@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { ArtistRecord, ArtistSummary, CollectionRecord } from "@sanctuary/domain";
 import { AquariumFloatingStage } from "./AquariumFloatingStage";
 import { ArtworkCard, LazyArtworkImage, artworkImageUrl } from "./ArtworkCard";
 import { PhotobookFlipSpread, type PhotobookAlbumInfo } from "./CollectionGallery";
 import { SegmentedControl } from "./SegmentedControl";
 import type { AuthorGalleryGroup } from "./gallery-model";
+import type { ArtistDetailSession, ArtistDetailViewMode, GalleryDetailSessionPatch } from "./gallery-detail-session";
+import { detailPageAttributes } from "./detail-scroll";
+import { useDetailScroll } from "./useDetailScroll";
+
+type ArtistSessionPatch = GalleryDetailSessionPatch<{ kind: "artist"; artistId: string | null }>;
 
 function AuthorAvatar({ author, large = false }: { author: { name: string; artistRecord?: ArtistRecord; artist?: ArtistRecord | null }; large?: boolean }) {
   const localPath = (author.artistRecord ?? author.artist)?.avatarLocalPath ?? "";
@@ -60,6 +65,10 @@ export function AuthorDetailPage({
   onOpenArtwork,
   onOpenPixivArtist,
   onViewWorks,
+  session = null,
+  onSessionChange,
+  onRegisterCapture,
+  mainScrollRef,
   lightboxOpen = false
 }: {
   author: AuthorGalleryGroup;
@@ -70,14 +79,50 @@ export function AuthorDetailPage({
   onOpenPixivArtist: (artistId: string) => void;
   onViewWorks: () => void;
   lightboxOpen?: boolean | undefined;
+  session?: ArtistDetailSession | null;
+  onSessionChange?: (patch: ArtistSessionPatch) => void;
+  onRegisterCapture?: (capture: () => ArtistSessionPatch) => () => void;
+  mainScrollRef?: RefObject<HTMLElement | null>;
 }) {
-  const [viewMode, setViewMode] = useState<"works" | "artbook" | "aquarium" | "catalog">("works");
+  const [fallbackMode, setFallbackMode] = useState<ArtistDetailViewMode>("works");
+  const viewMode = session?.viewMode ?? fallbackMode;
   const [isPhotobookTocOpen, setIsPhotobookTocOpen] = useState(false);
 
   // Flatten all artworks for this author
   const allArtworks = useMemo(() => author.works.flatMap((work) => work.pages), [author.works]);
   const primaryArtwork = allArtworks[0];
   const backdropUrl = primaryArtwork ? artworkImageUrl(primaryArtwork) : "";
+  const stageRef = useRef<HTMLElement>(null);
+  const fallbackScrollRef = useRef<HTMLElement>(null);
+  const bookCapture = useRef<(() => GalleryDetailSessionPatch) | null>(null);
+  const bookAnchorRef = useRef(session?.bookAnchor ?? null);
+  const tocPositionRef = useRef(session?.tocPosition ?? null);
+  const previousSession = useRef(session);
+  if (session !== previousSession.current) {
+    previousSession.current = session;
+    if (session) { bookAnchorRef.current = session.bookAnchor; tocPositionRef.current = session.tocPosition; }
+  }
+  const anchoredItems = useMemo(() => viewMode === "works" || viewMode === "catalog" ? allArtworks : [], [viewMode, allArtworks]);
+  const captureScroll = useDetailScroll({ channel: `${author.key}:${viewMode}`, containerRef: mainScrollRef ?? fallbackScrollRef,
+    contentRef: stageRef, items: anchoredItems, position: session?.scrollPositions[viewMode] ?? null,
+    onChange: (position) => onSessionChange?.({ scrollPositions: { [viewMode]: position } }) });
+  const capture = useCallback((): ArtistSessionPatch => {
+    const position = captureScroll();
+    return { viewMode, bookAnchor: bookAnchorRef.current, tocPosition: tocPositionRef.current,
+      ...(bookCapture.current?.() ?? {}), ...(position ? { scrollPositions: { [viewMode]: position } } : {}) } as ArtistSessionPatch;
+  }, [viewMode, captureScroll]);
+  useLayoutEffect(() => onRegisterCapture?.(capture), [onRegisterCapture, capture]);
+  const changeViewMode = (next: ArtistDetailViewMode) => {
+    const patch = capture(); setFallbackMode(next); onSessionChange?.({ ...patch, viewMode: next });
+  };
+  const changeTocOpen = (open: boolean) => {
+    if (!open) {
+      const patch = bookCapture.current?.();
+      if (patch?.tocPosition) { tocPositionRef.current = patch.tocPosition; onSessionChange?.({ tocPosition: patch.tocPosition }); }
+    }
+    setIsPhotobookTocOpen(open);
+  };
+  useEffect(() => { if (viewMode !== "artbook") setIsPhotobookTocOpen(false); }, [viewMode]);
 
   // Keyboard navigation for ESC key
   useEffect(() => {
@@ -85,7 +130,7 @@ export function AuthorDetailPage({
       if (e.key !== "Escape" || e.defaultPrevented || e.isComposing || e.keyCode === 229 || lightboxOpen || document.querySelector(".dialog-overlay")) return;
       if (isPhotobookTocOpen) {
         e.preventDefault();
-        setIsPhotobookTocOpen(false);
+        changeTocOpen(false);
       } else {
         e.preventDefault();
         onBack();
@@ -103,7 +148,7 @@ export function AuthorDetailPage({
   }), [author, allArtworks, primaryArtwork]);
 
   return (
-    <section className="author-detail-page" role="region" aria-label={`画师 ${author.name} 的专属工坊`}>
+    <section className="author-detail-page" data-detail-mode={viewMode} role="region" aria-label={`画师 ${author.name} 的专属工坊`}>
       {/* Ambient Blurred Artwork Backdrop */}
       {backdropUrl && (
         <div
@@ -132,7 +177,7 @@ export function AuthorDetailPage({
                 { value: "aquarium", label: "🫧 水族漂浮", title: "深海沉浸漂浮水泡，大小错落，流动触感" },
                 { value: "catalog", label: "📑 篇目编目", title: "全量画作索引目录表格" }
               ]}
-              onChange={(nextMode) => setViewMode(nextMode as "works" | "artbook" | "aquarium" | "catalog")}
+              onChange={(nextMode) => changeViewMode(nextMode as ArtistDetailViewMode)}
             />
           </div>
         </div>
@@ -175,7 +220,7 @@ export function AuthorDetailPage({
       </header>
 
       {/* Main Content Areas based on View Mode */}
-      <main className="author-stage-canvas">
+      <main className="author-stage-canvas" ref={stageRef}>
         {allArtworks.length === 0 ? (
           <section className="empty-state compact-empty">
             <h2>{author.workCount === 0 ? "这位画师还没有本地作品" : "这些作品可在图库中浏览"}</h2>
@@ -190,8 +235,13 @@ export function AuthorDetailPage({
               items={allArtworks}
               onOpenArtwork={onOpenArtwork}
               isTocOpen={isPhotobookTocOpen}
-              onTocOpenChange={setIsPhotobookTocOpen}
+              onTocOpenChange={changeTocOpen}
               interactionSuspended={lightboxOpen}
+              pageAnchor={bookAnchorRef.current}
+              onPageAnchorChange={(anchor) => { bookAnchorRef.current = anchor; onSessionChange?.({ bookAnchor: anchor }); }}
+              tocPosition={tocPositionRef.current}
+              onTocPositionChange={(position) => { tocPositionRef.current = position; onSessionChange?.({ tocPosition: position }); }}
+              onRegisterCapture={(reader) => { bookCapture.current = reader; return () => { if (bookCapture.current === reader) bookCapture.current = null; }; }}
             />
           </div>
         ) : viewMode === "aquarium" ? (
@@ -220,6 +270,7 @@ export function AuthorDetailPage({
                 return (
                   <div
                     key={artwork.id}
+                    {...detailPageAttributes(artwork)}
                     className="author-catalog-row"
                     onClick={() => onOpenArtwork(artwork.id)}
                   >
@@ -298,13 +349,14 @@ export function AuthorDetailPage({
                 </header>
                 <div className="work-page-grid">
                   {work.pages.map((artwork) => (
+                    <div key={artwork.id} {...detailPageAttributes(artwork)}>
                     <ArtworkCard
-                      key={artwork.id}
                       artwork={artwork}
                       collections={collections}
                       onAssign={onAssign}
                       onOpen={onOpenArtwork}
                     />
+                    </div>
                   ))}
                 </div>
               </section>

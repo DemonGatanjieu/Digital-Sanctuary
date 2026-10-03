@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ArtworkRecord, CollectionRecord, CollectionSummary, SavedCollectionView, SavedViewSummary } from "@sanctuary/domain";
 import { AquariumFloatingStage } from "./AquariumFloatingStage";
 import { ArtworkCard, artworkImageUrl } from "./ArtworkCard";
@@ -14,6 +14,11 @@ import {
   type PhotoMountStyle
 } from "./photobook-navigation";
 import { SegmentedControl } from "./SegmentedControl";
+import { photobookAnchor, resolvePhotobookSpread, type CollectionDetailSession, type CollectionDetailViewMode, type GalleryDetailSessionPatch, type PageAnchor, type ScrollPosition } from "./gallery-detail-session";
+import { detailPageAttributes } from "./detail-scroll";
+import { useDetailScroll } from "./useDetailScroll";
+
+type CollectionSessionPatch = GalleryDetailSessionPatch<{ kind: "collection"; collectionId: string }>;
 
 export function CollectionDetailPage({
   collection,
@@ -25,6 +30,9 @@ export function CollectionDetailPage({
   onOpenArtwork,
   onSetCover,
   onFilterInGallery,
+  session = null,
+  onSessionChange,
+  onRegisterCapture,
   lightboxOpen = false
 }: {
   collection: CollectionSummary;
@@ -37,13 +45,47 @@ export function CollectionDetailPage({
   onSetCover: (artworkId: string) => void;
   onFilterInGallery?: () => void;
   lightboxOpen?: boolean;
+  session?: CollectionDetailSession | null;
+  onSessionChange?: (patch: CollectionSessionPatch) => void;
+  onRegisterCapture?: (capture: () => CollectionSessionPatch) => () => void;
 }) {
   const items = artworks;
   const coverArtwork = artworks.find((a) => a.id === collection.coverArtworkId) ?? items[0];
   const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
-  const [viewMode, setViewMode] = useState<"flip" | "aquarium" | "grid" | "toc">("flip");
+  const [fallbackMode, setFallbackMode] = useState<CollectionDetailViewMode>("flip");
+  const viewMode = session?.viewMode ?? fallbackMode;
   const [isPickingWorks, setIsPickingWorks] = useState(false);
   const [isPhotobookTocOpen, setIsPhotobookTocOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLElement>(null);
+  const bookCapture = useRef<(() => GalleryDetailSessionPatch) | null>(null);
+  const bookAnchorRef = useRef(session?.bookAnchor ?? null);
+  const tocPositionRef = useRef(session?.tocPosition ?? null);
+  const previousSession = useRef(session);
+  if (session !== previousSession.current) {
+    previousSession.current = session;
+    if (session) { bookAnchorRef.current = session.bookAnchor; tocPositionRef.current = session.tocPosition; }
+  }
+  const scrollItems = useMemo(() => viewMode === "flip" ? [] : items, [viewMode, items]);
+  const captureScroll = useDetailScroll({ channel: `${collection.id}:${viewMode}`, containerRef: viewMode === "flip" ? stageRef : listRef, items: scrollItems,
+    position: session?.scrollPositions[viewMode] ?? null, enabled: viewMode === "flip" || viewMode === "grid" || viewMode === "toc",
+    onChange: (position) => onSessionChange?.({ scrollPositions: { [viewMode]: position } }) });
+  const capture = useCallback((): CollectionSessionPatch => {
+    const position = captureScroll();
+    return { viewMode, bookAnchor: bookAnchorRef.current, tocPosition: tocPositionRef.current,
+      ...(bookCapture.current?.() ?? {}), ...(position ? { scrollPositions: { [viewMode]: position } } : {}) } as CollectionSessionPatch;
+  }, [viewMode, captureScroll]);
+  useLayoutEffect(() => onRegisterCapture?.(capture), [onRegisterCapture, capture]);
+  const changeViewMode = (next: CollectionDetailViewMode) => {
+    const patch = capture(); setFallbackMode(next); onSessionChange?.({ ...patch, viewMode: next });
+  };
+  const changeTocOpen = (open: boolean) => {
+    if (!open) {
+      const patch = bookCapture.current?.();
+      if (patch?.tocPosition) { tocPositionRef.current = patch.tocPosition; onSessionChange?.({ tocPosition: patch.tocPosition }); }
+    }
+    setIsPhotobookTocOpen(open);
+  };
 
   // Global ESC key listener to exit full-screen game artbook
   useEffect(() => {
@@ -51,7 +93,7 @@ export function CollectionDetailPage({
       if (e.key !== "Escape" || e.defaultPrevented || e.isComposing || e.keyCode === 229 || isPickingWorks || lightboxOpen || document.querySelector(".dialog-overlay")) return;
       if (isPhotobookTocOpen) {
         e.preventDefault();
-        setIsPhotobookTocOpen(false);
+        changeTocOpen(false);
       } else {
         e.preventDefault();
         onBack();
@@ -66,7 +108,7 @@ export function CollectionDetailPage({
   }, [viewMode]);
 
   return (
-    <section className="album-fullscreen-theater" role="dialog" aria-modal="true" aria-label={`相册《${collection.name}》`}>
+    <section className="album-fullscreen-theater" data-detail-mode={viewMode} role="dialog" aria-modal="true" aria-label={`相册《${collection.name}》`}>
       {/* Ambient Blurred Art Backdrop (Game-like Cinema Stage) */}
       <div
         className="theater-ambient-backdrop"
@@ -98,7 +140,7 @@ export function CollectionDetailPage({
               { value: "grid", label: "🖼️ 典藏网格", title: "全景网格速览" },
               { value: "toc", label: "📑 篇目目录", title: "书籍篇目索引" }
             ]}
-            onChange={(val) => setViewMode(val as "flip" | "aquarium" | "grid" | "toc")}
+            onChange={(val) => changeViewMode(val as CollectionDetailViewMode)}
           />
         </div>
 
@@ -115,7 +157,7 @@ export function CollectionDetailPage({
       </header>
 
       {/* Main Theater Content Area */}
-      <main className="theater-stage-canvas">
+      <main className="theater-stage-canvas" ref={stageRef}>
         {items.length === 0 ? (
           <div className="theater-empty-state">
             <div className="theater-empty-book-icon">📖</div>
@@ -144,12 +186,17 @@ export function CollectionDetailPage({
             onSetCover={onSetCover}
             onOpenPicker={() => setIsPickingWorks(true)}
             isTocOpen={isPhotobookTocOpen}
-            onTocOpenChange={setIsPhotobookTocOpen}
+            onTocOpenChange={changeTocOpen}
             interactionSuspended={isPickingWorks || lightboxOpen}
+            pageAnchor={bookAnchorRef.current}
+            onPageAnchorChange={(anchor) => { bookAnchorRef.current = anchor; onSessionChange?.({ bookAnchor: anchor }); }}
+            tocPosition={tocPositionRef.current}
+            onTocPositionChange={(position) => { tocPositionRef.current = position; onSessionChange?.({ tocPosition: position }); }}
+            onRegisterCapture={(reader) => { bookCapture.current = reader; return () => { if (bookCapture.current === reader) bookCapture.current = null; }; }}
           />
         ) : viewMode === "toc" ? (
           /* Table of Contents Mode (画册目录索引模式) */
-          <div className="theater-toc-scroll-box">
+          <div className="theater-toc-scroll-box" ref={listRef}>
             <div className="album-toc-container">
               <div className="album-toc-header">
                 <span>INDEX / 索引编号</span>
@@ -164,6 +211,7 @@ export function CollectionDetailPage({
                   return (
                     <div
                       key={artwork.id}
+                      {...detailPageAttributes(artwork)}
                       className={`album-toc-row ${isCover ? "is-cover" : ""}`}
                       onClick={() => onOpenArtwork(artwork.id)}
                     >
@@ -202,10 +250,10 @@ export function CollectionDetailPage({
           </div>
         ) : (
           /* Grid Mode (画册网格画廊模式) */
-          <div className="theater-grid-scroll-box">
+          <div className="theater-grid-scroll-box" ref={listRef}>
             <div className="gallery-grid collection-detail-grid">
               {items.map((artwork) => (
-                <div className="collection-artwork" key={artwork.id}>
+                <div className="collection-artwork" key={artwork.id} {...detailPageAttributes(artwork)}>
                   <ArtworkCard artwork={artwork} collections={collections} onAssign={onAssign} onOpen={onOpenArtwork} />
                   <button
                     type="button"
@@ -292,7 +340,12 @@ export function PhotobookFlipSpread({
   onOpenPicker,
   isTocOpen,
   onTocOpenChange,
-  interactionSuspended = false
+  interactionSuspended = false,
+  pageAnchor = null,
+  onPageAnchorChange,
+  tocPosition = null,
+  onTocPositionChange,
+  onRegisterCapture
 }: {
   collection: PhotobookAlbumInfo | CollectionRecord;
   items: ArtworkRecord[];
@@ -302,6 +355,11 @@ export function PhotobookFlipSpread({
   isTocOpen: boolean;
   onTocOpenChange: (open: boolean) => void;
   interactionSuspended?: boolean | undefined;
+  pageAnchor?: PageAnchor | null;
+  onPageAnchorChange?: (anchor: PageAnchor) => void;
+  tocPosition?: ScrollPosition | null;
+  onTocPositionChange?: (position: ScrollPosition) => void;
+  onRegisterCapture?: (capture: () => GalleryDetailSessionPatch) => () => void;
 }) {
   const [mountStyle, setMountStyle] = useState<PhotoMountStyle>(() => {
     return normalizePhotoMountStyle(localStorage.getItem("sanctuary_photobook_mount_style"));
@@ -331,6 +389,11 @@ export function PhotobookFlipSpread({
 
   // Calculate total spreads: Spread 0 (Preface + Art 0), Spread 1+ (Art 2K-1 + Art 2K)
   const totalSpreads = getPhotobookTotalSpreads(items.length);
+  const itemKey = useMemo(() => items.map((item) => {
+    const attributes = detailPageAttributes(item);
+    return `${attributes["data-gallery-page-kind"]}:${attributes["data-gallery-page-id"]}`;
+  }).join("\u001f"), [items]);
+  const previousItemKey = useRef(itemKey);
 
   // Unified Atomic Spread State Machine (Guarantees zero-desync between current spread and transition)
   const [spreadState, setSpreadState] = useState<{
@@ -339,15 +402,24 @@ export function PhotobookFlipSpread({
     direction: "forward" | "backward";
     fromSpread: number;
     toSpread: number;
-  }>({
-    currentSpread: 0,
+  }>(() => {
+    const spread = resolvePhotobookSpread(items, pageAnchor);
+    return { currentSpread: spread,
     isAnimating: false,
     direction: "forward",
-    fromSpread: 0,
-    toSpread: 0
+    fromSpread: spread,
+    toSpread: spread };
   });
 
   const fallbackTimerRef = useRef<number | null>(null);
+  const settledAnchorRef = useRef(photobookAnchor(items, spreadState.currentSpread));
+  const tocPositionRef = useRef(tocPosition);
+  const tocCaptureRef = useRef<(() => ScrollPosition | null) | null>(null);
+  useLayoutEffect(() => onRegisterCapture?.(() => {
+    const position = tocCaptureRef.current?.();
+    if (position) tocPositionRef.current = position;
+    return { bookAnchor: settledAnchorRef.current, tocPosition: tocPositionRef.current };
+  }), [onRegisterCapture]);
 
   useEffect(() => () => {
     if (fallbackTimerRef.current !== null) window.clearTimeout(fallbackTimerRef.current);
@@ -375,8 +447,11 @@ export function PhotobookFlipSpread({
     preloadedPages.current.clear();
   }, []);
 
-  useEffect(() => {
-    const safeSpread = Math.min(spreadState.currentSpread, Math.max(0, totalSpreads - 1));
+  useLayoutEffect(() => {
+    const changed = previousItemKey.current !== itemKey;
+    previousItemKey.current = itemKey;
+    const safeSpread = resolvePhotobookSpread(items, pageAnchor ?? settledAnchorRef.current);
+    if (!changed && safeSpread === spreadState.currentSpread) return;
     if (fallbackTimerRef.current !== null) {
       window.clearTimeout(fallbackTimerRef.current);
       fallbackTimerRef.current = null;
@@ -388,7 +463,12 @@ export function PhotobookFlipSpread({
       fromSpread: safeSpread,
       toSpread: safeSpread
     });
-  }, [totalSpreads]);
+    const anchor = photobookAnchor(items, safeSpread);
+    settledAnchorRef.current = anchor;
+    onPageAnchorChange?.(anchor);
+    // Data changes invalidate transition indices; a cloned snapshot alone never restarts an animation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemKey, pageAnchor]);
 
 
   const finishFlip = (targetSpread: number) => {
@@ -396,12 +476,15 @@ export function PhotobookFlipSpread({
       window.clearTimeout(fallbackTimerRef.current);
       fallbackTimerRef.current = null;
     }
+    const settledSpread = Math.min(targetSpread, Math.max(0, totalSpreads - 1));
+    settledAnchorRef.current = photobookAnchor(items, settledSpread);
+    onPageAnchorChange?.(settledAnchorRef.current);
     setSpreadState((prev) => ({
-      currentSpread: targetSpread,
+      currentSpread: settledSpread,
       isAnimating: false,
       direction: prev.direction,
-      fromSpread: targetSpread,
-      toSpread: targetSpread
+      fromSpread: settledSpread,
+      toSpread: settledSpread
     }));
   };
 
@@ -488,7 +571,9 @@ export function PhotobookFlipSpread({
   }
 
   return (
-    <div className="photobook-stage-deck">
+    <div className="photobook-stage-deck" data-settled-spread={spreadState.currentSpread}
+      data-settled-page-id={settledAnchorRef.current.current?.assetId ?? settledAnchorRef.current.current?.legacyArtworkId ?? ""}
+      data-settled-page-kind={settledAnchorRef.current.current?.assetId ? "asset" : "artwork"}>
       {/* Top Floating Toolbar (Quick TOC Button, Turn Effect Switcher & Mount Switcher) */}
       <div className="photobook-toolbar-header">
         <div className="photobook-toolbar-left">
@@ -924,6 +1009,9 @@ export function PhotobookFlipSpread({
           flipToArtwork(artIdx);
           onTocOpenChange(false);
         }}
+        scrollPosition={tocPositionRef.current}
+        onScrollPositionChange={(position) => { tocPositionRef.current = position; onTocPositionChange?.(position); }}
+        onRegisterCapture={(capture) => { tocCaptureRef.current = capture; return () => { if (tocCaptureRef.current === capture) tocCaptureRef.current = null; }; }}
       />
     </div>
   );
@@ -1143,7 +1231,10 @@ function PhotobookTocDrawer({
   items,
   currentSpreadIndex,
   onClose,
-  onSelectArtwork
+  onSelectArtwork,
+  scrollPosition,
+  onScrollPositionChange,
+  onRegisterCapture
 }: {
   isOpen: boolean;
   collection: PhotobookAlbumInfo | CollectionRecord;
@@ -1151,12 +1242,13 @@ function PhotobookTocDrawer({
   currentSpreadIndex: number;
   onClose: () => void;
   onSelectArtwork: (artworkIndex: number) => void;
+  scrollPosition: ScrollPosition | null;
+  onScrollPositionChange: (position: ScrollPosition) => void;
+  onRegisterCapture: (capture: () => ScrollPosition | null) => () => void;
 }) {
   const [searchTerm, setSearchTerm] = useState("");
-
-  if (!isOpen) return null;
-
-  const filteredItems = items.filter((it) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const filteredItems = useMemo(() => items.filter((it) => {
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return (
@@ -1164,7 +1256,12 @@ function PhotobookTocDrawer({
       (it.source?.authorName?.toLowerCase().includes(q) ?? false) ||
       it.fileName.toLowerCase().includes(q)
     );
-  });
+  }), [items, searchTerm]);
+  const capture = useDetailScroll({ channel: `toc:${collection.id}:${searchTerm}`, containerRef: scrollRef,
+    items: filteredItems, position: searchTerm.trim() ? null : scrollPosition, enabled: isOpen, onChange: onScrollPositionChange });
+  useLayoutEffect(() => onRegisterCapture(capture), [onRegisterCapture, capture]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="photobook-toc-overlay" onClick={onClose}>
@@ -1196,7 +1293,11 @@ function PhotobookTocDrawer({
             className="toc-search-input"
             placeholder="搜索画作标题、画师..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              const position = capture();
+              if (position) onScrollPositionChange(position);
+              setSearchTerm(e.target.value);
+            }}
             autoFocus
           />
           {searchTerm && (
@@ -1207,7 +1308,7 @@ function PhotobookTocDrawer({
         </div>
 
         {/* Items List */}
-        <div className="toc-drawer-items-scroll">
+        <div className="toc-drawer-items-scroll" ref={scrollRef}>
           {filteredItems.map((item) => {
             const originalIndex = items.indexOf(item);
             const itemSpread = originalIndex === 0 ? 0 : 1 + Math.floor((originalIndex - 1) / 2);
@@ -1218,6 +1319,7 @@ function PhotobookTocDrawer({
             return (
               <div
                 key={item.id}
+                {...detailPageAttributes(item)}
                 className={`toc-drawer-card ${isCurrentlyActive ? "active" : ""}`}
                 onClick={() => onSelectArtwork(originalIndex)}
                 title={`翻至第 ${itemSpread + 1} 展对 (${sideLabel})`}

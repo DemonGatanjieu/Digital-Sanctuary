@@ -21,6 +21,55 @@
   .analysis-suggestions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .work-library-controls { grid-template-columns: minmax(200px, 1fr) auto auto; }
   .work-ambient-hero { grid-template-columns: minmax(0, 1fr) 180px; }
+
+  /* Keep album navigation readable within the window beside the sidebar. */
+  .theater-hud-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px 16px;
+    padding: 12px 20px;
+  }
+  .theater-hud-left { grid-column: 1; grid-row: 1; min-width: 0; gap: 12px; }
+  .theater-game-back-btn { flex-shrink: 0; min-height: 36px; padding-inline: 10px; white-space: nowrap; }
+  .theater-album-title-block { flex: 1; min-width: 0; }
+  .theater-sub-tag,
+  .theater-album-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .theater-hud-right { grid-column: 2; grid-row: 1; gap: 8px; }
+  .theater-action-pill { min-height: 36px; padding-inline: 12px; white-space: nowrap; }
+  .theater-hud-center { grid-column: 1 / -1; grid-row: 2; min-width: 0; }
+  .theater-hud-center .ui-segmented {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+  }
+  .theater-hud-center .ui-segmented button { min-width: 0; min-height: 36px; padding-inline: 8px; white-space: nowrap; }
+}
+
+@media (max-width: 1400px) {
+  /* Both preference families keep all four choices on their own complete row. */
+  .photobook-toolbar-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .photobook-toolbar-left { min-width: 0; }
+  .photobook-toc-trigger-btn { min-height: 36px; white-space: nowrap; }
+  .photobook-toc-trigger-btn .btn-text,
+  .photobook-toc-trigger-btn .btn-count { white-space: nowrap; }
+  .photobook-toolbar-right { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; min-width: 0; gap: 8px; }
+  .photobook-mount-switcher {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    width: 100%;
+    min-width: 0;
+    gap: 10px;
+    padding: 4px 6px 4px 12px;
+    box-sizing: border-box;
+  }
+  .mount-switcher-label { white-space: nowrap; }
+  .mount-switcher-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); min-width: 0; }
+  .mount-style-pill { justify-content: center; width: 100%; min-width: 0; min-height: 36px; padding: 6px 8px; gap: 5px; white-space: nowrap; }
+  .mount-pill-text { white-space: nowrap; }
+
+  /* Short windows scroll the book inside the stage, above the footer. */
+  .album-fullscreen-theater[data-detail-mode="flip"] .theater-stage-canvas { min-height: 0; align-items: flex-start; overflow-y: auto; }
+  .album-fullscreen-theater[data-detail-mode="flip"] .theater-stage-canvas .photobook-stage-deck { min-height: 0; max-height: none; }
 }
 
 @media (max-width: 1350px) {

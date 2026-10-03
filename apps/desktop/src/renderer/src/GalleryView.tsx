@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type {
   AppearancePreferences,
   ArtistSummary,
@@ -23,6 +23,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { WorkLibrary, WorkLightbox } from "./WorkLibrary";
 import { authorDetailFromSummary, directoryScopeWorkQuery, galleryScopeKey, savedViewWorkQuery } from "./gallery-model";
 import { hasWorkFilters, type WorkSortSnapshot } from "./work-presets";
+import type { GalleryDetailScope, GalleryDetailSession, GalleryDetailSessionPatch } from "./gallery-detail-session";
 
 export type GalleryMode = "flat" | "author-work" | "collections";
 
@@ -30,6 +31,10 @@ export function GalleryView({
   scopedArtworks,
   scope,
   scopeLoading,
+  detailSession,
+  onDetailSessionChange,
+  mainScrollRef,
+  onRegisterDetailCapture,
   directoryLoading,
   collectionSummaries,
   artistSummaries,
@@ -75,6 +80,10 @@ export function GalleryView({
   scopedArtworks: ScopedArtworkRecord[];
   scope: GalleryScope | null;
   scopeLoading: boolean;
+  detailSession: GalleryDetailSession | null;
+  onDetailSessionChange: (scope: GalleryDetailScope, patch: GalleryDetailSessionPatch) => void;
+  mainScrollRef: RefObject<HTMLElement | null>;
+  onRegisterDetailCapture: (scope: GalleryDetailScope, capture: () => GalleryDetailSessionPatch) => () => void;
   directoryLoading: boolean;
   collectionSummaries: CollectionSummary[];
   artistSummaries: ArtistSummary[];
@@ -262,6 +271,9 @@ export function GalleryView({
             onSetCover={(artworkId) => onUpdateCollectionCover(selectedCollection.id, artworkId)}
             lightboxOpen={Boolean(lightbox || openingArtworkId)}
             onFilterInGallery={() => viewScopeWorks({ kind: "collection", collectionId: selectedCollection.id })}
+            session={detailSession?.kind === "collection" ? detailSession : null}
+            onSessionChange={(patch) => onDetailSessionChange({ kind: "collection", collectionId: selectedCollection.id }, patch)}
+            onRegisterCapture={(capture) => onRegisterDetailCapture({ kind: "collection", collectionId: selectedCollection.id }, capture)}
           />
         ) : (
           <div className="collections-view-container">
@@ -378,6 +390,10 @@ export function GalleryView({
               onViewWorks={() => viewScopeWorks({ kind: "artist", artistId: selectedAuthor.artistId })}
               onOpenPixivArtist={onOpenPixivArtist}
               lightboxOpen={Boolean(lightbox || openingArtworkId)}
+              session={detailSession?.kind === "artist" ? detailSession : null}
+              onSessionChange={(patch) => onDetailSessionChange({ kind: "artist", artistId: selectedAuthor.artistId }, patch)}
+              onRegisterCapture={(capture) => onRegisterDetailCapture({ kind: "artist", artistId: selectedAuthor.artistId }, capture)}
+              mainScrollRef={mainScrollRef}
             />
           )}
         </section>

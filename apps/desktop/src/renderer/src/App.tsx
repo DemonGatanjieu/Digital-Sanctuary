@@ -21,6 +21,8 @@ import type { SettingsSection } from "./app-navigation";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
 import { useLibraryQuery } from "./useLibraryQuery";
 import { useGalleryDirectory } from "./useGalleryDirectory";
+import { GalleryDetailSessionCache, type GalleryDetailScope, type GalleryDetailSessionPatch } from "./gallery-detail-session";
+import { galleryScopeKey } from "./gallery-model";
 import { QuickActions, type QuickAction } from "./QuickActions";
 import { AppNotice } from "./AppNotice";
 import { applyWorkPreset, clearWorkCollectionFilters, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
@@ -41,7 +43,11 @@ export function App() {
   const [activeView, setActiveViewState] = useState<ActiveView>("gallery");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("library");
   const mainRef = useRef<HTMLElement>(null);
-  const [galleryScope, setGalleryScope] = useState<GalleryScope | null>(null);
+  const [galleryScope, setGalleryScopeState] = useState<GalleryScope | null>(null);
+  const detailSessions = useRef<GalleryDetailSessionCache | null>(null);
+  if (!detailSessions.current) detailSessions.current = new GalleryDetailSessionCache();
+  const [, setDetailRevision] = useState(0);
+  const detailCapture = useRef<{ scope: GalleryDetailScope; capture: () => GalleryDetailSessionPatch } | null>(null);
   const [thumbnailRevision, setThumbnailRevision] = useState(0);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
@@ -69,12 +75,35 @@ export function App() {
   const [error, setError] = useState("");
   const [exploreState, setExploreState] = useState<ExploreState>(initialExploreState);
   const [galleryMode, setGalleryModeState] = useState<GalleryMode>("flat");
-  const navigationState = useRef({ activeView, galleryMode });
+  const navigationState = useRef({ activeView, galleryMode, galleryScope });
   const rememberGalleryPosition = useCallback(() => {
     const current = navigationState.current;
     if (current.activeView === "gallery" && mainRef.current) {
-      scrollPositions.current.set(`gallery:${current.galleryMode}`, mainRef.current.scrollTop);
+      if (current.galleryScope) {
+        const registered = detailCapture.current;
+        if (registered && galleryScopeKey(registered.scope) === galleryScopeKey(current.galleryScope)) {
+          detailSessions.current!.patch(registered.scope, registered.capture());
+        }
+      } else {
+        scrollPositions.current.set(`gallery:${current.galleryMode}`, mainRef.current.scrollTop);
+      }
     }
+  }, []);
+  const setGalleryScope = useCallback((next: GalleryScope | null) => {
+    if (galleryScopeKey(next) !== galleryScopeKey(navigationState.current.galleryScope)) rememberGalleryPosition();
+    setGalleryScopeState(next);
+  }, [rememberGalleryPosition]);
+  const patchDetailSession = useCallback((scope: GalleryDetailScope, patch: GalleryDetailSessionPatch) => {
+    const current = navigationState.current;
+    if (current.activeView !== "gallery" || galleryScopeKey(scope) !== galleryScopeKey(current.galleryScope)) return;
+    detailSessions.current!.patch(scope, patch);
+    // Position writes stay in refs; only a controlled mode change needs a React render.
+    if (patch.viewMode) setDetailRevision((revision) => revision + 1);
+  }, []);
+  const registerDetailCapture = useCallback((scope: GalleryDetailScope, capture: () => GalleryDetailSessionPatch) => {
+    const registered = { scope, capture };
+    detailCapture.current = registered;
+    return () => { if (detailCapture.current === registered) detailCapture.current = null; };
   }, []);
   const setActiveView = useCallback((next: ActiveView) => {
     if (next !== navigationState.current.activeView) rememberGalleryPosition();
@@ -83,7 +112,7 @@ export function App() {
   const setGalleryMode = useCallback((next: GalleryMode) => {
     if (next !== navigationState.current.galleryMode) {
       rememberGalleryPosition();
-      setGalleryScope(null);
+      setGalleryScopeState(null);
     }
     setGalleryModeState(next);
   }, [rememberGalleryPosition]);
@@ -102,7 +131,14 @@ export function App() {
       ? directory.collectionSummaries.some((item) => item.id === galleryScope.collectionId)
       : galleryScope.kind === "artist"
         ? directory.artistSummaries.some((item) => item.artistId === galleryScope.artistId) : true;
-    if (!exists) setGalleryScope(null);
+    if (!exists) {
+      // Reject unmount callbacks immediately; layout effects update the route ref later.
+      if (galleryScopeKey(navigationState.current.galleryScope) !== galleryScopeKey(galleryScope)) return;
+      if (galleryScopeKey(detailCapture.current?.scope ?? null) === galleryScopeKey(galleryScope)) detailCapture.current = null;
+      navigationState.current = { ...navigationState.current, galleryScope: null };
+      if (galleryScope.kind !== "work") detailSessions.current!.delete(galleryScope);
+      setGalleryScopeState(null);
+    }
   }, [galleryScope, galleryMode, directory.directoryLoading, directory.directoryReadyMode, directory.collectionSummaries, directory.artistSummaries]);
   const { query: workQuery, result: workResult, loading: workLoading,
     setQuery: setWorkQuery, refresh: refreshWorks, loadMore: loadMoreWorks } = useLibraryQuery(showError);
@@ -111,12 +147,18 @@ export function App() {
     normalSort.current = { sortBy: workQuery.sortBy ?? "savedAt", direction: workQuery.direction ?? "desc" };
   }
   const scrollKey = activeView === "gallery" ? `gallery:${galleryMode}` : activeView === "settings" ? `settings:${settingsSection}` : activeView;
-  useLayoutEffect(() => { navigationState.current = { activeView, galleryMode }; }, [activeView, galleryMode]);
+  useLayoutEffect(() => { navigationState.current = { activeView, galleryMode, galleryScope }; }, [activeView, galleryMode, galleryScope]);
   useLayoutEffect(() => {
     const main = mainRef.current;
     if (!main) return;
+    // Author details restore their main-list anchor after the range and DOM are ready.
+    // Albums use nested theater scrollers, so their outer frame starts at the top.
+    if (activeView === "gallery" && galleryScope) {
+      if (galleryScope.kind === "collection") main.scrollTo({ top: 0, behavior: "instant" });
+      return;
+    }
     main.scrollTo({ top: activeView === "gallery" ? scrollPositions.current.get(scrollKey) ?? 0 : 0, behavior: "instant" });
-  }, [scrollKey]);
+  }, [scrollKey, galleryScope]);
   useEffect(() => {
     scrollPositions.current.set("gallery:flat", 0);
     if (activeView === "gallery" && galleryMode === "flat") mainRef.current?.scrollTo({ top: 0, behavior: "instant" });
@@ -526,7 +568,7 @@ export function App() {
       />
 
       <main ref={mainRef} className="animate-fade-in" onScroll={(event) => {
-        if (activeView === "gallery") scrollPositions.current.set(scrollKey, event.currentTarget.scrollTop);
+        if (activeView === "gallery" && !galleryScope) scrollPositions.current.set(scrollKey, event.currentTarget.scrollTop);
       }}>
         {(activeView === "gallery" || activeView === "organize") && (
           <nav className="workspace-navigation" aria-label="图库工作区">
@@ -555,6 +597,10 @@ export function App() {
             scopedArtworks={directory.scopedArtworks}
             scopeLoading={directory.scopeLoading}
             onScopeChange={setGalleryScope}
+            detailSession={galleryScope && galleryScope.kind !== "work" ? detailSessions.current.read(galleryScope) : null}
+            onDetailSessionChange={patchDetailSession}
+            mainScrollRef={mainRef}
+            onRegisterDetailCapture={registerDetailCapture}
             workResult={workResult}
             workQuery={workQuery}
             normalSort={normalSort.current}
