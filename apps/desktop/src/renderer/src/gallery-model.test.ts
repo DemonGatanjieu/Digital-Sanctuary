@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { ArtworkRecord } from "@sanctuary/domain";
+import type { ArtistSummary, ArtworkRecord, ScopedArtworkRecord } from "@sanctuary/domain";
 import {
   artworkLibraryWorkId,
   artworkWorkPages,
   buildAuthorGroups,
-  inferPixivWorkFromFileName
+  inferPixivWorkFromFileName,
+  authorDetailFromSummary,
+  directoryScopeWorkQuery,
+  galleryScopeKey,
+  savedViewWorkQuery
 } from "./gallery-model";
 
 function artwork(id: string, fileName: string, source?: ArtworkRecord["source"]): ArtworkRecord {
@@ -51,5 +55,33 @@ describe("gallery model", () => {
     expect(artworkLibraryWorkId(pixivPage)).toBe("pixiv:7788");
     expect(artworkLibraryWorkId(artwork("local-page", "drawing.png"))).toBe("local:local-page");
     expect(artworkLibraryWorkId(artwork("legacy", "9900_p1.jpg"))).toBe("pixiv:9900");
+  });
+
+  it("uses canonical IDs and page indices even when a local filename looks like a Pixiv download", () => {
+    const local = { ...artwork("legacy-local", "9900_p1.jpg"), libraryWorkId: "local:canonical", assetId: "local-asset", pageIndex: 7, thumbnailPath: null } as ScopedArtworkRecord;
+    expect(artworkLibraryWorkId(local)).toBe("local:canonical");
+    expect(artworkWorkPages([local, artwork("other", "9900_p0.jpg")], local)).toEqual([local]);
+  });
+
+  it("groups only current scope book pages while retaining authoritative work/page totals", () => {
+    const summary = { key: "unknown", artistId: null, artist: null, name: "未归属画师", workCount: 4, pageCount: 8, bookPageCount: 2, previewAssets: [] } satisfies ArtistSummary;
+    const pages = [2, 0].map((pageIndex) => ({ ...artwork(`legacy-${pageIndex}`, "9900_p0.jpg"), libraryWorkId: "local:actual", assetId: `asset-${pageIndex}`, pageIndex, thumbnailPath: null } as ScopedArtworkRecord));
+    const detail = authorDetailFromSummary(summary, pages);
+    expect(detail.workCount).toBe(4);
+    expect(detail.pageCount).toBe(8);
+    expect(detail.works).toHaveLength(1);
+    expect(detail.works[0]?.pages.map((page) => page.id)).toEqual(["legacy-0", "legacy-2"]);
+    expect(authorDetailFromSummary(summary, []).works).toEqual([]);
+  });
+
+  it("opens directory scopes from clean exact queries, including the unassigned author", () => {
+    const sort = { sortBy: "title", direction: "asc" } as const;
+    expect(directoryScopeWorkQuery({ kind: "artist", artistId: null }, sort, 60)).toEqual({ ...sort, unattributed: true, offset: 0, limit: 60 });
+    expect(directoryScopeWorkQuery({ kind: "artist", artistId: "42" }, sort)).toEqual({ ...sort, artistId: "42", offset: 0 });
+    expect(directoryScopeWorkQuery({ kind: "collection", collectionId: "album" }, sort)).toEqual({ ...sort, collectionId: "album", offset: 0 });
+    expect(savedViewWorkQuery({ includedCollectionIds: ["a", "b"], matchMode: "all", excludedCollectionIds: ["draft"] }, sort)).toEqual({ ...sort, collectionIds: ["a", "b"], collectionMatchMode: "all", excludedCollectionIds: ["draft"], offset: 0 });
+    expect(galleryScopeKey({ kind: "artist", artistId: null })).toBe("artist:null");
+    expect(galleryScopeKey({ kind: "artist", artistId: "null" })).not.toBe(galleryScopeKey({ kind: "artist", artistId: null }));
+    expect(galleryScopeKey({ kind: "work", workId: "local:actual" })).toBe("work:local:actual");
   });
 });

@@ -4,6 +4,7 @@ export * from "./prompt-bridge.js";
 export * from "./comfyui.js";
 export * from "./model-center.js";
 export * from "./local-inspiration.js";
+export * from "./library-directory.js";
 
 export interface VisionAssessment {
   status: "complete" | "error";
@@ -284,6 +285,8 @@ export interface WorkQuery {
   uncollected?: boolean;
   /** True selects works that have been successfully viewed at least once. */
   viewedOnly?: boolean;
+  /** True selects works without an assigned artist. */
+  unattributed?: boolean;
   sortBy?: WorkSortField;
   direction?: SortDirection;
   offset?: number;

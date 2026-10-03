@@ -10,6 +10,22 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])"
 ].join(",");
 
+export function isDialogComposition(event: { isComposing?: boolean; keyCode?: number }): boolean {
+  return event.isComposing === true || event.keyCode === 229;
+}
+
+/** Only one window listener may consume Escape; IME keeps its native candidate action. */
+export function handleDialogEscape(
+  event: Pick<KeyboardEvent, "key" | "defaultPrevented" | "isComposing" | "keyCode" | "preventDefault" | "stopImmediatePropagation">,
+  { topmost, busy, onClose }: { topmost: boolean; busy: boolean; onClose: () => void }
+): boolean {
+  if (event.key !== "Escape" || event.defaultPrevented || isDialogComposition(event) || !topmost) return false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  if (!busy) onClose();
+  return true;
+}
+
 export function DialogOverlay({
   children,
   busy = false,
@@ -26,6 +42,7 @@ export function DialogOverlay({
   busyRef.current = busy;
 
   useEffect(() => {
+    const isTopmost = () => overlayRef.current === [...document.querySelectorAll(".dialog-overlay")].at(-1);
     const previousFocus = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
@@ -34,17 +51,15 @@ export function DialogOverlay({
 
     const focusTimer = window.setTimeout(() => {
       const overlay = overlayRef.current;
-      if (overlay && !overlay.contains(document.activeElement)) {
+      if (overlay && isTopmost() && !overlay.contains(document.activeElement)) {
         overlay.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
       }
     }, 0);
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        if (!busyRef.current) closeRef.current();
-        return;
-      }
-      if (event.key !== "Tab") return;
+      const topmost = isTopmost();
+      if (handleDialogEscape(event, { topmost, busy: busyRef.current, onClose: () => closeRef.current() })) return;
+      if (event.key !== "Tab" || !topmost || event.defaultPrevented || isDialogComposition(event)) return;
 
       const focusable = [...(overlayRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [])];
       if (focusable.length === 0) {

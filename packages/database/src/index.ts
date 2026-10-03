@@ -34,9 +34,18 @@ import type {
   TriageQueryResultItem,
   ComfyUiJob,
   ComfyUiJobStatus,
-  GenerationProvenance
+  GenerationProvenance,
+  ArtistSummary,
+  CollectionSummary,
+  GalleryScope,
+  ScopedArtworkRecord,
+  DirectoryPageQuery,
+  SavedViewSummaryResult,
+  ArtworkPageQuery,
+  ArtworkPageQueryResult
 } from "@sanctuary/domain";
 import { SavedCollectionViewStore } from "./saved-collection-view-store.js";
+import { LibraryDirectoryStore } from "./library-directory-store.js";
 import {
   DEFAULT_ELEMENT_FILTER_SETTINGS,
   getVisionSuite,
@@ -274,11 +283,13 @@ export class LibraryDatabase {
   readonly #database: DatabaseSync;
   readonly #databasePath: string;
   readonly #savedCollectionViews: SavedCollectionViewStore;
+  readonly #directory: LibraryDirectoryStore;
 
   constructor(databasePath: string) {
     this.#databasePath = databasePath;
     this.#database = new DatabaseSync(databasePath);
     this.#savedCollectionViews = new SavedCollectionViewStore(this.#database);
+    this.#directory = new LibraryDirectoryStore(this.#database, (query) => this.#queryWorkPage(query));
     this.#database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     this.#backupBeforeWorkMigration();
     this.#migrate();
@@ -511,6 +522,10 @@ export class LibraryDatabase {
   }
 
   queryWorks(query: WorkQuery = {}): WorkQueryResult {
+    return this.#queryWorkPage(query);
+  }
+
+  #queryWorkPage(query: WorkQuery): WorkQueryResult {
     const search = typeof query.search === "string" ? query.search.trim().slice(0, 200) : "";
     const limit = clampInteger(query.limit, 60, 1, 200);
     const offset = clampInteger(query.offset, 0, 0, 10_000_000);
@@ -539,6 +554,7 @@ export class LibraryDatabase {
       clauses.push("NOT EXISTS (SELECT 1 FROM collection_works uncollected_cw WHERE uncollected_cw.work_id = w.id)");
     }
     if (query.viewedOnly === true) clauses.push("w.last_viewed_at IS NOT NULL");
+    if (query.unattributed === true) clauses.push("w.artist_id IS NULL");
     if (search) {
       clauses.push(
         `(instr(lower(w.title), lower(?)) > 0
@@ -1239,6 +1255,14 @@ export class LibraryDatabase {
       createdAt: row.created_at
     }));
   }
+
+  listCollectionSummaries(): CollectionSummary[] { return this.#directory.listCollectionSummaries(); }
+  listArtistSummaries(): ArtistSummary[] { return this.#directory.listArtistSummaries(); }
+  querySavedViewSummaries(query: DirectoryPageQuery = {}): SavedViewSummaryResult { return this.#directory.querySavedViewSummaries(query); }
+  listScopedArtworks(scope: GalleryScope): ScopedArtworkRecord[] { return this.#directory.listScopedArtworks(scope); }
+  queryArtworkPages(query: ArtworkPageQuery = {}): ArtworkPageQueryResult { return this.#directory.queryArtworkPages(query); }
+  addArtworksToCollection(artworkIds: readonly string[], collectionId: string): number { return this.#directory.addArtworksToCollection(artworkIds, collectionId); }
+  hasCollectionArtwork(collectionId: string, artworkId: string): boolean { return this.#directory.hasCollectionArtwork(collectionId, artworkId); }
 
   listSavedCollectionViews(): SavedCollectionView[] {
     return this.#savedCollectionViews.list();
@@ -2097,6 +2121,7 @@ export class LibraryDatabase {
       );
 
       CREATE INDEX IF NOT EXISTS idx_artworks_imported_at ON artworks(imported_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_artworks_page_order ON artworks(imported_at DESC, id);
       CREATE INDEX IF NOT EXISTS idx_collection_artworks_artwork ON collection_artworks(artwork_id);
       CREATE INDEX IF NOT EXISTS idx_remote_image_reviews_reviewed_at
         ON remote_image_reviews(reviewed_at DESC);
@@ -2290,6 +2315,9 @@ export class LibraryDatabase {
         WHERE deleted_at IS NULL AND last_viewed_at IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_works_artist ON works(artist_id, saved_at DESC);
       CREATE INDEX IF NOT EXISTS idx_assets_work ON assets(work_id, page_index);
+      CREATE INDEX IF NOT EXISTS idx_assets_legacy_images
+        ON assets(legacy_artwork_id, work_id, id)
+        WHERE media_type = 'image' AND legacy_artwork_id IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_assets_thumbnail_path
         ON assets(thumbnail_path) WHERE thumbnail_path IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_assets_pending_thumbnails

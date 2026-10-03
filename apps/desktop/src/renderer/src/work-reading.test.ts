@@ -31,6 +31,15 @@ describe("reading page selection", () => {
     expect(initialWorkPageIndex(work([]))).toBe(0);
   });
 
+  it("starts an explicitly clicked canonical asset instead of saved progress, including a page without a legacy ID", () => {
+    const assets = [asset("first"), { ...asset("middle"), legacyArtworkId: null }, asset("last")];
+    const saved = work(assets, "last");
+    expect(initialWorkPageIndex(saved, "first")).toBe(0);
+    expect(initialWorkPageIndex(saved, "middle")).toBe(1);
+    expect(initialWorkPageIndex(saved, "removed")).toBe(2);
+    expect(initialWorkPageIndex(saved)).toBe(2);
+  });
+
   it("maps an explicitly clicked legacy page to its actual asset without choosing saved progress", () => {
     const full = work([asset("first"), asset("last")], "last");
     expect(artworkReadingAsset(full, { id: "legacy-first", path: "first.png" } as ArtworkRecord)?.id).toBe("first");

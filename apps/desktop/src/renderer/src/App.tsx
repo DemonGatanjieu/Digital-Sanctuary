@@ -2,13 +2,12 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import {
   type AppearancePreferences,
   type ArtistRecord,
-  type ArtworkRecord,
+  type GalleryScope,
   type CollectionRecord,
   type CustomElementGroup,
   type ElementFilterSetting,
   DEFAULT_LIBRARY_PREFERENCES,
   type LibraryPreferences,
-  type SavedCollectionView,
   type SavedCollectionViewDraft,
   type StorageLocationInfo,
 } from "@sanctuary/domain";
@@ -21,6 +20,7 @@ import { GalleryView, type GalleryMode } from "./GalleryView";
 import type { SettingsSection } from "./app-navigation";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
 import { useLibraryQuery } from "./useLibraryQuery";
+import { useGalleryDirectory } from "./useGalleryDirectory";
 import { QuickActions, type QuickAction } from "./QuickActions";
 import { AppNotice } from "./AppNotice";
 import { applyWorkPreset, clearWorkCollectionFilters, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
@@ -41,15 +41,13 @@ export function App() {
   const [activeView, setActiveViewState] = useState<ActiveView>("gallery");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("library");
   const mainRef = useRef<HTMLElement>(null);
-  const [artworks, setArtworks] = useState<ArtworkRecord[]>([]);
+  const [galleryScope, setGalleryScope] = useState<GalleryScope | null>(null);
   const [thumbnailRevision, setThumbnailRevision] = useState(0);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
   const nativeQuickActions = useRef(false);
   const nativeFocusPending = useRef(false);
   const blockingAppOverlay = useRef(false);
-  const artworkGeneration = useRef(0);
-  const [artworksLoading, setArtworksLoading] = useState(false);
   const scrollPositions = useRef(new Map<string, number>());
   const previousView = useRef<ActiveView>("gallery");
   const [collectionEditor, setCollectionEditor] = useState<CollectionRecord | "new" | null>(null);
@@ -61,7 +59,6 @@ export function App() {
   const [bookmarkPreview, setBookmarkPreview] = useState<BookmarkDownloadPreview | null>(null);
   const [startingBookmarkDownload, setStartingBookmarkDownload] = useState(false);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
-  const [savedCollectionViews, setSavedCollectionViews] = useState<SavedCollectionView[]>([]);
   const [artists, setArtists] = useState<ArtistRecord[]>([]);
   const [filterSettings, setFilterSettings] = useState<ElementFilterSetting[]>([]);
   const [status, setStatus] = useState<AppStatus | null>(null);
@@ -84,7 +81,10 @@ export function App() {
     setActiveViewState(next);
   }, [rememberGalleryPosition]);
   const setGalleryMode = useCallback((next: GalleryMode) => {
-    if (next !== navigationState.current.galleryMode) rememberGalleryPosition();
+    if (next !== navigationState.current.galleryMode) {
+      rememberGalleryPosition();
+      setGalleryScope(null);
+    }
     setGalleryModeState(next);
   }, [rememberGalleryPosition]);
   const [analysisWorkIds, setAnalysisWorkIds] = useState<string[]>([]);
@@ -94,19 +94,16 @@ export function App() {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
   blockingAppOverlay.current = Boolean(collectionEditor || bookmarkPreview || inspectorTarget);
-  const refreshArtworks = useCallback(async () => {
-    const generation = ++artworkGeneration.current;
-    setArtworksLoading(true);
-    try {
-      const next = await window.sanctuary.listArtworks();
-      if (generation === artworkGeneration.current) setArtworks(next);
-    } finally {
-      if (generation === artworkGeneration.current) setArtworksLoading(false);
-    }
-  }, []);
+  const directory = useGalleryDirectory(galleryMode, galleryScope, activeView === "gallery", showError);
+  const { refresh: refreshGalleryData, refreshDirectory } = directory;
   useEffect(() => {
-    if (galleryMode !== "flat") void refreshArtworks().catch(showError);
-  }, [galleryMode, refreshArtworks, showError]);
+    if (!galleryScope || directory.directoryLoading || directory.directoryReadyMode !== galleryMode) return;
+    const exists = galleryScope.kind === "collection"
+      ? directory.collectionSummaries.some((item) => item.id === galleryScope.collectionId)
+      : galleryScope.kind === "artist"
+        ? directory.artistSummaries.some((item) => item.artistId === galleryScope.artistId) : true;
+    if (!exists) setGalleryScope(null);
+  }, [galleryScope, galleryMode, directory.directoryLoading, directory.directoryReadyMode, directory.collectionSummaries, directory.artistSummaries]);
   const { query: workQuery, result: workResult, loading: workLoading,
     setQuery: setWorkQuery, refresh: refreshWorks, loadMore: loadMoreWorks } = useLibraryQuery(showError);
   const normalSort = useRef<WorkSortSnapshot>({ sortBy: "savedAt", direction: "desc" });
@@ -156,27 +153,25 @@ export function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeView, busy, galleryMode, openQuickActions]);
 
-  const refreshLibrary = useCallback(async () => {
-    const [, nextCollections, nextArtists, , nextSavedViews, nextStorage] = await Promise.all([
+  const refreshLibrary = useCallback(async (refreshGallery = true) => {
+    const [, nextCollections, nextArtists, , nextStorage] = await Promise.all([
       refreshWorks(),
       window.sanctuary.listCollections(),
       window.sanctuary.listArtists(),
-      galleryMode === "flat" ? Promise.resolve() : refreshArtworks(),
-      window.sanctuary.listSavedCollectionViews(),
+      refreshGallery ? refreshGalleryData() : Promise.resolve(),
       window.sanctuary.getStorageLocation()
     ]);
     setCollections(nextCollections);
     setArtists(nextArtists);
-    setSavedCollectionViews(nextSavedViews);
     setStorageLocation(nextStorage);
-  }, [galleryMode, refreshWorks, refreshArtworks]);
+  }, [refreshWorks, refreshGalleryData]);
 
   useEffect(() => {
     const returned = activeView === "gallery" && previousView.current !== "gallery";
     previousView.current = activeView;
     // Native Pixiv page controls can save works without a renderer-side download callback.
     // Revalidate the retained range on every route back, including shortcuts and search actions.
-    if (returned) void refreshLibrary().catch(showError);
+    if (returned) void refreshLibrary(false).catch(showError);
   }, [activeView, refreshLibrary, showError]);
 
   useEffect(() => {
@@ -198,7 +193,6 @@ export function App() {
 
     void Promise.all([
       window.sanctuary.listCollections(),
-      window.sanctuary.listSavedCollectionViews(),
       window.sanctuary.listFilterSettings(),
       window.sanctuary.status(),
       window.sanctuary.listArtists(),
@@ -207,9 +201,8 @@ export function App() {
       window.sanctuary.listCustomElementGroups(),
       window.sanctuary.getStorageLocation()
     ])
-      .then(([nextCollections, nextSavedViews, nextFilterSettings, nextStatus, nextArtists, nextAppearance, nextLibraryPreferences, nextCustomGroups, nextStorage]) => {
+      .then(([nextCollections, nextFilterSettings, nextStatus, nextArtists, nextAppearance, nextLibraryPreferences, nextCustomGroups, nextStorage]) => {
         setCollections(nextCollections);
-        setSavedCollectionViews(nextSavedViews);
         setFilterSettings(nextFilterSettings);
         setStatus(nextStatus);
         setArtists(nextArtists);
@@ -259,11 +252,12 @@ export function App() {
         await new Promise((resolveTask) => window.setTimeout(resolveTask, 120));
       }
       if (active && changed) await refreshWorks();
+      if (active) await refreshDirectory();
     })().catch(showError);
     return () => {
       active = false;
     };
-  }, [refreshWorks, showError, thumbnailRevision]);
+  }, [refreshWorks, refreshDirectory, showError, thumbnailRevision]);
 
   async function importImages() {
     if (busy) return;
@@ -271,9 +265,8 @@ export function App() {
     setError("");
     try {
       await window.sanctuary.importImages();
-      await refreshWorks();
+      await refreshLibrary();
       setThumbnailRevision((current) => current + 1);
-      if (galleryMode !== "flat") await refreshArtworks();
     } catch (caught) {
       showError(caught);
     } finally {
@@ -288,6 +281,7 @@ export function App() {
         ? await window.sanctuary.createCollection(draft)
         : await window.sanctuary.updateCollection(collectionEditor?.id ?? "", draft));
       setCollectionEditor(null);
+      await refreshGalleryData();
     } catch (caught) {
       showError(caught);
     } finally {
@@ -302,7 +296,7 @@ export function App() {
       } else {
         await window.sanctuary.createSavedCollectionView(draft);
       }
-      setSavedCollectionViews(await window.sanctuary.listSavedCollectionViews());
+      await refreshDirectory();
     } catch (caught) {
       showError(caught);
       throw caught;
@@ -312,7 +306,7 @@ export function App() {
   async function deleteSavedCollectionView(id: string) {
     try {
       await window.sanctuary.deleteSavedCollectionView(id);
-      setSavedCollectionViews(await window.sanctuary.listSavedCollectionViews());
+      await refreshDirectory();
     } catch (caught) {
       showError(caught);
     }
@@ -325,6 +319,7 @@ export function App() {
       setCollections(await window.sanctuary.deleteCollection(collectionEditor.id));
       setCollectionEditor(null);
       await refreshWorks();
+      await refreshGalleryData();
     } catch (caught) {
       showError(caught);
     } finally {
@@ -334,22 +329,26 @@ export function App() {
 
   async function assignCollection(artworkId: string, collectionId: string) {
     if (!collectionId) return;
-    try {
-      setArtworks(await window.sanctuary.addArtworkToCollection(artworkId, collectionId));
-    } catch (caught) {
-      showError(caught);
-    }
+    try { await addCollectionArtworks([artworkId], collectionId); }
+    catch (caught) { showError(caught); }
+  }
+
+  async function addCollectionArtworks(artworkIds: string[], collectionId: string) {
+    await window.sanctuary.addArtworksToCollection(artworkIds, collectionId);
+    await Promise.all([refreshWorks(), refreshGalleryData()]);
   }
 
   async function assignWorkCollection(workId: string, collectionId: string) {
     if (!collectionId) return;
     await window.sanctuary.addWorkToCollection(workId, collectionId);
     await refreshWorks();
+    await refreshGalleryData();
   }
 
   async function updateCollectionCover(collectionId: string, artworkId: string | null) {
     try {
       setCollections(await window.sanctuary.updateCollectionCover(collectionId, artworkId));
+      await refreshDirectory();
     } catch (caught) {
       showError(caught);
     }
@@ -410,7 +409,7 @@ export function App() {
     setGalleryMode("flat");
     setActiveView("gallery");
     setWorkQuery((current) => {
-      const { search: _search, workType: _workType, artistId: _artistId, ...withoutSearch } = current;
+      const { search: _search, workType: _workType, artistId: _artistId, unattributed: _unattributed, ...withoutSearch } = current;
       return applyWorkPreset(clearWorkCollectionFilters(withoutSearch), preset, normalSort.current);
     });
   }
@@ -542,14 +541,25 @@ export function App() {
         <Suspense fallback={<section className="page-loading" role="status">正在打开…</section>}>
         {activeView === "gallery" ? (
           <GalleryView
-            artworks={artworks}
+            collectionSummaries={directory.collectionSummaries}
+            artistSummaries={directory.artistSummaries}
+            artistCount={artists.length}
+            savedViewSummaries={directory.savedViewSummaries}
+            savedViewsTotal={directory.savedViewsTotal}
+            savedViewsHasMore={directory.savedViewsHasMore}
+            directoryLoading={directory.directoryLoading}
+            onRetryDirectory={() => { setError(""); void refreshGalleryData().catch(showError); }}
+            savedViewsLoading={directory.savedViewsLoading}
+            onLoadMoreSavedViews={() => void directory.loadMoreSavedViews()}
+            scope={galleryScope}
+            scopedArtworks={directory.scopedArtworks}
+            scopeLoading={directory.scopeLoading}
+            onScopeChange={setGalleryScope}
             workResult={workResult}
             workQuery={workQuery}
             normalSort={normalSort.current}
-            workLoading={workLoading || (galleryMode !== "flat" && artworksLoading)}
+            workLoading={workLoading}
             collections={collections}
-            savedCollectionViews={savedCollectionViews}
-            artists={artists}
             appearance={appearance}
             mode={galleryMode}
             busy={busy}
@@ -563,13 +573,14 @@ export function App() {
             onSaveSavedView={saveSavedCollectionView}
             onDeleteSavedView={deleteSavedCollectionView}
             onAssignCollection={assignCollection}
+            onAddCollectionArtworks={addCollectionArtworks}
             onAssignWorkCollection={assignWorkCollection}
             onUpdateCollectionCover={updateCollectionCover}
             onRepairArtistAvatars={repairArtistAvatars}
             onModeChange={(nextMode) => void changeGalleryMode(nextMode)}
             onWorkQueryChange={setWorkQuery}
             onLoadMoreWorks={() => void loadMoreWorks()}
-            onWorkLibraryChanged={() => refreshWorks()}
+            onWorkLibraryChanged={() => refreshLibrary()}
             onAnalyzeWorks={(workIds) => {
               setAnalysisWorkIds(workIds);
               setActiveView("organize");

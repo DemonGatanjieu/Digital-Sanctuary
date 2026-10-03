@@ -425,7 +425,7 @@ try {
   });
   const resolvedUserData = resolve(userData);
   if (!resolvedUserData.startsWith(`${temporaryRoot}${sep}sanctuary-navigation-`)) throw new Error("Unexpected temporary directory");
-  await rm(resolvedUserData, { recursive: true, force: true });
+  await rm(resolvedUserData, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 });
 }
 
 async function waitForRenderer() {

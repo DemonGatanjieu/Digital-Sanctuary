@@ -114,7 +114,7 @@ function normalizeDraft(draft: SavedCollectionViewDraft): { name: string; query:
   };
 }
 
-function mapSavedCollectionView(row: SavedCollectionViewRow): SavedCollectionView {
+export function mapSavedCollectionView(row: SavedCollectionViewRow): SavedCollectionView {
   let raw: Partial<SavedCollectionViewQuery> = {};
   try {
     raw = JSON.parse(row.query_json) as Partial<SavedCollectionViewQuery>;

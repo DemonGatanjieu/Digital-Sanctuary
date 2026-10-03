@@ -4,7 +4,11 @@ export function isReadableWorkAsset(asset: WorkAssetRecord): boolean {
   return asset.mediaType === "image" && asset.fileState === "available";
 }
 
-export function initialWorkPageIndex(work: WorkRecord): number {
+export function initialWorkPageIndex(work: WorkRecord, initialAssetId?: string): number {
+  if (initialAssetId) {
+    const clicked = work.assets.findIndex((asset) => asset.id === initialAssetId);
+    if (clicked >= 0) return clicked;
+  }
   const progress = work.readingProgress;
   if (progress?.workId === work.id) {
     const resumed = work.assets.findIndex((asset) => asset.id === progress.assetId && isReadableWorkAsset(asset));

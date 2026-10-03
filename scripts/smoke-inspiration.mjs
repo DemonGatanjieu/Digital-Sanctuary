@@ -287,7 +287,7 @@ try {
   child.kill();
   await new Promise((done) => { if (child.exitCode !== null) done(); else { child.once("exit", done); setTimeout(done, 2000); } });
   if (!resolve(userData).startsWith(`${temporaryRoot}${sep}sanctuary-inspiration-smoke-`)) throw new Error("Unexpected inspiration smoke directory");
-  await rm(userData, { recursive: true, force: true });
+  await rm(userData, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 });
 }
 
 async function availablePort() {

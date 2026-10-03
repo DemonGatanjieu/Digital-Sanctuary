@@ -18,7 +18,7 @@ import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 import { useCinemaViewer } from "./useCinemaViewer";
 import { SegmentedControl } from "./SegmentedControl";
-import { applyWorkPreset, clearWorkCollectionFilters, getWorkPreset, workEmptyMessage, type WorkSortSnapshot } from "./work-presets";
+import { applyWorkPreset, getWorkPreset, workEmptyMessage, type WorkSortSnapshot } from "./work-presets";
 import { initialWorkPageIndex, isReadableWorkAsset } from "./work-reading";
 import { useWorkReading } from "./useWorkReading";
 
@@ -61,7 +61,7 @@ export function WorkLibrary({
   const [notice, setNotice] = useState<{ message: string; undo?: () => Promise<void> } | null>(null);
   const preset = getWorkPreset(query);
   const emptyMessage = workEmptyMessage(query);
-  const showAllWorks = () => onQueryChange(clearWorkCollectionFilters(applyWorkPreset(query, "all", normalSort)));
+  const showAllWorks = () => onQueryChange({ ...normalSort, offset: 0, ...(query.limit ? { limit: query.limit } : {}) });
   const activeCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
   const isCombinationFilter = Boolean(
     (query.collectionIds && query.collectionIds.length > 0) ||
@@ -611,8 +611,8 @@ function LazyWorkImage({ path }: { path: string }) {
   );
 }
 
-function WorkLightbox({ work, onClose, onGenerated, onOpenInspiration, onError }: { work: WorkRecord; onClose: () => void; onGenerated: () => Promise<void> | void; onOpenInspiration: (workId: string, pageIndex: number) => void; onError: (error: unknown) => void }) {
-  const [pageIndex, setPageIndex] = useState(() => initialWorkPageIndex(work));
+export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpenInspiration, onError }: { work: WorkRecord; initialAssetId?: string; onClose: () => void; onGenerated: () => Promise<void> | void; onOpenInspiration: (workId: string, pageIndex: number) => void; onError: (error: unknown) => void }) {
+  const [pageIndex, setPageIndex] = useState(() => initialWorkPageIndex(work, initialAssetId));
   const [showRadar, setShowRadar] = useState(false);
   const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
   const [provenance, setProvenance] = useState<GenerationProvenance | null>(null);

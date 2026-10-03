@@ -56,6 +56,7 @@ export function parseWorkQuery(value: unknown): WorkQuery {
     query.direction = value.direction as SortDirection;
   }
   if (typeof value.favorite === "boolean") query.favorite = value.favorite;
+  if (typeof value.unattributed === "boolean") query.unattributed = value.unattributed;
   if (typeof value.uncollected === "boolean") query.uncollected = value.uncollected;
   if (typeof value.viewedOnly === "boolean") query.viewedOnly = value.viewedOnly;
   return query;

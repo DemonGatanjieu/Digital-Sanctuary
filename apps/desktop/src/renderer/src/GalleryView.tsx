@@ -1,37 +1,48 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppearancePreferences,
-  ArtistRecord,
-  ArtworkRecord,
+  ArtistSummary,
   CollectionRecord,
+  CollectionSummary,
+  GalleryScope,
+  ScopedArtworkRecord,
+  SavedViewSummary,
   SavedCollectionView,
   SavedCollectionViewDraft,
   WorkQuery,
-  WorkQueryResult
+  WorkQueryResult,
+  WorkRecord
 } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
-import { ArtworkLightbox } from "./ArtworkLightbox";
 import { AuthorBrowserCard, AuthorDetailPage } from "./AuthorGallery";
 import { Button } from "./Button";
 import { CollectionCard, CollectionDetailPage, SavedCollectionViewCard } from "./CollectionGallery";
 import { DialogOverlay } from "./DialogOverlay";
 import { SavedCollectionViewEditor } from "./SavedCollectionViewEditor";
 import { SegmentedControl } from "./SegmentedControl";
-import { WorkLibrary } from "./WorkLibrary";
-import { artworkWorkPages, buildAuthorGroups } from "./gallery-model";
-import { applyWorkPreset, clearWorkCollectionFilters, hasWorkFilters, type WorkSortSnapshot } from "./work-presets";
+import { WorkLibrary, WorkLightbox } from "./WorkLibrary";
+import { authorDetailFromSummary, directoryScopeWorkQuery, galleryScopeKey, savedViewWorkQuery } from "./gallery-model";
+import { hasWorkFilters, type WorkSortSnapshot } from "./work-presets";
 
 export type GalleryMode = "flat" | "author-work" | "collections";
 
 export function GalleryView({
-  artworks,
+  scopedArtworks,
+  scope,
+  scopeLoading,
+  directoryLoading,
+  collectionSummaries,
+  artistSummaries,
+  artistCount,
+  savedViewSummaries,
+  savedViewsTotal,
+  savedViewsHasMore,
+  savedViewsLoading,
   workResult,
   workQuery,
   normalSort,
   workLoading,
   collections,
-  savedCollectionViews,
-  artists,
   appearance,
   mode,
   busy,
@@ -45,10 +56,14 @@ export function GalleryView({
   onSaveSavedView,
   onDeleteSavedView,
   onAssignCollection,
+  onAddCollectionArtworks,
   onAssignWorkCollection,
   onUpdateCollectionCover,
   onRepairArtistAvatars,
   onModeChange,
+  onScopeChange,
+  onLoadMoreSavedViews,
+  onRetryDirectory,
   onWorkQueryChange,
   onLoadMoreWorks,
   onWorkLibraryChanged,
@@ -57,14 +72,22 @@ export function GalleryView({
   onOpenPixivArtist,
   onError
 }: {
-  artworks: ArtworkRecord[];
+  scopedArtworks: ScopedArtworkRecord[];
+  scope: GalleryScope | null;
+  scopeLoading: boolean;
+  directoryLoading: boolean;
+  collectionSummaries: CollectionSummary[];
+  artistSummaries: ArtistSummary[];
+  artistCount: number;
+  savedViewSummaries: SavedViewSummary[];
+  savedViewsTotal: number;
+  savedViewsHasMore: boolean;
+  savedViewsLoading: boolean;
   workResult: WorkQueryResult;
   workQuery: WorkQuery;
   normalSort: WorkSortSnapshot;
   workLoading: boolean;
   collections: CollectionRecord[];
-  savedCollectionViews: SavedCollectionView[];
-  artists: ArtistRecord[];
   appearance: AppearancePreferences;
   mode: GalleryMode;
   busy: boolean;
@@ -78,10 +101,14 @@ export function GalleryView({
   onSaveSavedView: (draft: SavedCollectionViewDraft, id?: string) => Promise<void>;
   onDeleteSavedView: (id: string) => Promise<void>;
   onAssignCollection: (artworkId: string, collectionId: string) => Promise<void> | void;
+  onAddCollectionArtworks: (artworkIds: string[], collectionId: string) => Promise<void>;
   onAssignWorkCollection: (workId: string, collectionId: string) => Promise<void>;
   onUpdateCollectionCover: (collectionId: string, artworkId: string | null) => void;
   onRepairArtistAvatars: () => void;
   onModeChange: (mode: GalleryMode) => void;
+  onScopeChange: (scope: GalleryScope | null) => void;
+  onLoadMoreSavedViews: () => void;
+  onRetryDirectory: () => void;
   onWorkQueryChange: (query: WorkQuery) => void;
   onLoadMoreWorks: () => void;
   onWorkLibraryChanged: () => Promise<void>;
@@ -90,35 +117,73 @@ export function GalleryView({
   onOpenPixivArtist: (artistId: string) => void;
   onError: (error: unknown) => void;
 }) {
-  const authorGroups = useMemo(() => buildAuthorGroups(artworks, artists), [artworks, artists]);
-  const [selectedAuthorKey, setSelectedAuthorKey] = useState("");
-  const [selectedCollectionId, setSelectedCollectionId] = useState("");
-  const [selectedArtworkId, setSelectedArtworkId] = useState("");
+  const [lightbox, setLightbox] = useState<{ work: WorkRecord; initialAssetId: string } | null>(null);
+  const [openingArtworkId, setOpeningArtworkId] = useState("");
+  const openGeneration = useRef(0);
   const [isCreatingSavedView, setIsCreatingSavedView] = useState(false);
   const [editingSavedView, setEditingSavedView] = useState<SavedCollectionView | null>(null);
   const [deletingSavedView, setDeletingSavedView] = useState<SavedCollectionView | null>(null);
 
-  const selectedAuthor = authorGroups.find((author) => author.key === selectedAuthorKey) ?? null;
-  const selectedCollection = collections.find((collection) => collection.id === selectedCollectionId) ?? null;
-  const selectedArtwork = artworks.find((artwork) => artwork.id === selectedArtworkId) ?? null;
-  const lightboxPages = useMemo(
-    () => selectedArtwork ? artworkWorkPages(artworks, selectedArtwork) : [],
-    [artworks, selectedArtwork]
-  );
-  const missingPixivMetadata = artworks.filter(
-    (artwork) => !artwork.source && /^\d+_p\d+\./i.test(artwork.fileName)
-  ).length;
-  const missingAvatarCount = artists.filter((artist) => !artist.avatarLocalPath).length;
+  const selectedAuthor = scope?.kind === "artist" ? artistSummaries.find((author) => author.artistId === scope.artistId) ?? null : null;
+  const selectedCollection = scope?.kind === "collection" ? collectionSummaries.find((collection) => collection.id === scope.collectionId) ?? null : null;
+  const authorDetail = useMemo(() => selectedAuthor ? authorDetailFromSummary(selectedAuthor, scopedArtworks) : null, [selectedAuthor, scopedArtworks]);
+  const missingAvatarCount = artistSummaries.filter((author) => author.artist && !author.artist.avatarLocalPath).length;
+  const scopeKey = galleryScopeKey(scope);
+
+  function closeLightbox() {
+    openGeneration.current += 1;
+    setOpeningArtworkId("");
+    setLightbox(null);
+  }
+
+  function cancelOpeningArtwork() {
+    openGeneration.current += 1;
+    setOpeningArtworkId("");
+  }
+
+  useEffect(() => {
+    if (!openingArtworkId) return;
+    const cancelOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing || document.querySelector(".dialog-overlay")) return;
+      event.preventDefault();
+      cancelOpeningArtwork();
+    };
+    window.addEventListener("keydown", cancelOnEscape);
+    return () => window.removeEventListener("keydown", cancelOnEscape);
+  }, [openingArtworkId]);
+
+  async function openArtwork(artworkId: string) {
+    const clicked = scopedArtworks.find((artwork) => artwork.id === artworkId);
+    if (!clicked) return;
+    const generation = ++openGeneration.current;
+    setOpeningArtworkId(artworkId);
+    try {
+      const work = await window.sanctuary.getWork(clicked.libraryWorkId);
+      if (generation !== openGeneration.current) return;
+      if (!work || !work.assets.some((asset) => asset.id === clicked.assetId)) throw new Error("作品页面已不存在，请重新读取图库。");
+      setLightbox({ work, initialAssetId: clicked.assetId });
+    } catch (error) {
+      if (generation === openGeneration.current) onError(error);
+    } finally {
+      if (generation === openGeneration.current) setOpeningArtworkId("");
+    }
+  }
 
   const showAllWorks = () => {
-    onWorkQueryChange(clearWorkCollectionFilters(applyWorkPreset(workQuery, "all", normalSort)));
+    onWorkQueryChange({ ...normalSort, offset: 0, ...(workQuery.limit ? { limit: workQuery.limit } : {}) });
+    onModeChange("flat");
+  };
+
+  const viewScopeWorks = (target: Exclude<GalleryScope, { kind: "work" }>) => {
+    onWorkQueryChange(directoryScopeWorkQuery(target, normalSort, workQuery.limit));
+    onScopeChange(null);
     onModeChange("flat");
   };
 
   useEffect(() => {
-    if (mode !== "author-work") setSelectedAuthorKey("");
-    if (mode !== "collections") setSelectedCollectionId("");
-  }, [mode]);
+    closeLightbox();
+    return () => { openGeneration.current += 1; };
+  }, [mode, scopeKey]);
 
   return (
     <>
@@ -141,7 +206,7 @@ export function GalleryView({
           />
           {mode === "author-work" && (
             <div className="avatar-repair-control">
-              <Button busy={repairingAvatars} busyLabel="正在补全头像…" disabled={artists.length === 0} onClick={onRepairArtistAvatars}>
+              <Button busy={repairingAvatars} busyLabel="正在补全头像…" disabled={!artistSummaries.some((author) => author.artist)} onClick={onRepairArtistAvatars}>
                 {missingAvatarCount > 0 ? `补全画师头像 (${missingAvatarCount})` : "重新检查头像"}
               </Button>
               {avatarRepairMessage && <small>{avatarRepairMessage}</small>}
@@ -151,22 +216,26 @@ export function GalleryView({
             <Button onClick={() => setIsCreatingSavedView(true)}>新建相册组合</Button>
           )}
           {mode === "collections" && <Button onClick={onCreateCollection}>新建相册</Button>}
+          {mode !== "flat" && <Button busy={directoryLoading} busyLabel="正在读取目录…" onClick={onRetryDirectory}>刷新目录</Button>}
           <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在导入…">导入图片</Button>
         </div>
       </header>
 
       {error && <AppNotice tone="error">{error}</AppNotice>}
+      {openingArtworkId && <AppNotice tone="info"><span>正在读取作品…</span><Button size="small" onClick={cancelOpeningArtwork}>取消读取</Button></AppNotice>}
 
       <section className="summary-row">
         <article><span>作品</span><strong>{workResult.total}</strong></article>
         <article><span>图片页</span><strong>{workResult.totalPages}</strong></article>
-        <article><span>画师</span><strong>{artists.length}</strong></article>
+        <article><span>画师</span><strong>{artistCount}</strong></article>
         <article><span>相册</span><strong>{collections.length}</strong></article>
       </section>
 
-      {workLoading && !hasWorkFilters(workQuery) && (workResult.total === 0 || (mode !== "flat" && artworks.length === 0)) ? (
+      {(mode === "collections" && directoryLoading && collectionSummaries.length === 0) ||
+       (mode === "author-work" && directoryLoading && artistSummaries.length === 0) ||
+       (mode === "flat" && workLoading && !hasWorkFilters(workQuery) && workResult.total === 0) ? (
         <section className="library-loading" role="status">正在读取图库…</section>
-      ) : workResult.total === 0 && !hasWorkFilters(workQuery) ? (
+      ) : mode === "flat" && workResult.total === 0 && !hasWorkFilters(workQuery) ? (
         <section className="empty-state">
           <div className="empty-orbit"><span>✦</span></div>
           <p className="eyebrow">YOUR FIRST ARTWORK</p>
@@ -178,26 +247,21 @@ export function GalleryView({
           </div>
         </section>
       ) : mode === "collections" ? (
-        selectedCollection ? (
+        scopeLoading && scopedArtworks.length === 0 && selectedCollection ? (
+          <section className="library-loading" role="status">正在读取相册页面…</section>
+        ) : selectedCollection ? (
           <CollectionDetailPage
             collection={selectedCollection}
-            artworks={artworks}
+            key={selectedCollection.id}
+            artworks={scopedArtworks}
             collections={collections}
-            onBack={() => setSelectedCollectionId("")}
+            onBack={() => onScopeChange(null)}
             onAssign={onAssignCollection}
-            onOpenArtwork={setSelectedArtworkId}
+            onAddArtworks={(ids) => onAddCollectionArtworks(ids, selectedCollection.id)}
+            onOpenArtwork={(id) => void openArtwork(id)}
             onSetCover={(artworkId) => onUpdateCollectionCover(selectedCollection.id, artworkId)}
-            lightboxOpen={Boolean(selectedArtwork)}
-            onFilterInGallery={() => {
-              const {
-                collectionIds: _cids,
-                collectionMatchMode: _cmm,
-                excludedCollectionIds: _ecids,
-                ...restQuery
-              } = workQuery;
-              onWorkQueryChange({ ...restQuery, collectionId: selectedCollection.id, offset: 0 });
-              onModeChange("flat");
-            }}
+            lightboxOpen={Boolean(lightbox || openingArtworkId)}
+            onFilterInGallery={() => viewScopeWorks({ kind: "collection", collectionId: selectedCollection.id })}
           />
         ) : (
           <div className="collections-view-container">
@@ -205,7 +269,7 @@ export function GalleryView({
             <section className="saved-views-section">
               <div className="section-header-row">
                 <div>
-                  <h3 className="section-title">组合视图 ({savedCollectionViews.length})</h3>
+                  <h3 className="section-title">组合视图 ({savedViewsTotal})</h3>
                   <p className="section-subtext">把多个相册一起查看，可选择同时包含、任意包含或排除</p>
                 </div>
                 <Button variant="ghost" onClick={() => setIsCreatingSavedView(true)}>
@@ -213,7 +277,9 @@ export function GalleryView({
                 </Button>
               </div>
 
-              {savedCollectionViews.length === 0 ? (
+              {savedViewsLoading && savedViewSummaries.length === 0 ? (
+                <p role="status">正在读取组合视图…</p>
+              ) : savedViewSummaries.length === 0 ? (
                 <div className="saved-views-empty-card" onClick={() => setIsCreatingSavedView(true)}>
                   <div className="saved-views-empty-icon">⚡</div>
                   <div className="saved-views-empty-text">
@@ -224,22 +290,13 @@ export function GalleryView({
                 </div>
               ) : (
                 <div className="collections-grid saved-views-grid">
-                  {savedCollectionViews.map((view) => (
+                  {savedViewSummaries.map((view) => (
                     <SavedCollectionViewCard
                       key={view.id}
                       view={view}
                       collections={collections}
-                      artworks={artworks}
                       onOpen={() => {
-                        const { collectionId: _cid, ...restQuery } = workQuery;
-                        const existingCollectionIds = new Set(collections.map((collection) => collection.id));
-                        onWorkQueryChange({
-                          ...restQuery,
-                          collectionIds: view.includedCollectionIds.filter((id) => existingCollectionIds.has(id)),
-                          collectionMatchMode: view.matchMode,
-                          excludedCollectionIds: view.excludedCollectionIds.filter((id) => existingCollectionIds.has(id)),
-                          offset: 0
-                        });
+                        onWorkQueryChange(savedViewWorkQuery(view.effectiveQuery, normalSort, workQuery.limit));
                         onModeChange("flat");
                       }}
                       onEdit={() => setEditingSavedView(view)}
@@ -248,6 +305,7 @@ export function GalleryView({
                   ))}
                 </div>
               )}
+              {savedViewsHasMore && <Button busy={savedViewsLoading} busyLabel="正在读取…" onClick={onLoadMoreSavedViews}>继续加载组合视图（已显示 {savedViewSummaries.length} / {savedViewsTotal}）</Button>}
             </section>
 
             {/* 2. Normal Collections Section */}
@@ -270,23 +328,13 @@ export function GalleryView({
                     <p>点击上方“新建相册”来组织你的画廊</p>
                   </div>
                 )}
-                {collections.map((collection) => (
+                {collectionSummaries.map((collection) => (
                   <CollectionCard
                     key={collection.id}
                     collection={collection}
-                    artworks={artworks}
-                    onOpen={() => setSelectedCollectionId(collection.id)}
+                    onOpen={() => onScopeChange({ kind: "collection", collectionId: collection.id })}
                     onEdit={() => onEditCollection(collection)}
-                    onFilter={() => {
-                      const {
-                        collectionIds: _cids,
-                        collectionMatchMode: _cmm,
-                        excludedCollectionIds: _ecids,
-                        ...restQuery
-                      } = workQuery;
-                      onWorkQueryChange({ ...restQuery, collectionId: collection.id, offset: 0 });
-                      onModeChange("flat");
-                    }}
+                    onFilter={() => viewScopeWorks({ kind: "collection", collectionId: collection.id })}
                   />
                 ))}
               </div>
@@ -311,40 +359,39 @@ export function GalleryView({
         />
       ) : (
         <section className="author-gallery">
-          {missingPixivMetadata > 0 && (
-            <div className="metadata-hint">
-              还有 {missingPixivMetadata} 页旧下载缺少作者信息。再次执行“下载全部收藏”会命中去重，只补作者资料并恢复为用户信任。
-            </div>
-          )}
           {!selectedAuthor ? (
             <div className="author-browser-grid">
-              {authorGroups.map((author) => (
-                <AuthorBrowserCard key={author.key} author={author} onOpen={() => setSelectedAuthorKey(author.key)} />
+              {artistSummaries.map((author) => (
+                <AuthorBrowserCard key={author.key} author={author} onOpen={() => onScopeChange({ kind: "artist", artistId: author.artistId })} />
               ))}
             </div>
-          ) : (
+          ) : scopeLoading && scopedArtworks.length === 0 ? (
+            <section className="library-loading" role="status">正在读取画师页面…</section>
+          ) : authorDetail && (
             <AuthorDetailPage
-              author={selectedAuthor}
+              key={selectedAuthor.key}
+              author={authorDetail}
               collections={collections}
-              onBack={() => setSelectedAuthorKey("")}
+              onBack={() => onScopeChange(null)}
               onAssign={onAssignCollection}
-              onOpenArtwork={setSelectedArtworkId}
+              onOpenArtwork={(id) => void openArtwork(id)}
+              onViewWorks={() => viewScopeWorks({ kind: "artist", artistId: selectedAuthor.artistId })}
               onOpenPixivArtist={onOpenPixivArtist}
-              lightboxOpen={Boolean(selectedArtwork)}
+              lightboxOpen={Boolean(lightbox || openingArtworkId)}
             />
           )}
         </section>
       )}
-      {selectedArtwork && (
-        <ArtworkLightbox
-          artwork={selectedArtwork}
-          pages={lightboxPages}
-          onClose={() => setSelectedArtworkId("")}
-          onSelect={(artwork) => setSelectedArtworkId(artwork.id)}
-          onReadingSaved={onWorkLibraryChanged}
+      {lightbox && (
+        <WorkLightbox
+          key={lightbox.work.id + ":" + lightbox.initialAssetId}
+          work={lightbox.work}
+          initialAssetId={lightbox.initialAssetId}
+          onClose={closeLightbox}
+          onGenerated={onWorkLibraryChanged}
           onError={onError}
           onOpenInspiration={(workId, pageIndex) => {
-            setSelectedArtworkId("");
+            closeLightbox();
             onOpenInspiration(workId, pageIndex);
           }}
         />
@@ -354,7 +401,7 @@ export function GalleryView({
         <SavedCollectionViewEditor
           editingView={editingSavedView}
           collections={collections}
-          existingViews={savedCollectionViews}
+          existingViews={savedViewSummaries}
           onClose={() => {
             setIsCreatingSavedView(false);
             setEditingSavedView(null);
@@ -365,14 +412,7 @@ export function GalleryView({
             setEditingSavedView(null);
           }}
           onApplyTemporarily={(query) => {
-            const { collectionId: _cid, ...restQuery } = workQuery;
-            onWorkQueryChange({
-              ...restQuery,
-              collectionIds: query.collectionIds,
-              collectionMatchMode: query.collectionMatchMode,
-              excludedCollectionIds: query.excludedCollectionIds,
-              offset: 0
-            });
+            onWorkQueryChange(savedViewWorkQuery({ includedCollectionIds: query.collectionIds, matchMode: query.collectionMatchMode, excludedCollectionIds: query.excludedCollectionIds }, normalSort, workQuery.limit));
             onModeChange("flat");
           }}
         />

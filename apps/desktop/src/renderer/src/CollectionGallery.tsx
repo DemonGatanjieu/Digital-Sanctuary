@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ArtworkRecord, CollectionRecord, SavedCollectionView } from "@sanctuary/domain";
+import type { ArtworkRecord, CollectionRecord, CollectionSummary, SavedCollectionView, SavedViewSummary } from "@sanctuary/domain";
 import { AquariumFloatingStage } from "./AquariumFloatingStage";
 import { ArtworkCard, artworkImageUrl } from "./ArtworkCard";
 import { Button } from "./Button";
-import { DialogOverlay } from "./DialogOverlay";
+import { PagedArtworkPicker } from "./PagedArtworkPicker";
 import {
   getPhotobookArtworkIndex,
   getPhotobookSpreadForArtworkIndex,
@@ -21,22 +21,24 @@ export function CollectionDetailPage({
   collections,
   onBack,
   onAssign,
+  onAddArtworks,
   onOpenArtwork,
   onSetCover,
   onFilterInGallery,
   lightboxOpen = false
 }: {
-  collection: CollectionRecord;
+  collection: CollectionSummary;
   artworks: ArtworkRecord[];
   collections: CollectionRecord[];
   onBack: () => void;
   onAssign: (artworkId: string, collectionId: string) => Promise<void> | void;
+  onAddArtworks: (artworkIds: string[]) => Promise<void>;
   onOpenArtwork: (artworkId: string) => void;
   onSetCover: (artworkId: string) => void;
   onFilterInGallery?: () => void;
   lightboxOpen?: boolean;
 }) {
-  const items = useMemo(() => artworks.filter((artwork) => artwork.collectionIds.includes(collection.id)), [artworks, collection.id]);
+  const items = artworks;
   const coverArtwork = artworks.find((a) => a.id === collection.coverArtworkId) ?? items[0];
   const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
   const [viewMode, setViewMode] = useState<"flip" | "aquarium" | "grid" | "toc">("flip");
@@ -46,7 +48,7 @@ export function CollectionDetailPage({
   // Global ESC key listener to exit full-screen game artbook
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || isPickingWorks || lightboxOpen) return;
+      if (e.key !== "Escape" || e.defaultPrevented || e.isComposing || e.keyCode === 229 || isPickingWorks || lightboxOpen || document.querySelector(".dialog-overlay")) return;
       if (isPhotobookTocOpen) {
         e.preventDefault();
         setIsPhotobookTocOpen(false);
@@ -117,8 +119,9 @@ export function CollectionDetailPage({
         {items.length === 0 ? (
           <div className="theater-empty-state">
             <div className="theater-empty-book-icon">📖</div>
-            <h2>《{collection.name}》尚未收录画作</h2>
-            <p>{collection.description || "暂无题记。您可以直接从画廊中挑选精美作品收录至本相册。"}</p>
+            <h2>{collection.workCount > 0 ? "本相册的作品可在图库中浏览" : `《${collection.name}》尚未收录画作`}</h2>
+            <p>{collection.workCount > 0 ? "当前没有可编入画册的页面，原图仍保留在图库中。" : collection.description || "暂无题记。您可以直接从画廊中挑选精美作品收录至本相册。"}</p>
+            {onFilterInGallery && <Button onClick={onFilterInGallery}>在图库中查看作品 ({collection.workCount})</Button>}
             <Button variant="primary" style={{ marginTop: 16 }} onClick={() => setIsPickingWorks(true)}>
               + 立即从画廊挑选作品入册
             </Button>
@@ -234,14 +237,11 @@ export function CollectionDetailPage({
 
       {/* Add Works from Library Modal Picker */}
       {isPickingWorks && (
-        <AddWorksToAlbumDialog
+        <PagedArtworkPicker
           collection={collection}
-          allArtworks={artworks}
           onClose={() => setIsPickingWorks(false)}
           onAdd={async (selectedArtworkIds) => {
-            for (const id of selectedArtworkIds) {
-              await onAssign(id, collection.id);
-            }
+            await onAddArtworks(selectedArtworkIds);
             setIsPickingWorks(false);
           }}
         />
@@ -1334,149 +1334,18 @@ function PhotoMountCard({
   );
 }
 
-function AddWorksToAlbumDialog({
-  collection,
-  allArtworks,
-  onClose,
-  onAdd
-}: {
-  collection: CollectionRecord;
-  allArtworks: ArtworkRecord[];
-  onClose: () => void;
-  onAdd: (selectedArtworkIds: string[]) => Promise<void> | void;
-}) {
-  const [search, setSearch] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [submitting, setSubmitting] = useState(false);
-
-  const filteredArtworks = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return allArtworks.filter((artwork) => {
-      if (artwork.collectionIds.includes(collection.id)) return false; // already in this album
-      if (!term) return true;
-      const titleMatch = (artwork.source?.title ?? artwork.fileName).toLowerCase().includes(term);
-      const artistMatch = (artwork.source?.authorName ?? "").toLowerCase().includes(term);
-      return titleMatch || artistMatch;
-    });
-  }, [allArtworks, collection.id, search]);
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSelectAll = () => {
-    setSelectedIds(new Set(filteredArtworks.map((a) => a.id)));
-  };
-
-  const handleClearAll = () => {
-    setSelectedIds(new Set());
-  };
-
-  const handleConfirm = async () => {
-    if (selectedIds.size === 0) return;
-    setSubmitting(true);
-    try {
-      await onAdd([...selectedIds]);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <DialogOverlay busy={submitting} onClose={onClose}>
-      <div className="add-works-dialog" role="dialog" aria-label={`为相册《${collection.name}》挑选画作`}>
-        <header className="dialog-header">
-          <div>
-            <h3>从画廊挑选画作加入相册</h3>
-            <small>当前相册：《{collection.name}》</small>
-          </div>
-          <button type="button" className="dialog-close-button" onClick={onClose}>×</button>
-        </header>
-
-        <div className="dialog-toolbar-row">
-          <input
-            type="search"
-            className="dialog-search-input"
-            placeholder="搜索画作标题、作者…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <div className="dialog-bulk-btns">
-            <button type="button" onClick={handleSelectAll}>全选当前 ({filteredArtworks.length})</button>
-            <button type="button" onClick={handleClearAll} disabled={selectedIds.size === 0}>清空</button>
-          </div>
-        </div>
-
-        <div className="dialog-work-grid">
-          {filteredArtworks.length === 0 ? (
-            <div className="dialog-empty-hint">
-              {search ? "没有找到符合搜索条件的未收录画作" : "画廊中的所有作品都已收录到本相册中了！"}
-            </div>
-          ) : (
-            filteredArtworks.map((artwork) => {
-              const isSelected = selectedIds.has(artwork.id);
-              return (
-                <div
-                  key={artwork.id}
-                  className={`dialog-work-card ${isSelected ? "selected" : ""}`}
-                  onClick={() => toggleSelect(artwork.id)}
-                >
-                  <div className="dialog-work-thumb">
-                    <img src={artworkImageUrl(artwork)} alt="" loading="lazy" />
-                    <span className={`dialog-check-badge ${isSelected ? "checked" : ""}`}>
-                      {isSelected ? "✓" : ""}
-                    </span>
-                  </div>
-                  <strong className="dialog-work-title">{artwork.source?.title ?? artwork.fileName}</strong>
-                  <small className="dialog-work-artist">{artwork.source?.authorName ?? "本地画师"}</small>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        <footer className="dialog-footer-actions">
-          <span>已选择 <strong>{selectedIds.size}</strong> 部画作</span>
-          <div className="dialog-actions-right">
-            <Button onClick={onClose} disabled={submitting}>取消</Button>
-            <Button
-              variant="primary"
-              disabled={selectedIds.size === 0 || submitting}
-              busy={submitting}
-              busyLabel="正在加入…"
-              onClick={() => void handleConfirm()}
-            >
-              确认加入相册 ({selectedIds.size})
-            </Button>
-          </div>
-        </footer>
-      </div>
-    </DialogOverlay>
-  );
-}
-
 export function CollectionCard({
   collection,
-  artworks,
   onOpen,
   onEdit,
   onFilter
 }: {
-  collection: CollectionRecord;
-  artworks: ArtworkRecord[];
+  collection: CollectionSummary;
   onOpen: () => void;
   onEdit: () => void;
   onFilter?: () => void;
 }) {
-  const coverArtwork = artworks.find((artwork) => artwork.id === collection.coverArtworkId)
-    ?? artworks.find((artwork) => artwork.collectionIds.includes(collection.id));
-  const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
-  const count = artworks.filter((artwork) => artwork.collectionIds.includes(collection.id)).length;
+  const coverUrl = collection.coverAsset ? `sanctuary-image://local/${encodeURIComponent(collection.coverAsset.thumbnailPath ?? collection.coverAsset.path)}` : "";
 
   return (
     <article className="collection-card album-card-book" onClick={onOpen}>
@@ -1513,7 +1382,7 @@ export function CollectionCard({
       </div>
       <div className="collection-info">
         <h3>{collection.name}</h3>
-        <small>{count} 部画作</small>
+        <small>{collection.workCount} 个作品 · {collection.bookPageCount} 页画作</small>
         {collection.description && <p className="collection-desc">{collection.description}</p>}
       </div>
     </article>
@@ -1547,30 +1416,17 @@ export function formatSavedViewSummary(
 export function SavedCollectionViewCard({
   view,
   collections,
-  artworks,
   onOpen,
   onEdit,
   onDelete
 }: {
-  view: SavedCollectionView;
+  view: SavedViewSummary;
   collections: CollectionRecord[];
-  artworks: ArtworkRecord[];
   onOpen: () => void;
   onEdit: () => void;
   onDelete?: () => void;
 }) {
-  const matchingArtworks = artworks.filter((artwork) => {
-    const included =
-      view.includedCollectionIds.length === 0
-        ? true
-        : view.matchMode === "all"
-          ? view.includedCollectionIds.every((id) => artwork.collectionIds.includes(id))
-          : view.includedCollectionIds.some((id) => artwork.collectionIds.includes(id));
-    const excluded = view.excludedCollectionIds.some((id) => artwork.collectionIds.includes(id));
-    return included && !excluded;
-  });
-
-  const previewArtworks = matchingArtworks.slice(0, 4);
+  const previewArtworks = view.previewAssets;
 
   return (
     <article className="collection-card saved-view-card" onClick={onOpen}>
@@ -1600,7 +1456,7 @@ export function SavedCollectionViewCard({
         {previewArtworks.length > 0 ? (
           previewArtworks.map((artwork, idx) => (
             <div key={artwork.id} className={`preview-quadrant quadrant-${idx}`}>
-              <img src={artworkImageUrl(artwork)} alt="" loading="lazy" />
+              <img src={`sanctuary-image://local/${encodeURIComponent(artwork.thumbnailPath ?? artwork.path)}`} alt="" loading="lazy" />
             </div>
           ))
         ) : (
@@ -1614,8 +1470,9 @@ export function SavedCollectionViewCard({
           <h3>{view.name}</h3>
           <span className="saved-view-badge">组合视图</span>
         </div>
-        <small>{matchingArtworks.length} 部画作</small>
+        <small>{view.workCount} 个作品 · {view.pageCount} 页</small>
         <p className="collection-desc">{formatSavedViewSummary(view, collections)}</p>
+        {(view.missingIncludedIds.length > 0 || view.missingExcludedIds.length > 0) && <small>部分相册已删除，按现有条件展示</small>}
       </div>
     </article>
   );

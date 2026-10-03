@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CollectionRecord } from "@sanctuary/domain";
+import type { ArtistRecord, ArtistSummary, CollectionRecord } from "@sanctuary/domain";
 import { AquariumFloatingStage } from "./AquariumFloatingStage";
 import { ArtworkCard, LazyArtworkImage, artworkImageUrl } from "./ArtworkCard";
 import { PhotobookFlipSpread, type PhotobookAlbumInfo } from "./CollectionGallery";
 import { SegmentedControl } from "./SegmentedControl";
 import type { AuthorGalleryGroup } from "./gallery-model";
 
-function AuthorAvatar({ author, large = false }: { author: AuthorGalleryGroup; large?: boolean }) {
-  const localPath = author.artistRecord?.avatarLocalPath ?? "";
+function AuthorAvatar({ author, large = false }: { author: { name: string; artistRecord?: ArtistRecord; artist?: ArtistRecord | null }; large?: boolean }) {
+  const localPath = (author.artistRecord ?? author.artist)?.avatarLocalPath ?? "";
   const [failed, setFailed] = useState(false);
   useEffect(() => setFailed(false), [localPath]);
   const className = `author-monogram${large ? " large" : ""}`;
@@ -26,8 +26,8 @@ function AuthorAvatar({ author, large = false }: { author: AuthorGalleryGroup; l
   return <span className={className}>{author.name.slice(0, 1).toUpperCase()}</span>;
 }
 
-export function AuthorBrowserCard({ author, onOpen }: { author: AuthorGalleryGroup; onOpen: () => void }) {
-  const covers = author.works.flatMap((work) => work.pages).slice(0, 3);
+export function AuthorBrowserCard({ author, onOpen }: { author: ArtistSummary; onOpen: () => void }) {
+  const covers = author.previewAssets;
   return (
     <button className="author-browser-card" onClick={onOpen} title={`进入画师 ${author.name} 的专属工坊展厅`}>
       <span className={`author-cover-grid covers-${Math.min(3, covers.length)}`}>
@@ -35,7 +35,7 @@ export function AuthorBrowserCard({ author, onOpen }: { author: AuthorGalleryGro
           return (
             <LazyArtworkImage
               key={artwork.id}
-              src={artworkImageUrl(artwork)}
+              src={`sanctuary-image://local/${encodeURIComponent(artwork.thumbnailPath ?? artwork.path)}`}
             />
           );
         })}
@@ -44,7 +44,7 @@ export function AuthorBrowserCard({ author, onOpen }: { author: AuthorGalleryGro
         <AuthorAvatar author={author} />
         <span className="author-card-copy">
           <strong>{author.name}</strong>
-          <small>{author.works.length} 个作品 · {author.pageCount} 页画稿</small>
+          <small>{author.workCount} 个作品 · {author.pageCount} 页画稿</small>
         </span>
         <span className="author-card-arrow">→</span>
       </span>
@@ -59,6 +59,7 @@ export function AuthorDetailPage({
   onAssign,
   onOpenArtwork,
   onOpenPixivArtist,
+  onViewWorks,
   lightboxOpen = false
 }: {
   author: AuthorGalleryGroup;
@@ -67,6 +68,7 @@ export function AuthorDetailPage({
   onAssign: (artworkId: string, collectionId: string) => void;
   onOpenArtwork: (artworkId: string) => void;
   onOpenPixivArtist: (artistId: string) => void;
+  onViewWorks: () => void;
   lightboxOpen?: boolean | undefined;
 }) {
   const [viewMode, setViewMode] = useState<"works" | "artbook" | "aquarium" | "catalog">("works");
@@ -80,7 +82,7 @@ export function AuthorDetailPage({
   // Keyboard navigation for ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || lightboxOpen) return;
+      if (e.key !== "Escape" || e.defaultPrevented || e.isComposing || e.keyCode === 229 || lightboxOpen || document.querySelector(".dialog-overlay")) return;
       if (isPhotobookTocOpen) {
         e.preventDefault();
         setIsPhotobookTocOpen(false);
@@ -96,7 +98,7 @@ export function AuthorDetailPage({
   const authorAlbumInfo: PhotobookAlbumInfo = useMemo(() => ({
     id: author.id,
     name: `《${author.name} 专属典藏画集》`,
-    description: `收录画师 ${author.name} 的 ${author.works.length} 个作品与 ${allArtworks.length} 页精选图稿。`,
+    description: `收录画师 ${author.name} 的 ${author.workCount ?? author.works.length} 个作品与 ${allArtworks.length} 页精选图稿。`,
     coverArtworkId: primaryArtwork?.id ?? null
   }), [author, allArtworks, primaryArtwork]);
 
@@ -146,7 +148,7 @@ export function AuthorDetailPage({
             <div className="author-stats-ribbon">
               <span className="author-stat-pill">
                 <span className="pill-icon">🎨</span>
-                <strong>{author.works.length}</strong>
+                <strong>{author.workCount ?? author.works.length}</strong>
                 <span className="pill-label">部作品</span>
               </span>
               <span className="author-stat-pill">
@@ -154,7 +156,7 @@ export function AuthorDetailPage({
                 <strong>{author.pageCount}</strong>
                 <span className="pill-label">页图稿</span>
               </span>
-              {author.id && (
+              {/^[0-9]+$/.test(author.id) && (
                 <button
                   type="button"
                   className="author-pixiv-pill"
@@ -166,6 +168,7 @@ export function AuthorDetailPage({
                   <span className="pixiv-arrow">↗</span>
                 </button>
               )}
+              <button type="button" className="author-pixiv-pill" onClick={onViewWorks}>在图库中查看作品 →</button>
             </div>
           </div>
         </div>
@@ -173,7 +176,13 @@ export function AuthorDetailPage({
 
       {/* Main Content Areas based on View Mode */}
       <main className="author-stage-canvas">
-        {viewMode === "artbook" ? (
+        {allArtworks.length === 0 ? (
+          <section className="empty-state compact-empty">
+            <h2>{author.workCount === 0 ? "这位画师还没有本地作品" : "这些作品可在图库中浏览"}</h2>
+            <p>{author.workCount === 0 ? "保存作品后，会出现在这位画师的目录中。" : "当前没有可编入画册的页面，作品和原图仍然保留。"}</p>
+            <button type="button" className="author-back-btn" onClick={onViewWorks}>查看作品 →</button>
+          </section>
+        ) : viewMode === "artbook" ? (
           /* View Mode 2: Photobook Double-Spread Real Flip Experience */
           <div className="author-photobook-container">
             <PhotobookFlipSpread
@@ -182,7 +191,7 @@ export function AuthorDetailPage({
               onOpenArtwork={onOpenArtwork}
               isTocOpen={isPhotobookTocOpen}
               onTocOpenChange={setIsPhotobookTocOpen}
-              interactionSuspended={false}
+              interactionSuspended={lightboxOpen}
             />
           </div>
         ) : viewMode === "aquarium" ? (

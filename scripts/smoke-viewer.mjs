@@ -347,11 +347,11 @@ try {
     await clickText('[aria-label="画廊布局"] button', '相册');
     await click('.collection-filter-button');
     await waitFor("Boolean(document.querySelector('.work-collection-context')) && document.querySelectorAll('.work-library-card').length === 1");
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"常用筛选\"] button.active').textContent"), '喜欢');
-    assert.equal(await cdp.evaluate("document.querySelector('input[type=search]').value"), '横竖');
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"常用筛选\"] button.active').textContent"), '全部');
+    assert.equal(await cdp.evaluate("document.querySelector('input[type=search]').value"), '', 'directory entry inherited unrelated old search');
     await clickText('.work-collection-context button', '查看全部作品');
     await waitFor("!document.querySelector('.work-collection-context') && document.querySelector('[aria-label=\"常用筛选\"] button.active')?.textContent === '全部'");
-    assert.equal(await cdp.evaluate("document.querySelector('input[type=search]').value"), '横竖', "return all unexpectedly erased the search");
+    assert.equal(await cdp.evaluate("document.querySelector('input[type=search]').value"), '', "return all retained a stale search");
     await changeControl('input[type="search"]', '');
     await cdp.evaluate("window.sanctuary.updateWorkFavorite(['pixiv:123456789'], false)");
     await clickText('[aria-label="常用筛选"] button', '最近浏览');
@@ -360,7 +360,7 @@ try {
     assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').disabled && document.querySelector('.work-sort-direction').disabled"), true);
     await screenshot('recent-reading-gallery');
     await clickText('[aria-label="常用筛选"] button', '全部');
-    checks.push({ name: "favorite-recent-uncollected-compose-with-search-type-and-album-return-all-clears-presets" });
+    checks.push({ name: "favorite-recent-uncollected-compose-with-search-type-and-directory-entry-clears-unrelated-scope" });
 
     await click('.work-cover-button');
     await imageReady();
@@ -405,13 +405,22 @@ try {
     await main.evaluate("(() => { const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain; const channel = 'library:get-work'; const original = ipc._invokeHandlers.get(channel); globalThis.__viewerMapping = { original, pending: [] }; ipc.removeHandler(channel); ipc.handle(channel, (event, request) => new Promise(resolve => globalThis.__viewerMapping.pending.push({ result: original(event, request), resolve }))); })()");
     try {
       await click('.collection-detail-grid .art-preview-button');
-      await imageReady();
-      await waitFor("Boolean(document.querySelector('.cinema-lightbox-theater'))");
-      assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"), true, 'explicit album page was overwritten by saved reading progress');
       await waitForMain('globalThis.__viewerMapping.pending.length === 1');
+      await waitFor("document.querySelector('.app-notice--info')?.textContent.includes('正在读取作品')");
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"), false, 'viewer opened before canonical assets were available');
+      await key('Escape');
+      await waitFor("!document.querySelector('.app-notice--info')");
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.album-fullscreen-theater'))"), true, 'canceling a pending work exited the album');
+      await main.evaluate('globalThis.__viewerMapping.pending[0].resolve(globalThis.__viewerMapping.pending[0].result)');
+      await cdp.evaluate("new Promise(done => setTimeout(done, 100))");
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"), false, 'canceled late work reopened its viewer');
+      await click('.collection-detail-grid .art-preview-button');
+      await waitForMain('globalThis.__viewerMapping.pending.length === 2');
+      await main.evaluate('globalThis.__viewerMapping.pending[1].resolve(globalThis.__viewerMapping.pending[1].result)');
+      await imageReady();
+      assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"), true, 'explicit album page was overwritten by saved reading progress');
       await key('Escape');
       await waitFor("!document.querySelector('.cinema-lightbox-theater')");
-      await main.evaluate('globalThis.__viewerMapping.pending[0].resolve(globalThis.__viewerMapping.pending[0].result)');
     } finally {
       await main.evaluate("(() => { const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain; ipc.removeHandler('library:get-work'); ipc.handle('library:get-work', globalThis.__viewerMapping.original); delete globalThis.__viewerMapping; })()");
     }
@@ -427,7 +436,7 @@ try {
     await key('Escape');
     await waitForProgress(2);
     await cdp.evaluate("(async () => window.sanctuary.updateLibraryPreferences({ ...(await window.sanctuary.getLibraryPreferences()), defaultView: 'flat' }))()");
-    checks.push({ name: 'cover-resumes-and-explicit-album-entry-preserves-clicked-page-and-flushes-slow-canonical-mapping-after-close' });
+    checks.push({ name: 'cover-resumes-explicit-album-page-flushes-on-close-and-canceled-canonical-read-never-reopens' });
 
     await cdp.evaluate("(() => { window.__viewerUnhandled = 0; window.addEventListener('unhandledrejection', () => window.__viewerUnhandled++); })()");
     // Delete only this fixture album through IPC while leaving the rendered select stale, then exercise a genuine failed assignment.
@@ -474,7 +483,7 @@ try {
   await new Promise((done) => { if (child.exitCode !== null) done(); else { child.once("exit", done); setTimeout(done, 2000); } });
   const resolved = resolve(userData);
   if (!resolved.startsWith(`${temporaryRoot}${sep}sanctuary-viewer-`)) throw new Error("Unexpected temporary directory");
-  await rm(resolved, { recursive: true, force: true });
+  await rm(resolved, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 });
 }
 
 function fixturePng(width, height, variant) {

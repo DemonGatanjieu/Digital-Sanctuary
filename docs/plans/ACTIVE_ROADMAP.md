@@ -8,7 +8,7 @@
 
 ### 自主持续推进：日常图库与创作闭环
 
-用户已授权持续加入合适能力与优化；第一批常用图库筛选、阅读位置、创作 Markdown 保存、小窗口输入布局以及对话/分页/探索竞态修复已完成验证。执行边界与验收见 [`TASK_EVERYDAY_LIBRARY_AND_CREATION.md`](./TASK_EVERYDAY_LIBRARY_AND_CREATION.md)。下一批优先按目录摘要和当前范围读取减少相册/画师整库负担，再处理详情返航状态；后续仍按单批完整门禁与 Git 里程碑推进。
+用户已授权持续加入合适能力与优化；第一批常用图库筛选、阅读位置、创作 Markdown 保存、小窗口输入布局与竞态修复，第二批相册/画师目录摘要、范围读取、分页批量入册均已完成验证。执行边界与验收见 [`TASK_EVERYDAY_LIBRARY_AND_CREATION.md`](./TASK_EVERYDAY_LIBRARY_AND_CREATION.md)。接下来处理详情返航状态；后续仍按单批完整门禁与 Git 里程碑推进。
 
 模型中心和视觉雷达运行时第二阶段已经完成代码闭环与真实本地模型烟雾测试；设计真值见 [`../design/MODEL_CENTER_AND_RADAR_RUNTIME.md`](../design/MODEL_CENTER_AND_RADAR_RUNTIME.md)。
 

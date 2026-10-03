@@ -41,6 +41,8 @@ describe("parseWorkQuery", () => {
   });
 
   it("keeps explicit boolean filters and recently viewed sorting without coercing strings", () => {
+    expect(parseWorkQuery({ unattributed: true })).toEqual({ limit: 60, offset: 0, unattributed: true });
+    expect(parseWorkQuery({ unattributed: "true" })).toEqual({ limit: 60, offset: 0 });
     expect(parseWorkQuery({ favorite: false, uncollected: true, viewedOnly: true, sortBy: "lastViewedAt" }))
       .toEqual({ limit: 60, offset: 0, favorite: false, uncollected: true, viewedOnly: true, sortBy: "lastViewedAt" });
     expect(parseWorkQuery({ favorite: "true", uncollected: 1, viewedOnly: null }))

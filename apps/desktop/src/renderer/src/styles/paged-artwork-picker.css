@@ -1,0 +1,100 @@
+.paged-artwork-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(820px, calc(100vw - 48px));
+  height: min(760px, calc(100dvh - 48px));
+  min-height: 0;
+  padding: 22px;
+  background: var(--ds-bg-card);
+}
+
+.paged-picker-heading,
+.paged-picker-toolbar,
+.paged-picker-pagination,
+.paged-picker-footer,
+.paged-picker-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.paged-picker-heading,
+.paged-picker-footer { justify-content: space-between; }
+.paged-picker-heading { align-items: flex-start; }
+.paged-picker-heading > div,
+.paged-picker-footer > div { min-width: 0; }
+.paged-picker-heading h2 { margin: 0; color: var(--ds-text-heading); font-size: 21px; }
+.paged-picker-heading p,
+.paged-picker-status,
+.paged-picker-pagination,
+.paged-picker-footer small { color: var(--ds-text-secondary); font-size: 12px; line-height: var(--ds-leading-body); }
+.paged-picker-heading p { margin: 6px 0 0; overflow-wrap: anywhere; }
+.paged-picker-close { min-width: 40px; min-height: 40px; padding: 0; font-size: 22px; }
+.paged-picker-toolbar input {
+  flex: 1;
+  min-width: 100px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-text-heading);
+  background: var(--ds-bg-card-subtle);
+  font-size: 13px;
+}
+.paged-picker-toolbar input:focus { outline: 2px solid var(--ds-primary-glow); border-color: var(--ds-primary); }
+.paged-picker-toolbar .ui-button { min-height: 40px; white-space: nowrap; }
+.paged-picker-status { flex-shrink: 0; }
+.paged-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(122px, 1fr));
+  align-content: start;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-card-subtle);
+}
+.paged-picker-artwork {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 6px;
+  border: 2px solid transparent;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-card);
+  color: var(--ds-text-body);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--ds-transition-fast), background var(--ds-transition-fast);
+}
+.paged-picker-artwork:hover:not(:disabled),
+.paged-picker-artwork:focus-visible { border-color: var(--ds-primary-border); outline: none; }
+.paged-picker-artwork.selected { border-color: var(--ds-primary); background: var(--ds-primary-subtle); }
+.paged-picker-artwork:disabled { cursor: default; opacity: .55; }
+.paged-picker-thumbnail { position: relative; display: block; width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: var(--ds-radius-sm); }
+.paged-picker-thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+.paged-picker-check { position: absolute; inset: 6px 6px auto auto; display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-full); background: var(--ds-bg-card); color: var(--ds-primary); }
+.paged-picker-artwork strong,
+.paged-picker-artwork small { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.paged-picker-artwork small { color: var(--ds-text-secondary); font-size: 11px; }
+.paged-picker-empty { grid-column: 1 / -1; padding: 30px 12px; color: var(--ds-text-secondary); text-align: center; overflow-wrap: anywhere; }
+.paged-picker-pagination { justify-content: center; }
+.paged-picker-pagination .ui-button { min-width: 85px; min-height: 40px; }
+.paged-picker-footer { padding-top: 12px; border-top: 1px solid var(--ds-border-light); }
+.paged-picker-footer strong { display: block; color: var(--ds-text-heading); font-size: 14px; }
+.paged-picker-footer p { margin: 5px 0 0; font-size: 12px; color: var(--ds-danger-text); overflow-wrap: anywhere; }
+.paged-picker-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .paged-artwork-picker { padding: 16px; gap: 10px; }
+  .paged-picker-toolbar { flex-wrap: wrap; }
+  .paged-picker-toolbar input { flex-basis: 100%; }
+  .paged-picker-footer { align-items: flex-start; flex-wrap: wrap; }
+  .paged-picker-actions { margin-left: auto; }
+}

@@ -7,6 +7,14 @@ import type {
   AnalysisScopePreview,
   ArtistRecord,
   ArtworkRecord,
+  ArtworkPageQuery,
+  ArtworkPageQueryResult,
+  ArtistSummary,
+  CollectionSummary,
+  DirectoryPageQuery,
+  GalleryScope,
+  SavedViewSummaryResult,
+  ScopedArtworkRecord,
   CollectionRecord,
   CustomElementGroup,
   ElementFilterSetting,
@@ -136,6 +144,12 @@ export interface PersonalPreferenceProfileView {
 
 export interface SanctuaryApi {
   listArtworks(): Promise<ArtworkRecord[]>;
+  listCollectionSummaries(): Promise<CollectionSummary[]>;
+  listArtistSummaries(): Promise<ArtistSummary[]>;
+  querySavedViewSummaries(query?: DirectoryPageQuery): Promise<SavedViewSummaryResult>;
+  listScopedArtworks(scope: GalleryScope): Promise<ScopedArtworkRecord[]>;
+  queryArtworkPages(query?: ArtworkPageQuery): Promise<ArtworkPageQueryResult>;
+  addArtworksToCollection(artworkIds: string[], collectionId: string): Promise<number>;
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
   getWork(workId: string): Promise<WorkRecord | null>;
   recordWorkView(workId: string, assetId: string): Promise<WorkReadingProgress | null>;
@@ -254,6 +268,12 @@ export interface SanctuaryApi {
 
 const api: SanctuaryApi = {
   listArtworks: () => ipcRenderer.invoke("library:list") as Promise<ArtworkRecord[]>,
+  listCollectionSummaries: () => ipcRenderer.invoke("collections:summaries") as Promise<CollectionSummary[]>,
+  listArtistSummaries: () => ipcRenderer.invoke("artists:summaries") as Promise<ArtistSummary[]>,
+  querySavedViewSummaries: (query = {}) => ipcRenderer.invoke("saved-collection-views:summaries", query) as Promise<SavedViewSummaryResult>,
+  listScopedArtworks: (scope) => ipcRenderer.invoke("library:scoped-artworks", scope) as Promise<ScopedArtworkRecord[]>,
+  queryArtworkPages: (query = {}) => ipcRenderer.invoke("library:query-artwork-pages", query) as Promise<ArtworkPageQueryResult>,
+  addArtworksToCollection: (artworkIds, collectionId) => ipcRenderer.invoke("collections:add-artworks", artworkIds, collectionId) as Promise<number>,
   queryWorks: (query = {}) =>
     ipcRenderer.invoke("library:query-works", query) as Promise<WorkQueryResult>,
   getWork: (workId) =>

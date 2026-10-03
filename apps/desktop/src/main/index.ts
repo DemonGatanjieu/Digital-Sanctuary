@@ -116,6 +116,7 @@ import {
 } from "../shared/bounded-concurrency.js";
 import { parseWorkId, parseWorkIds } from "../shared/library-query.js";
 import { registerLibraryReadIpc } from "./library-ipc.js";
+import { registerGalleryDirectoryIpc } from "./gallery-directory-ipc.js";
 import { normalizeWindowState, type PersistedWindowState } from "./window-state.js";
 import { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import { registerAnalysisIpc } from "./analysis-ipc.js";
@@ -657,6 +658,7 @@ function registerIpc(): void {
     emitDownloadProgress: (event) => mainWindow?.webContents.send("themes:download-progress", event),
   });
   registerLibraryReadIpc(ipcMain, database, join(app.getPath("userData"), "thumbnails"), encodeLocalThumbnail);
+  registerGalleryDirectoryIpc(ipcMain, database);
   ipcMain.handle("library:create-backup", async (): Promise<string | null> => {
     if (!database || !mainWindow) throw new Error("Application is not ready");
     const timestamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
@@ -1611,8 +1613,7 @@ function registerIpc(): void {
       throw new Error("Collection does not exist");
     }
     if (artworkId !== null) {
-      const artwork = database.listArtworks().find((candidate) => candidate.id === artworkId);
-      if (!artwork?.collectionIds.includes(collectionId)) {
+      if (!database.hasCollectionArtwork(collectionId, artworkId)) {
         throw new Error("Collection cover must belong to the selected collection");
       }
     }
