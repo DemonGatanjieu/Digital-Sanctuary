@@ -16,11 +16,10 @@ function settingsMarkup(section: SettingsSection) {
   return renderToStaticMarkup(
     <TypographyProvider>
       <SettingsView section={section} onSectionChange={ignore} onError={ignore}
-        settings={[]} appearance={appearance} libraryPreferences={DEFAULT_LIBRARY_PREFERENCES}
-        customGroups={[]} status={null} savingGroupId="" error=""
-        onEdit={ignore} onSave={ignore} onAppearanceChange={resolve}
+        appearance={appearance} libraryPreferences={DEFAULT_LIBRARY_PREFERENCES} error=""
+        onOpenProtection={ignore} onAppearanceChange={resolve}
         onLibraryPreferencesChange={resolve} onChooseDownloadDirectory={resolve}
-        onCreateBackup={async () => null} onCustomGroupsChange={resolve} />
+        onCreateBackup={async () => null} />
     </TypographyProvider>
   );
 }
@@ -61,18 +60,27 @@ describe("task-based navigation", () => {
 
   it.each([
     ["library", "storage-preference-card"],
-    ["appearance", "typography-settings-section"],
-    ["protection", "rules-grid"],
+    ["appearance", "theme-settings-container"],
     ["models", "model-center-page"],
-    ["connections", "comfy-settings-section"]
+    ["connections", "external-vision"]
   ] as const)("renders only the requested settings category: %s", (section, expectedClass) => {
     const markup = settingsMarkup(section);
     expect(markup).toContain(expectedClass);
-    const classes = ["storage-preference-card", "typography-settings-section", "rules-grid", "model-center-page", "comfy-settings-section"];
+    const classes = ["storage-preference-card", "theme-settings-container", "model-center-page", "external-vision"];
     for (const otherClass of classes.filter((value) => value !== expectedClass)) {
       expect(markup).not.toContain(otherClass);
     }
     expect(markup.match(/<h1>/g)).toHaveLength(1);
+  });
+
+  it("keeps advanced forms out of initial settings and leaves protection in its task", () => {
+    expect(settingsMarkup("appearance")).not.toContain("slot-select");
+    expect(settingsMarkup("connections")).not.toContain("vision-model-input");
+    expect(settingsMarkup("library")).not.toContain("一键迁移已有照片至此");
+    expect(settingsMarkup("protection")).toContain("在探索管理浏览保护");
+    expect(settingsMarkup("protection")).not.toContain("rules-grid");
+    expect(settingsMarkup("models")).not.toContain("相似搜索");
+    expect(settingsMarkup("models")).not.toContain("整体观感");
   });
 
   it("restores the download location without resetting browsing preferences", () => {

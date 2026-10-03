@@ -87,6 +87,7 @@ try {
       const settled = await bookState();
       for (const label of ["典藏相角", "和纸手账", "画廊浮雕", "复古拍立得"]) {
         await clickText('.photobook-mount-switcher:not(.photobook-effect-switcher) button', label);
+        await assertLayout("collection");
         await leaveAndReturn("settings", "collection", "flip");
         await assertBook(settled);
         assert.ok(await cdp.evaluate(`document.querySelector('.photobook-mount-switcher:not(.photobook-effect-switcher) button.active')?.textContent.includes(${JSON.stringify(label)})`));
@@ -343,15 +344,16 @@ async function assertLayout(kind) {
     const bounds=detail.getBoundingClientRect();
     const hud=document.querySelector('.theater-hud-header');
     const clippedControls=Array.from(detail.querySelectorAll('.theater-hud-header button,.author-back-btn,[aria-label="浏览视角"] button')).filter(node=>{
-      const rect=node.getBoundingClientRect();return rect.left<bounds.left-2 || rect.right>bounds.right+2;
+      const rect=node.getBoundingClientRect();return node.checkVisibility() && (rect.left<bounds.left-2 || rect.right>bounds.right+2);
     }).map(node=>node.textContent.trim());
     const wrappedLabels=Array.from(detail.querySelectorAll('.photobook-toc-trigger-btn .btn-text,.mount-pill-text,.theater-hud-center button')).filter(node=>{
+      if(!node.checkVisibility()) return false;
       const range=document.createRange();range.selectNodeContents(node);
       const style=getComputedStyle(node),lineHeight=parseFloat(style.lineHeight)||parseFloat(style.fontSize)*1.6;
       return range.getBoundingClientRect().height>lineHeight*1.5;
     }).map(node=>node.textContent.trim());
     const smallTargets=innerWidth>900?[]:Array.from(detail.querySelectorAll('.photobook-toc-trigger-btn,.mount-style-pill,.theater-hud-header button')).filter(node=>{
-      const rect=node.getBoundingClientRect();return rect.height<35.5 || rect.width<35.5;
+      const rect=node.getBoundingClientRect();return node.checkVisibility() && (rect.height<35.5 || rect.width<35.5);
     }).map(node=>node.textContent.trim());
     return { width:innerWidth,height:innerHeight,documentOverflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
       hudOverflow:hud?hud.scrollWidth-hud.clientWidth:0,clippedControls,wrappedLabels,smallTargets,stageOverflow:stage?stage.scrollWidth-stage.clientWidth:0 };
@@ -367,7 +369,11 @@ async function click(selector) {
 }
 async function clickText(selector, text) {
   const find = `Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(node=>node.textContent.includes(${JSON.stringify(text)})&&!node.disabled)`;
-  await waitFor(`Boolean(${find})`); await cdp.evaluate(`(${find}).click()`);
+  await waitFor(`Boolean(${find})`);
+  await cdp.evaluate(`(() => { const node=${find}; const menu=node.closest(".browse-mode-menu,.photobook-display-options"); if(menu && !menu.open) menu.querySelector("summary").click(); })()`);
+  await settledFrames();
+  if(selector.includes('画册模式') || selector.includes('浏览视角')) await assertLayout(selector.includes('画册模式')?'collection':'artist');
+  await cdp.evaluate(`(${find}).click()`);
 }
 async function directory(kind) {
   if (await cdp.evaluate("document.querySelector('[data-nav=gallery]')?.getAttribute('aria-current') !== 'page'")) await click('[data-nav="gallery"]');

@@ -107,6 +107,7 @@ async function runFixture(metadataWorks) {
       assert.equal(await cdp.evaluate(`(() => { const button = document.querySelector(${JSON.stringify(selector)}); if (button.disabled) return false; button.click(); return true; })()`), true, `Disabled control: ${selector}`);
     }
     async function clickText(selector, text) {
+      await cdp.evaluate(`(() => { const node=Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el=>el.textContent.includes(${JSON.stringify(text)})); const menu=node?.closest(".browse-mode-menu,.photobook-display-options"); if(menu && !menu.open) menu.querySelector("summary").click(); })()`);
       await waitFor(`Array.from(document.querySelectorAll(${JSON.stringify(selector)})).some(el => el.textContent.includes(${JSON.stringify(text)}) && !el.disabled)`);
       await cdp.evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el => el.textContent.includes(${JSON.stringify(text)}) && !el.disabled).click()`);
     }

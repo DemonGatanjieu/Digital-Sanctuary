@@ -82,6 +82,7 @@ import {
   isPixivArtworkImageUrl,
   normalizePixivArtworkImageUrl,
   parseExploreBounds,
+  nativeExploreBounds,
   shouldAllowPixivLoginPermission,
   shouldBlockExploreAdRequest,
   shouldBlockExploreResource,
@@ -1074,20 +1075,20 @@ function registerIpc(): void {
     return { fileName: basename(path), assessment, decision };
   });
 
-  ipcMain.handle("explore:show", (_event, bounds: unknown) => {
+  ipcMain.handle("explore:show", (event, bounds: unknown) => {
     const parsedBounds = parseExploreBounds(bounds);
     if (!parsedBounds) throw new Error("Invalid exploration bounds");
-    exploreBounds = parsedBounds;
+    exploreBounds = nativeExploreBounds(parsedBounds, event.sender.getZoomFactor());
     exploreVisible = true;
     syncExploreProtectionVisibility();
     scheduleExploreState();
     return currentExploreState();
   });
-  ipcMain.handle("explore:set-bounds", (_event, bounds: unknown) => {
+  ipcMain.handle("explore:set-bounds", (event, bounds: unknown) => {
     const parsedBounds = parseExploreBounds(bounds);
     if (!parsedBounds) return false;
-    exploreBounds = parsedBounds;
-    if (exploreView && exploreVisible) exploreView.setBounds(parsedBounds);
+    exploreBounds = nativeExploreBounds(parsedBounds, event.sender.getZoomFactor());
+    if (exploreView && exploreVisible) exploreView.setBounds(exploreBounds);
     return true;
   });
   ipcMain.handle("explore:hide", () => {

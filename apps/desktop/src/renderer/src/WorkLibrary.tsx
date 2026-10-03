@@ -1,3 +1,4 @@
+import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -670,6 +671,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
           <button type="button" className={`cinema-btn-fit ${zoom === 1 ? "active" : ""}`} title="自适应 / 原始像素 (每像素对应 1 CSS px；双击或按 1)" onClick={viewer.toggleNativeZoom}>
             {nativeMode ? "自适应全貌" : "1:1 原图"}
           </button>
+          <ArtworkToolsMenu>
           <button
             type="button"
             className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
@@ -694,6 +696,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
           >
             ✦ 一起创作
           </button>
+          </ArtworkToolsMenu>
           {provenance && (
             <button type="button" className={`cinema-btn-fit ${showProvenance ? "active" : ""}`} title="查看 ComfyUI 生成来源" onClick={() => { setShowProvenance((value) => !value); setShowRadar(false); setShowInspector(false); }}>
               ✦ 生成来源

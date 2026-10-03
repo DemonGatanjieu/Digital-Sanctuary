@@ -28,6 +28,7 @@ import { AppNotice } from "./AppNotice";
 import { applyWorkPreset, clearWorkCollectionFilters, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
 
 const SettingsView = lazy(() => import("./SettingsView").then((module) => ({ default: module.SettingsView })));
+const ExploreProtectionPanel = lazy(() => import("./ExploreProtectionPanel").then((module) => ({ default: module.ExploreProtectionPanel })));
 const AnalysisView = lazy(() => import("./AnalysisView").then((module) => ({ default: module.AnalysisView })));
 const InspirationView = lazy(() => import("./InspirationView").then((module) => ({ default: module.InspirationView })));
 const CollectionEditor = lazy(() => import("./CollectionEditor").then((module) => ({ default: module.CollectionEditor })));
@@ -50,6 +51,8 @@ export function App() {
   const detailCapture = useRef<{ scope: GalleryDetailScope; capture: () => GalleryDetailSessionPatch } | null>(null);
   const [thumbnailRevision, setThumbnailRevision] = useState(0);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
+  const [protectionOpen, setProtectionOpen] = useState(false);
+  const [protectionBusy, setProtectionBusy] = useState(false);
   const [pendingSearchFocus, setPendingSearchFocus] = useState(false);
   const nativeQuickActions = useRef(false);
   const nativeFocusPending = useRef(false);
@@ -71,7 +74,6 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [repairingAvatars, setRepairingAvatars] = useState(false);
   const [avatarRepairMessage, setAvatarRepairMessage] = useState("");
-  const [savingGroupId, setSavingGroupId] = useState("");
   const [error, setError] = useState("");
   const [exploreState, setExploreState] = useState<ExploreState>(initialExploreState);
   const [galleryMode, setGalleryModeState] = useState<GalleryMode>("flat");
@@ -107,6 +109,7 @@ export function App() {
   }, []);
   const setActiveView = useCallback((next: ActiveView) => {
     if (next !== navigationState.current.activeView) rememberGalleryPosition();
+    if (next !== "explore") setProtectionOpen(false);
     setActiveViewState(next);
   }, [rememberGalleryPosition]);
   const setGalleryMode = useCallback((next: GalleryMode) => {
@@ -230,6 +233,7 @@ export function App() {
       applyThemeCss(event.cssContent);
     });
     const unsubInspector = window.sanctuary.onExploreOpenInspector((data) => {
+      setProtectionOpen(false);
       setInspectorTarget(data);
     });
 
@@ -416,31 +420,28 @@ export function App() {
     }
   }
 
-  function editFilterSetting(next: ElementFilterSetting) {
-    setFilterSettings((current) =>
-      current.map((setting) => (setting.groupId === next.groupId ? next : setting))
-    );
-  }
-
-  async function saveFilterSetting(setting: ElementFilterSetting) {
-    setSavingGroupId(setting.groupId);
-    setError("");
-    try {
-      setFilterSettings(await window.sanctuary.updateFilterSetting(setting));
-    } catch (caught) {
-      showError(caught);
-    } finally {
-      setSavingGroupId("");
-    }
-  }
-
   async function openGallery() {
     setActiveView("gallery");
   }
 
   function openSettings(section: SettingsSection) {
+    if (section === "protection") { openProtection(); return; }
     setSettingsSection(section);
     setActiveView("settings");
+  }
+
+  function openProtection() {
+    setInspectorTarget(null);
+    setProtectionOpen(true);
+    setActiveView("explore");
+  }
+  const closeProtection = useCallback(() => {
+    nativeFocusPending.current = true;
+    setProtectionOpen(false);
+  }, []);
+  async function updateCustomGroups(groups: CustomElementGroup[]) {
+    setCustomElementGroups(await window.sanctuary.updateCustomElementGroups(groups));
+    setFilterSettings(await window.sanctuary.listFilterSettings());
   }
 
   async function changeGalleryMode(mode: GalleryMode) {
@@ -529,6 +530,7 @@ export function App() {
     { id: "albums", label: "浏览相册", description: "管理相册与组合视图", keywords: ["分类", "画集"], onSelect: () => { setActiveView("gallery"); void changeGalleryMode("collections"); } },
     { id: "organize", label: "整理与分类", description: "按标签查找、推荐相册分类", keywords: ["分析", "标签"], onSelect: () => { setAnalysisWorkIds([]); setActiveView("organize"); } },
     { id: "explore", label: "打开探索", description: "浏览 Pixiv 并保存作品", shortcut: "Ctrl 2", keywords: ["下载", "收藏"], onSelect: () => setActiveView("explore") },
+    { id: "protection", label: "浏览保护", description: "在探索调整拦截内容与识别模型", keywords: ["规则", "过滤", "阈值"], onSelect: openProtection },
     { id: "creation", label: "打开创作", description: "聊图、写设定与提示词", shortcut: "Ctrl 3", keywords: ["对话", "写作"], onSelect: () => setActiveView("inspiration") },
     { id: "settings", label: "打开设置", description: "管理图库与存储", shortcut: "Ctrl 4", onSelect: () => openSettings("library") },
     { id: "models", label: "本地模型", description: "安装或切换识别、画评与创作模型", keywords: ["安装", "AI"], onSelect: () => openSettings("models") },
@@ -670,16 +672,13 @@ export function App() {
             section={settingsSection}
             onSectionChange={setSettingsSection}
             onError={showError}
-            settings={filterSettings}
             appearance={appearance}
             libraryPreferences={libraryPreferences}
-            customGroups={customElementGroups}
-            status={status}
-            savingGroupId={savingGroupId}
             error={error}
             storageLocation={storageLocation}
-            onEdit={editFilterSetting}
-            onSave={saveFilterSetting}
+            onOpenProtection={openProtection}
+            modelBusy={protectionBusy}
+            onModelBusyChange={setProtectionBusy}
             onAppearanceChange={updateAppearance}
             onLibraryPreferencesChange={updateLibraryPreferences}
             onChooseDownloadDirectory={async () => {
@@ -700,10 +699,6 @@ export function App() {
               try { return await window.sanctuary.createLibraryBackup(); }
               catch (caught) { showError(caught); return null; }
             }}
-            onCustomGroupsChange={async (groups) => {
-              setCustomElementGroups(await window.sanctuary.updateCustomElementGroups(groups));
-              setFilterSettings(await window.sanctuary.listFilterSettings());
-            }}
           />
         ) : (
           <ExploreView
@@ -713,6 +708,15 @@ export function App() {
             isModalOpen={Boolean(bookmarkPreview || collectionEditor || quickActionsOpen)}
             focusOnShow={nativeFocusPending.current}
             onFocusRestored={() => { nativeFocusPending.current = false; }}
+            protectionOpen={protectionOpen}
+            onProtectionOpen={openProtection}
+            onProtectionClose={closeProtection}
+            protectionPanel={protectionOpen && <Suspense fallback={<aside className="explore-protection-panel">正在读取保护设置…</aside>}>
+              <ExploreProtectionPanel state={exploreState} status={status} settings={filterSettings} customGroups={customElementGroups}
+                busy={protectionBusy} onBusyChange={setProtectionBusy}
+                onReloadPage={async () => { setExploreState(await window.sanctuary.exploreCommand("reload")); }}
+                onSettingsChange={setFilterSettings} onCustomGroupsChange={updateCustomGroups} onClose={closeProtection} />
+            </Suspense>}
             onStateChange={setExploreState}
             onError={showError}
           />

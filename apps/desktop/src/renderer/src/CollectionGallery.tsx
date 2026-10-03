@@ -13,7 +13,7 @@ import {
   resolvePhotobookKeyboardAction,
   type PhotoMountStyle
 } from "./photobook-navigation";
-import { SegmentedControl } from "./SegmentedControl";
+import { BrowseModeMenu } from "./BrowseModeMenu";
 import { photobookAnchor, resolvePhotobookSpread, type CollectionDetailSession, type CollectionDetailViewMode, type GalleryDetailSessionPatch, type PageAnchor, type ScrollPosition } from "./gallery-detail-session";
 import { detailPageAttributes } from "./detail-scroll";
 import { useDetailScroll } from "./useDetailScroll";
@@ -130,7 +130,7 @@ export function CollectionDetailPage({
         </div>
 
         <div className="theater-hud-center">
-          <SegmentedControl
+          <BrowseModeMenu
             compact
             label="画册模式"
             value={viewMode}
@@ -589,6 +589,13 @@ export function PhotobookFlipSpread({
           </button>
         </div>
 
+        <details className="photobook-display-options" onKeyDown={(event) => {
+          if (event.key === "Escape" && event.currentTarget.open && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+            event.preventDefault(); event.stopPropagation();
+            event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus();
+          }
+        }}>
+        <summary>展示选项</summary>
         <div className="photobook-toolbar-right">
           {/* Turn Effect Switcher */}
           <div className="photobook-mount-switcher photobook-effect-switcher">
@@ -628,6 +635,7 @@ export function PhotobookFlipSpread({
             </div>
           </div>
         </div>
+        </details>
       </div>
 
       {/* 3D Open Hardcover Double Spread (Permanent Double Page Deck) */}

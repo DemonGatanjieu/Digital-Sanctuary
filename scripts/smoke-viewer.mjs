@@ -93,6 +93,7 @@ try {
       await cdp.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
     }
     async function clickText(selector, text) {
+      await cdp.evaluate(`(() => { const node=Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el=>el.textContent.includes(${JSON.stringify(text)})); const menu=node?.closest(".browse-mode-menu,.photobook-display-options,.artwork-tools-menu"); if(menu && !menu.open) menu.querySelector("summary").click(); })()`);
       await waitFor(`Array.from(document.querySelectorAll(${JSON.stringify(selector)})).some(el => el.textContent.includes(${JSON.stringify(text)}))`);
       await cdp.evaluate(`Array.from(document.querySelectorAll(${JSON.stringify(selector)})).find(el => el.textContent.includes(${JSON.stringify(text)})).click()`);
     }
@@ -118,7 +119,7 @@ try {
       await imageReady();
       const layout = await cdp.evaluate(`(() => {
         const theater = document.querySelector('.cinema-lightbox-theater');
-        const buttons = Array.from(theater.querySelectorAll('.cinema-hud-island button'));
+        const buttons = Array.from(theater.querySelectorAll('.cinema-hud-island button,.cinema-hud-island summary')).filter(el=>el.checkVisibility());
         return { overflow: theater.scrollWidth - theater.clientWidth,
           controlsVisible: buttons.every(el => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.width >= 35 && r.height >= 35; }),
           objectFit: getComputedStyle(theater.querySelector('img.cinema-image-entity')).objectFit,
@@ -171,6 +172,18 @@ try {
       await key("Home");
       await waitFor("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')");
       await imageReady();
+      assert.equal(await cdp.evaluate("document.querySelector('.artwork-tools-menu').open"),false);
+      await click('.artwork-tools-menu > summary');
+      await cdp.evaluate("document.querySelector('.artwork-tools-menu > summary').focus()");
+      const toolsBounds=await cdp.evaluate("(() => {const r=document.querySelector('.artwork-tools-options').getBoundingClientRect();return {left:r.left,right:r.right,bottom:r.bottom,height:innerHeight,width:innerWidth};})()");
+      assert.ok(toolsBounds.left>=0 && toolsBounds.right<=toolsBounds.width && toolsBounds.bottom<=toolsBounds.height,`${entry} tools menu clipped: ${JSON.stringify(toolsBounds)}`);
+      await key('ArrowRight');
+      assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"),true);
+      await cdp.evaluate("document.querySelector('.artwork-tools-menu summary').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:229,isComposing:true,bubbles:true}))");
+      assert.equal(await cdp.evaluate("document.querySelector('.artwork-tools-menu').open"),true);
+      await key('Escape');
+      assert.equal(await cdp.evaluate("document.querySelector('.artwork-tools-menu').open"),false);
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"),true);
       await clickText(".cinema-hud-island button", "雷达画像");
       await waitFor("Boolean(document.querySelector('.cinema-radar-drawer'))");
       assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.cinema-nav-arrow, .filmstrip-thumb-btn')).every(button => button.disabled)"), true, "background page controls remained enabled under radar");

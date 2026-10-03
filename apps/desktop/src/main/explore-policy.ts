@@ -146,6 +146,13 @@ export function parseExploreBounds(value: unknown): ExploreBounds | null {
   };
 }
 
+/** Renderer rectangles are CSS pixels; Electron View bounds use device-independent pixels. */
+export function nativeExploreBounds(bounds: ExploreBounds, rendererZoom: number): ExploreBounds {
+  const zoom = Number.isFinite(rendererZoom) && rendererZoom > 0 ? rendererZoom : 1;
+  return { x: Math.round(bounds.x * zoom), y: Math.round(bounds.y * zoom),
+    width: Math.round(bounds.width * zoom), height: Math.round(bounds.height * zoom) };
+}
+
 function isFiniteCoordinate(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }

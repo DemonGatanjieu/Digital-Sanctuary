@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ExploreBounds, ExploreCommand, ExploreState } from "../../preload/index";
 import { AppNotice } from "./AppNotice";
 
@@ -53,6 +53,10 @@ export function ExploreView({
   isModalOpen = false,
   focusOnShow = false,
   onFocusRestored,
+  protectionOpen = false,
+  protectionPanel,
+  onProtectionOpen,
+  onProtectionClose,
   onStateChange,
   onError
 }: {
@@ -62,6 +66,10 @@ export function ExploreView({
   isModalOpen?: boolean;
   focusOnShow?: boolean;
   onFocusRestored?: () => void;
+  protectionOpen?: boolean;
+  protectionPanel?: ReactNode;
+  onProtectionOpen?: () => void;
+  onProtectionClose?: () => void;
   onStateChange: (state: ExploreState) => void;
   onError: (caught: unknown) => void;
 }) {
@@ -71,6 +79,7 @@ export function ExploreView({
   focusOnShowRef.current = focusOnShow;
   focusRestoredRef.current = onFocusRestored;
   const [passwordSetupOpened, setPasswordSetupOpened] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const protectedBrowsingReady = state.protectionStatus === "ready";
   const contentAvailable = protectedBrowsingReady || state.protectionStatus === "bypassed";
 
@@ -109,7 +118,7 @@ export function ExploreView({
           .then((nextState) => {
             if (active) {
               onStateChange(nextState);
-              if (focusOnShowRef.current) {
+              if (!protectionOpen && focusOnShowRef.current) {
                 focusOnShowRef.current = false;
                 void window.sanctuary.focusExplore().then(() => focusRestoredRef.current?.()).catch(onError);
               }
@@ -133,7 +142,19 @@ export function ExploreView({
       unsubscribe();
       void window.sanctuary.hideExplore();
     };
-  }, [isDrawerOpen, isModalOpen, onError, onStateChange]);
+  }, [isDrawerOpen, isModalOpen, protectionOpen, onError, onStateChange]);
+
+  useEffect(() => {
+    if (!protectionOpen) return;
+    document.querySelector<HTMLButtonElement>(".protection-panel-close")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing || event.keyCode === 229 || isModalOpen || isDrawerOpen) return;
+      event.preventDefault();
+      onProtectionClose?.();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [protectionOpen, isModalOpen, isDrawerOpen, onProtectionClose]);
 
   async function runCommand(command: ExploreCommand) {
     try {
@@ -164,8 +185,7 @@ export function ExploreView({
           <strong>{state.title || state.url}</strong>
           <small>{state.url}</small>
         </div>
-        <button className="account-setup-button" title="在默认浏览器中打开 Pixiv 官方密码设置页" onClick={() => void openPasswordSetup()}>浏览器设置密码</button>
-        <button className="login-button" disabled={!contentAvailable} onClick={() => void runCommand("login")}>邮箱登录</button>
+        <button className="explore-account-trigger" type="button" aria-expanded={accountOpen} onClick={() => setAccountOpen(!accountOpen)}>账号</button>
         <div className={`shield-status protection-${state.protectionStatus}`} title="本地模型状态与探索保护模式">
           <span className={`status-dot ${protectedBrowsingReady ? "online" : ""}`} />
           {state.protectionStatus === "bypassed" ? (
@@ -176,21 +196,21 @@ export function ExploreView({
             <span>模型未就绪</span>
           ) : (
             <>
-              <span>放行 {state.approvedResources}</span>
-              {state.blockedResources > 0 && <span style={{ color: "var(--ds-danger-text)", fontWeight: 700 }}>· 拦截 {state.blockedResources}</span>}
-              {state.blockedAds > 0 && <span style={{ color: "var(--ds-warning-text)" }}>· 广告 {state.blockedAds}</span>}
-              {state.remoteReviewCacheHits > 0 && <span>· 缓存 {state.remoteReviewCacheHits}</span>}
-              {(state.pendingResources > 0 || state.queuedResources > 0) && (
-                <span style={{ color: "var(--ds-primary)", fontWeight: 700 }}>· 检查中 {state.pendingResources + state.queuedResources}</span>
-              )}
+              <span>保护已开启</span>
             </>
           )}
         </div>
+        <button className="explore-protection-trigger" type="button" aria-expanded={protectionOpen}
+          onClick={protectionOpen ? onProtectionClose : onProtectionOpen}>浏览保护</button>
         <button className="maximize-button" title={state.maximized ? "还原窗口" : "最大化窗口"} onClick={() => void runCommand("maximize")}>
           {state.maximized ? "❐" : "□"}
         </button>
       </div>
-
+      {accountOpen && <div className="explore-account-actions" aria-label="登录与账号">
+        <button className="login-button" disabled={!contentAvailable} onClick={() => void runCommand("login")}>邮箱登录</button>
+        <button className="account-setup-button" onClick={() => void openPasswordSetup()}>浏览器设置密码</button>
+        <span>使用 Pixiv 邮箱登录；第三方账号可先在浏览器设置密码。</span>
+      </div>}
       {(passwordSetupOpened || state.url.startsWith("https://accounts.pixiv.net/login")) && (
         <div className="auth-hint">
           {passwordSetupOpened
@@ -199,6 +219,7 @@ export function ExploreView({
         </div>
       )}
       {(state.error || error) && <AppNotice tone="error" className="explore-error">{state.error || error}</AppNotice>}
+      <div className={`explore-workspace ${protectionOpen ? "protection-open" : ""}`}>
       <div className={`explore-surface ${isDrawerOpen ? "with-drawer" : ""}`} ref={surfaceRef}>
         {!contentAvailable ? (
           <div className={`explore-protection-gate ${state.protectionStatus}`}>
@@ -209,12 +230,11 @@ export function ExploreView({
               <p>{state.protectionStatus === "starting"
                 ? "模型确认加载完成后，Pixiv 页面才会出现。画廊始终可以正常使用。"
                 : "这不是图片命中规则，因此不会用大量遮罩冒充拦截结果。"}</p>
-              {state.protectionError && state.protectionStatus !== "starting" && (
-                <code>{state.protectionError}</code>
-              )}
+              {state.protectionError && state.protectionStatus !== "starting" && <details className="protection-failure-details"><summary>查看错误详情</summary><code>{state.protectionError}</code></details>}
               <div className="protection-gate-actions">
                 <button className="primary" disabled={state.protectionStatus === "starting"} onClick={() => void runCommand("retry-vision")}>重新启动模型</button>
                 <button disabled={state.protectionStatus === "starting"} onClick={() => void runCommand("browse-unprotected")}>本次无保护浏览</button>
+                <button onClick={onProtectionOpen}>检查保护设置</button>
               </div>
             </div>
           </div>
@@ -225,6 +245,8 @@ export function ExploreView({
             <small>{state.protectionStatus === "bypassed" ? "当前会话不会隐藏图片。" : "只对确实命中个人规则的作品进行隐藏。"}</small>
           </div>
         )}
+      </div>
+      {protectionOpen && protectionPanel}
       </div>
     </section>
   );

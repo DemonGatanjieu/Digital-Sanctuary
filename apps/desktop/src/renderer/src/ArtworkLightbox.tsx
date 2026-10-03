@@ -1,3 +1,4 @@
+import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ArtworkRecord, VisionEvaluationResult, WorkRecord } from "@sanctuary/domain";
@@ -118,6 +119,7 @@ export function ArtworkLightbox({
             {nativeMode ? "自适应全貌" : "1:1 原图"}
           </button>
 
+          <ArtworkToolsMenu>
           <button
             type="button"
             className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
@@ -145,6 +147,7 @@ export function ArtworkLightbox({
             ✦ 一起创作
           </button>
 
+          </ArtworkToolsMenu>
           <button
             type="button"
             className="cinema-btn-close"

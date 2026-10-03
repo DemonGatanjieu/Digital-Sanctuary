@@ -133,9 +133,8 @@ export function ThemeSettingsSection({ onThemeSwitchSuccess }: ThemeSettingsSect
     <section className="theme-settings-container">
       <header className="theme-settings-header">
         <div>
-          <p className="eyebrow">THEMES & VISUALS</p>
-          <h2>个性化主题与外观</h2>
-          <p className="page-description">零刷新无缝热切换视觉风格，支持安装来自 GitHub 社区的二次元创意主题。</p>
+          <h2>主题</h2>
+          <p className="page-description">选择喜欢的界面风格。</p>
         </div>
 
         <div className="theme-nav-toggle">

@@ -92,10 +92,9 @@ export function VisionSettingsSection() {
     <section className="user-profile-card vision-settings-section">
       <div className="section-header">
         <div>
-          <p className="eyebrow">AI VISION & RADAR</p>
-          <h2>外部大模型视觉服务与雷达图配置</h2>
+          <h2>外部画评服务</h2>
           <p className="page-description">
-            配置用于画作主观解读的视觉大模型。所有 API 密钥均由 Electron <code>safeStorage</code> 本地硬件加密存储，绝无明文回传。
+            仅在你主动请求云端画评时使用，密钥保存在本机系统密钥库。
           </p>
         </div>
       </div>

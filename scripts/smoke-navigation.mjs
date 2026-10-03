@@ -138,7 +138,7 @@ try {
 
     await key("k", "KeyK", 2);
     await waitFor("document.activeElement?.className === 'quick-actions-search'");
-    await fill(".quick-actions-search", "模型");
+    await fill(".quick-actions-search", "本地模型");
     await cdp.evaluate("document.querySelector('.quick-actions-search').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, isComposing: true }))");
     assert.equal(await cdp.evaluate("Boolean(document.querySelector('.quick-actions-dialog'))"), true);
     await key("Enter", "Enter");
@@ -224,8 +224,8 @@ try {
     await checkLayout("organize-900", true);
     await click('[data-nav="settings"]');
     const categories = [
-      ["library", ".storage-preference-card"], ["appearance", ".typography-settings-section"],
-      ["protection", ".rules-grid"], ["models", ".model-center-page"], ["connections", ".comfy-settings-section"]
+      ["library", ".storage-preference-card"], ["appearance", ".theme-settings-container"],
+      ["models", ".model-center-page"], ["connections", '[data-disclosure="external-vision"]']
     ];
     for (const [section, selector] of categories) {
       await click(`[data-settings="${section}"]`);
@@ -237,6 +237,9 @@ try {
       assert.equal(await cdp.evaluate("document.querySelector('main').scrollTop"), 0);
       await checkLayout(`settings-${section}-900`, true);
     }
+    assert.equal(await cdp.evaluate("Boolean(document.querySelector('#vision-model-input'))"), false);
+    await click('[data-disclosure="external-vision"] > button');
+    await click('[data-disclosure="comfyui"] > button');
     await waitFor("document.querySelector('#vision-model-input').value.length > 0");
     await fill("#vision-model-input", "navigation-draft-model");
     await fill("#vision-key-input", "navigation-test-placeholder");
@@ -246,6 +249,7 @@ try {
     assert.deepEqual(await cdp.evaluate("[document.querySelector('#vision-model-input').value, document.querySelector('#vision-key-input').value, document.querySelector('.comfy-config-row input').value]"),
       ["navigation-draft-model", "navigation-test-placeholder", "http://127.0.0.1:8288"]);
     await click('[data-settings="appearance"]');
+    await click('[data-disclosure="typography"] > button');
     await waitFor("document.querySelector('.slot-select')?.options.length > 1");
     await fill('.slot-select', "preset::preset.classical-editorial");
     await waitFor("Boolean(document.querySelector('.typography-save-bar'))");
@@ -385,6 +389,139 @@ try {
       assert.equal(await mainInspector.evaluate(visibleNativeView), true, "an expired show response hid the current exploration view");
       assert.equal(await native.evaluate("document.hasFocus()"), true, "an expired show response interrupted restored native focus");
       checks.push({ name: "native-expired-show-response-preserves-newer-show" });
+
+      // Use production rule persistence; only hold/fail a reply and provide two disposable
+      // model identities to exercise the contextual picker without downloading weights.
+      await mainInspector.evaluate(`(async () => {
+        const ipc=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').ipcMain;
+        const channels=['filters:update','models:snapshot','models:activate'];
+        const originals=new Map(channels.map(channel=>[channel,ipc._invokeHandlers.get(channel)]));
+        const snapshot=await originals.get('models:snapshot')();
+        const template=snapshot.models.find(model=>model.capability==='element_tagging');
+        if(!template) throw new Error('No production element model descriptor');
+        const state=globalThis.__contextualProtectionSmoke={originals,saveMode:'hold',saveCalls:0,release:null,active:'smoke-engine-a',failModel:false,holdModel:false,releaseModel:null,modelCalls:[]};
+        for(const channel of channels) ipc.removeHandler(channel);
+        ipc.handle('models:snapshot',()=>({...snapshot,models:['a','b'].map(suffix=>({...template,
+          id:'smoke-engine-'+suffix,name:suffix==='a'?'隔离识别模型 A':'隔离识别模型 B · 测试长名称',
+          installed:true,bundled:true,active:state.active==='smoke-engine-'+suffix})),activeByCapability:{element_tagging:state.active}}));
+        ipc.handle('models:activate',(_event,id)=>{
+          state.modelCalls.push(id);
+          if(state.failModel) {state.failModel=false;throw new Error('隔离模型切换失败');}
+          if(!['smoke-engine-a','smoke-engine-b'].includes(id)) throw new Error('Unexpected model test identity');
+          const commit=()=>{state.active=id;return {modelId:id,runtimeRestarted:true};};
+          if(state.holdModel){state.holdModel=false;return new Promise(resolve=>{state.releaseModel=()=>{state.releaseModel=null;resolve(commit());};});}
+          return commit();
+        });
+        ipc.handle('filters:update',(...args)=>{
+          state.saveCalls++;
+          if(state.saveMode==='fail') {state.saveMode='normal';throw new Error('隔离规则保存失败');}
+          if(state.saveMode!=='hold') return originals.get('filters:update')(...args);
+          state.saveMode='normal';
+          return new Promise((resolve,reject)=>{state.release=()=>{
+            state.release=null;try{resolve(originals.get('filters:update')(...args));}catch(error){reject(error);}
+          };});
+        });
+        return true;
+      })()`);
+      await click('.explore-protection-trigger');
+      await waitFor("Boolean(document.querySelector('.protection-rule-row input:not(:disabled)'))");
+      await waitFor(`!${visibleNativeView}`, mainInspector);
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.explore-protection-panel input[type=range]'))"), false);
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.explore-protection-panel .tag-list'))"), false);
+      assert.equal(await cdp.evaluate("document.activeElement?.className"), 'protection-panel-close');
+      await checkLayout('protection-900', true);
+      checks.push({name:'contextual-protection-narrow-hides-native-and-defaults-to-simple-controls'});
+
+      const originalRule=await cdp.evaluate("(() => {const row=document.querySelector('.protection-rule-row');return {id:row.dataset.ruleId,checked:row.querySelector('input').checked};})()");
+      await click('.protection-rule-row input');
+      await waitFor("typeof globalThis.__contextualProtectionSmoke.release==='function'",mainInspector);
+      assert.equal(await cdp.evaluate("document.querySelector('.protection-rule-row input').checked"),originalRule.checked);
+      assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.protection-rule-row input')).every(input=>input.disabled)"),true);
+      // Closing and reopening cannot unlock a still-pending mutation.
+      await click('.protection-panel-close');
+      await click('.explore-protection-trigger');
+      await waitFor("Boolean(document.querySelector('.protection-current-model')?.textContent.includes('隔离'))");
+      assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.protection-rule-row input')).every(input=>input.disabled)"),true);
+      await mainInspector.evaluate("globalThis.__contextualProtectionSmoke.release();true");
+      await waitFor(`document.querySelector('.protection-rule-row input')?.checked===${!originalRule.checked} && !document.querySelector('.protection-rule-row input').disabled`);
+      assert.equal(await mainInspector.evaluate("globalThis.__contextualProtectionSmoke.saveCalls"),1);
+      assert.equal(await cdp.evaluate(`(async()=> (await window.sanctuary.listFilterSettings()).find(rule=>rule.groupId===${JSON.stringify(originalRule.id)}).enabled)()`),!originalRule.checked);
+      checks.push({name:'pending-rule-save-survives-panel-remount-without-false-success-or-second-write'});
+
+      await mainInspector.evaluate("globalThis.__contextualProtectionSmoke.saveMode='fail';true");
+      await click('.protection-rule-row input');
+      await waitFor("document.querySelector('.explore-protection-panel .app-notice')?.textContent.includes('隔离规则保存失败')");
+      assert.equal(await cdp.evaluate("document.querySelector('.protection-rule-row input').checked"),!originalRule.checked);
+      await click('.protection-rule-row input');
+      await waitFor(`document.querySelector('.protection-rule-row input')?.checked===${originalRule.checked} && !document.querySelector('.protection-rule-row input').disabled`);
+      checks.push({name:'failed-rule-save-keeps-persisted-state-and-retry-succeeds'});
+
+      await click('[data-disclosure="explore-models"] > button');
+      await fill('[aria-label="探索识别模型"] select','smoke-engine-b');
+      await waitFor("document.querySelector('.protection-current-model')?.textContent.includes('模型 B')");
+      await mainInspector.evaluate("globalThis.__contextualProtectionSmoke.failModel=true;true");
+      await fill('[aria-label="探索识别模型"] select','smoke-engine-a');
+      await waitFor("document.querySelector('.explore-protection-panel .app-notice')?.textContent.includes('隔离模型切换失败')");
+      assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"探索识别模型\"] select').value"),'smoke-engine-b');
+      await mainInspector.evaluate("globalThis.__contextualProtectionSmoke.holdModel=true;true");
+      await fill('[aria-label="探索识别模型"] select','smoke-engine-a');
+      await waitFor("typeof globalThis.__contextualProtectionSmoke.releaseModel==='function'",mainInspector);
+      await click('.protection-panel-close');
+      await click('.explore-protection-trigger');
+      await waitFor("document.querySelector('.protection-current-model')?.textContent.includes('模型 B')");
+      assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.protection-rule-row input')).every(input=>input.disabled)"),true);
+      await mainInspector.evaluate("globalThis.__contextualProtectionSmoke.releaseModel();true");
+      await waitFor("document.querySelector('.protection-current-model')?.textContent.includes('模型 A') && !document.querySelector('.protection-rule-row input').disabled");
+      assert.deepEqual(await mainInspector.evaluate("globalThis.__contextualProtectionSmoke.modelCalls"),['smoke-engine-b','smoke-engine-a','smoke-engine-a']);
+      checks.push({name:'explore-model-picker-is-contextual-and-failed-switch-retains-current-model'});
+
+      await click('[data-disclosure="explore-advanced"] > button');
+      await click('.protection-advanced-rule summary');
+      const threshold=await cdp.evaluate("document.querySelector('.protection-advanced-rule input[type=range]').value");
+      const nextThreshold=Number(threshold)>.5?.25:.75;
+      await fill('.protection-advanced-rule input[type=range]',String(nextThreshold));
+      assert.equal(await cdp.evaluate(`(async()=> (await window.sanctuary.listFilterSettings()).find(rule=>rule.groupId===${JSON.stringify(originalRule.id)}).minimumConfidence)()`),Number(threshold));
+      await click('.protection-advanced-rule .ui-button');
+      await waitFor(`!document.querySelector('.protection-rule-row input').disabled && document.querySelector('.protection-advanced-rule input[type=range]').value==='${nextThreshold}'`);
+      assert.equal(await cdp.evaluate(`(async()=> (await window.sanctuary.listFilterSettings()).find(rule=>rule.groupId===${JSON.stringify(originalRule.id)}).minimumConfidence)()`),nextThreshold);
+      checks.push({name:'advanced-threshold-is-explicit-and-persists-only-after-apply'});
+      await cdp.evaluate("window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:229,bubbles:true}))");
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.explore-protection-panel'))"),true);
+      await key('Escape','Escape');
+      await waitFor("!document.querySelector('.explore-protection-panel')");
+      await waitFor(visibleNativeView,mainInspector);
+      await waitFor("document.hasFocus()",native);
+      checks.push({name:'protection-ime-escape-and-close-restore-native-focus'});
+
+      await cdp.send('Emulation.clearDeviceMetricsOverride');
+      for(const [width,height,zoom] of [[1280,720,1],[900,620,1],[1280,720,1.25],[1280,720,1.5]]) {
+        await mainInspector.evaluate(`(() => {
+          const window=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').BrowserWindow.getAllWindows()[0];
+          window.setContentSize(${width},${height});window.webContents.setZoomFactor(${zoom});return true;
+        })()`);
+        await waitFor(`Math.abs(innerWidth-${width/zoom})<3`);
+        await cdp.evaluate("(async()=> {await Promise.allSettled(document.querySelector('.app-shell').getAnimations().map(animation=>animation.finished));await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));})()");
+        await click('.explore-protection-trigger');
+        await waitFor("Boolean(document.querySelector('.protection-rule-row input:not(:disabled)'))");
+        const narrow=await cdp.evaluate("innerWidth<=1100");
+        await waitFor(narrow?`!${visibleNativeView}`:visibleNativeView,mainInspector);
+        if(!narrow) {
+          const rect=await cdp.evaluate("(() => {const r=document.querySelector('.explore-surface').getBoundingClientRect(),p=document.querySelector('.explore-protection-panel').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,panelLeft:p.left,panelRight:p.right};})()");
+          const nativeBounds=await mainInspector.evaluate(`(() => {const w=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').BrowserWindow.getAllWindows()[0];return w.contentView.children.find(view=>view.webContents?.id===${nativeContents.id}).getBounds();})()`);
+          for(const field of ['x','y','width','height']) assert.ok(Math.abs(nativeBounds[field]-rect[field]*zoom)<=2,`native ${field} mismatch ${JSON.stringify({rect,nativeBounds,zoom})}`);
+          assert.ok(nativeBounds.x+nativeBounds.width<=rect.panelLeft*zoom+2,'native view overlapped protection controls');
+        }
+        await checkLayout(`protection-real-${width}-zoom-${zoom}`,true);
+        await click('.protection-panel-close');
+        await waitFor(visibleNativeView,mainInspector);
+        const rect=await cdp.evaluate("(() => {const r=document.querySelector('.explore-surface').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()");
+        await waitFor(`(() => {const w=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').BrowserWindow.getAllWindows()[0];const r=w.contentView.children.find(view=>view.webContents?.id===${nativeContents.id}).getBounds();return ['x','y','width','height'].every(field=>Math.abs(r[field]-${JSON.stringify(rect)}[field]*${zoom})<=2);})()`,mainInspector);
+      }
+      checks.push({name:'real-window-and-100-125-150-percent-ui-zoom-keep-native-view-outside-controls'});
+      await mainInspector.evaluate(`(() => {
+        const w=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').BrowserWindow.getAllWindows()[0];
+        w.webContents.setZoomFactor(1);w.setContentSize(900,620);return true;
+      })()`);
       await click('[data-nav="settings"]');
       await waitFor("Boolean(document.querySelector('.settings-navigation'))");
       await waitFor(`!${visibleNativeView}`, mainInspector);
@@ -405,6 +542,12 @@ try {
 } finally {
   if (mainInspector) {
     try {
+      await mainInspector.evaluate(`(() => {
+        const state=globalThis.__contextualProtectionSmoke;if(!state)return true;
+        const ipc=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').ipcMain;
+        state.release?.();state.releaseModel?.();for(const [channel,handler] of state.originals){ipc.removeHandler(channel);ipc.handle(channel,handler);}
+        delete globalThis.__contextualProtectionSmoke;return true;
+      })()`);
       await mainInspector.evaluate(`(() => {
         const state = globalThis.__navigationShowDelay;
         if (!state) return true;

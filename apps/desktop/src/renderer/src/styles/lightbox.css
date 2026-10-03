@@ -1602,3 +1602,7 @@
   .inspector-header-actions { gap: 5px; }
   .inspector-refresh-btn > span:last-child { display: none; }
 }
+.artwork-tools-menu { position: relative; }
+.artwork-tools-menu > summary { min-height: 36px; padding: 8px 14px; border-radius: 20px; border: 1px solid rgba(255,255,255,.2); color: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.artwork-tools-options { position: absolute; top: calc(100% + 10px); right: 0; display: grid; gap: 6px; width: 210px; padding: 10px; border: 1px solid rgba(255,255,255,.2); border-radius: var(--ds-radius-lg); background: var(--ds-bg-lightbox); box-shadow: var(--ds-shadow-lg); }
+.artwork-tools-options > button { min-height: 40px; text-align: left; }

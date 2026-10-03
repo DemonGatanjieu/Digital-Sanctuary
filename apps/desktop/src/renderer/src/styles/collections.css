@@ -2444,4 +2444,14 @@
 .theater-footer-stats strong {
   color: var(--ds-primary);
 }
-
+.browse-mode-menu { min-width: 0; }
+.browse-mode-menu > summary,
+.photobook-display-options > summary { min-height: 36px; padding: 8px 12px; box-sizing: border-box; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); background: var(--ds-bg-card); color: var(--ds-text-body); font-size: 13px; cursor: pointer; white-space: nowrap; }
+.browse-mode-menu > summary strong { margin-left: 8px; font-weight: 600; }
+.browse-mode-menu .ui-segmented { margin-top: 8px; }
+.theater-hud-center .browse-mode-menu .ui-segmented,
+.author-view-switcher .browse-mode-menu .ui-segmented { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+.browse-mode-menu .ui-segmented button { min-width: 0; min-height: 36px; white-space: nowrap; }
+.photobook-display-options { min-width: 0; }
+.photobook-display-options > summary { width: max-content; }
+.photobook-display-options .photobook-toolbar-right { margin-top: 8px; }

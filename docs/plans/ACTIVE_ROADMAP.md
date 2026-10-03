@@ -1,10 +1,14 @@
 # 现行实施路线：日常图库、创作闭环与模型能力
 
 - 状态：唯一现行路线索引
-- 更新日期：2026-10-03
+- 更新日期：2026-10-04
 - 已完成产品化路线：`archive/2026-08-14-productization-roadmap-p0-p11-complete.md`
 
 ## 当前施工任务
+
+### 已完成：探索保护归位与界面减负
+
+探索规则与识别模型已放回探索页，设置保留四类并按需展开高级参数，相册和大图工具入口已收拢；真实原生视图遮挡、缩放边界和跨页面保存状态已修复并通过完整门禁。归档范围与结果见 [`archive/2026-10-04-contextual-protection-and-simplification-complete.md`](./archive/2026-10-04-contextual-protection-and-simplification-complete.md)。下一步优先收集当前界面的实际使用反馈，再评估日常图库新能力；不继续扩大本批功能数量。
 
 ### 自主持续推进：日常图库与创作闭环
 

@@ -4,6 +4,7 @@ import {
   isPixivArtworkImageUrl,
   normalizePixivArtworkImageUrl,
   parseExploreBounds,
+  nativeExploreBounds,
   pixivArtistUrl,
   PIXIV_LOGIN_URL,
   PIXIV_PASSWORD_SETUP_URL,
@@ -96,5 +97,10 @@ describe("Pixiv exploration policy", () => {
     expect(parseExploreBounds({ x: 0, y: 0, width: 20, height: 20 })).toBeNull();
     expect(parseExploreBounds({ x: 0, y: 0, width: Number.NaN, height: 500 }))
       .toBeNull();
+  });
+  it.each([1, 1.25, 1.5])("maps CSS rectangles to native View coordinates at zoom %s", (zoom) => {
+    expect(nativeExploreBounds({ x: 190, y: 80, width: 710, height: 540 }, zoom)).toEqual({
+      x: Math.round(190 * zoom), y: Math.round(80 * zoom), width: Math.round(710 * zoom), height: Math.round(540 * zoom)
+    });
   });
 });

@@ -3,7 +3,7 @@ import type { ArtistRecord, ArtistSummary, CollectionRecord } from "@sanctuary/d
 import { AquariumFloatingStage } from "./AquariumFloatingStage";
 import { ArtworkCard, LazyArtworkImage, artworkImageUrl } from "./ArtworkCard";
 import { PhotobookFlipSpread, type PhotobookAlbumInfo } from "./CollectionGallery";
-import { SegmentedControl } from "./SegmentedControl";
+import { BrowseModeMenu } from "./BrowseModeMenu";
 import type { AuthorGalleryGroup } from "./gallery-model";
 import type { ArtistDetailSession, ArtistDetailViewMode, GalleryDetailSessionPatch } from "./gallery-detail-session";
 import { detailPageAttributes } from "./detail-scroll";
@@ -167,7 +167,7 @@ export function AuthorDetailPage({
           </button>
 
           <div className="author-view-switcher">
-            <SegmentedControl
+            <BrowseModeMenu
               compact
               label="浏览视角"
               value={viewMode}

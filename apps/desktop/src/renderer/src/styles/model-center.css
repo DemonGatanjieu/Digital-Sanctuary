@@ -249,3 +249,6 @@
 [data-display-profile="efficient"] .model-card { transition: none; }
 [data-reduced-motion="true"] .model-card:hover,
 [data-display-profile="efficient"] .model-card:hover { transform: none; }
+.model-technical-details { margin: 8px 0 14px; min-width: 0; }
+.model-technical-details summary { min-height: 36px; padding: 8px 0; font-size: 12px; color: var(--ds-text-muted); cursor: pointer; }
+.model-download-size { font-size: 12px; color: var(--ds-text-muted); }
