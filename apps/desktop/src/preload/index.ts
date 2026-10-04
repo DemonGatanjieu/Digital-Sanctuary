@@ -34,6 +34,7 @@ import type {
   WorkQuery,
   WorkQueryResult,
   WorkRecord,
+  WorkInformation,
   WorkReadingProgress,
   WorkDeletionPreview,
   WorkDeletionResult,
@@ -155,6 +156,7 @@ export interface SanctuaryApi {
   addArtworksToCollection(artworkIds: string[], collectionId: string): Promise<number>;
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
   getWork(workId: string): Promise<WorkRecord | null>;
+  getWorkInformation(workId: string, pageIndex: number): Promise<WorkInformation | null>;
   recordWorkView(workId: string, assetId: string): Promise<WorkReadingProgress | null>;
   getGenerationProvenance(workId: string): Promise<GenerationProvenance | null>;
   listInspirationConversations(): Promise<InspirationConversation[]>;
@@ -286,6 +288,8 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:query-works", query) as Promise<WorkQueryResult>,
   getWork: (workId) =>
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
+  getWorkInformation: (workId, pageIndex) =>
+    ipcRenderer.invoke("library:work-information", workId, pageIndex) as Promise<WorkInformation | null>,
   recordWorkView: (workId, assetId) =>
     ipcRenderer.invoke("library:record-work-view", { workId, assetId }) as Promise<WorkReadingProgress | null>,
   getGenerationProvenance: (workId) =>

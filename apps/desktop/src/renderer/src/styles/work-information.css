@@ -1,0 +1,18 @@
+.work-information-drawer { width: min(480px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); overflow-y: auto; background: var(--ds-bg-card); display: grid; gap: 18px; }
+.work-information-drawer header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.work-information-drawer h2, .work-information-drawer h3, .work-information-drawer p { margin: 0; }
+.work-information-drawer h3 { margin-bottom: 8px; font-size: 16px; overflow-wrap: anywhere; }
+.work-information-drawer p { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.work-information-drawer dl { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 10px; font-size: 13px; margin: 0; }
+.work-information-drawer dt { color: var(--ds-text-secondary); }
+.work-information-drawer dd { margin: 0; overflow-wrap: anywhere; }
+.work-information-albums { padding: 0; margin: 0 0 10px; list-style: none; }
+.work-information-albums li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.work-information-albums li span { min-width: 0; overflow-wrap: anywhere; }
+.work-information-assign { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 8px 0; }
+.work-information-assign select { width: 100%; padding: 8px; background: var(--ds-bg-card-subtle); color: var(--ds-text-body); border: 1px solid var(--ds-border-light); border-radius: 8px; }
+.work-information-actions, .work-information-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px !important; }
+.work-information-tags span { background: var(--ds-bg-card-subtle); padding: 4px 8px; border-radius: 8px; font-size: 12px; }
+.work-information-drawer details { padding: 12px; border: 1px solid var(--ds-border-light); border-radius: 10px; }
+.work-information-drawer summary { cursor: pointer; font-size: 13px; }
+.work-information-drawer details[open] summary { margin-bottom: 10px; }

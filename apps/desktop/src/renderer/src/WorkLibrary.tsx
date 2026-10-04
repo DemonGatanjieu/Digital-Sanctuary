@@ -1,4 +1,5 @@
 import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
+import { WorkInformationDrawer } from "./WorkInformationDrawer";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -619,13 +620,14 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
   const [provenance, setProvenance] = useState<GenerationProvenance | null>(null);
   const [showProvenance, setShowProvenance] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
+  const [showInformation, setShowInformation] = useState(false);
   const page = work.assets[pageIndex];
-  const interactionSuspended = showInspector || showRadar || showProvenance;
+  const interactionSuspended = showInspector || showRadar || showProvenance || showInformation;
   const viewerPages = useMemo(() => work.assets.map((asset) => ({ url: workImageUrl(asset.path), width: asset.width, height: asset.height, byteLength: asset.byteLength })), [work.assets]);
   const viewer = useCinemaViewer({
     imageKey: page?.id ?? work.id, pages: viewerPages, pageIndex, onPageChange: setPageIndex, onClose,
     interactionSuspended,
-    onDismissOverlay: showInspector ? undefined : showRadar ? () => setShowRadar(false) : showProvenance ? () => setShowProvenance(false) : undefined
+    onDismissOverlay: showInspector ? undefined : showInformation ? () => setShowInformation(false) : showRadar ? () => setShowRadar(false) : showProvenance ? () => setShowProvenance(false) : undefined
   });
   const { zoom, nativeMode, isPanning, hudVisible, imageLoaded, imageFailed, resetHudTimer } = viewer;
   useWorkReading({ workId: work.id, assetId: page && isReadableWorkAsset(page) ? page.id : null, imageLoaded, onSaved: onGenerated, onError });
@@ -672,11 +674,12 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
             {nativeMode ? "自适应全貌" : "1:1 原图"}
           </button>
           <ArtworkToolsMenu>
+          <button type="button" className="cinema-btn-fit" onClick={() => { setShowInformation(true); setShowRadar(false); setShowInspector(false); setShowProvenance(false); }}>作品信息与相册</button>
           <button
             type="button"
             className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
             title="切换 AI 视觉雷达图画像"
-            onClick={() => { setShowRadar((v) => !v); setShowInspector(false); setShowProvenance(false); }}
+            onClick={() => { setShowRadar((v) => !v); setShowInformation(false); setShowInspector(false); setShowProvenance(false); }}
           >
             ✦ 雷达画像
           </button>
@@ -684,7 +687,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
             type="button"
             className={`cinema-btn-fit ${showInspector ? "active" : ""}`}
             title="查看当前页 WD 标签并打开提示词调音台"
-            onClick={() => { setShowInspector((value) => !value); setShowRadar(false); setShowProvenance(false); }}
+            onClick={() => { setShowInspector((value) => !value); setShowInformation(false); setShowRadar(false); setShowProvenance(false); }}
           >
             ◇ 元素透视
           </button>
@@ -719,6 +722,9 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
           />
         </aside>
       )}
+      {showInformation && <WorkInformationDrawer workId={work.id} pageIndex={page.pageIndex} onClose={() => setShowInformation(false)}
+        onInspector={() => { setShowInformation(false); setShowInspector(true); }} onRadar={() => { setShowInformation(false); setShowRadar(true); }}
+        onInspiration={() => { onClose(); onOpenInspiration(work.id, pageIndex); }} onChanged={onGenerated} />}
 
       {showProvenance && provenance && (
         <aside className="cinema-radar-drawer generation-provenance-drawer" role="complementary" aria-label="生成来源与工作流摘要">

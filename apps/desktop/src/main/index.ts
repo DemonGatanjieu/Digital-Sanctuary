@@ -123,6 +123,7 @@ import { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import { registerAnalysisIpc } from "./analysis-ipc.js";
 import { registerSavedCollectionViewIpc } from "./saved-collection-view-ipc.js";
 import { registerLocalImportIpc } from "./local-import-ipc.js";
+import { registerWorkInformationIpc } from "./work-information-ipc.js";
 import { ThemeManagerService } from "./theme/theme-manager.js";
 import { ThemeStoreService } from "./theme/theme-store.js";
 import { registerThemeIpc } from "./theme/theme-ipc.js";
@@ -653,6 +654,7 @@ function registerIpc(): void {
   });
   registerSavedCollectionViewIpc(ipcMain, database);
   registerLocalImportIpc(ipcMain, database, dialog);
+  registerWorkInformationIpc(ipcMain, database);
   registerThemeIpc({
     ipc: ipcMain,
     dialog,

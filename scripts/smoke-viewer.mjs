@@ -117,6 +117,28 @@ try {
     }
     async function viewerChecks(entry) {
       await imageReady();
+      const inspectCount = await main.evaluate('__viewerInspect.requests.length');
+      await clickText('.cinema-hud-island button', '作品信息与相册');
+      await waitFor("Boolean(document.querySelector('.work-information-drawer [aria-label=\"作品相册\"]'))");
+      assert.equal(await cdp.evaluate("document.querySelector('.work-information-drawer').textContent.includes('Pixiv · 123456789')"), true);
+      assert.equal(await cdp.evaluate("document.querySelector('.work-information-drawer').textContent.includes('查看器测试相册')"), true);
+      assert.equal(await main.evaluate('__viewerInspect.requests.length'), inspectCount, 'reading information started model analysis');
+      const informationBounds = await cdp.evaluate("(()=>{const n=document.querySelector('.work-information-drawer'),r=n.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:innerWidth,height:innerHeight,overflow:n.scrollWidth-n.clientWidth};})()");
+      assert.ok(informationBounds.left >= 0 && informationBounds.right <= informationBounds.width && informationBounds.top >= 0 && informationBounds.bottom <= informationBounds.height && informationBounds.overflow <= 2);
+      await clickText('.work-information-drawer button', '移出相册');
+      await waitFor("document.querySelector('.work-information-drawer').textContent.includes('还未加入相册')");
+      await changeControl('[aria-label="作品信息相册"]', 'viewer-album');
+      await clickText('.work-information-drawer button', '加入相册');
+      await waitFor("Boolean(document.querySelector('.work-information-albums li'))");
+      await key('ArrowRight');
+      assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"), true);
+      await cdp.evaluate("document.querySelector('[aria-label=\"作品信息相册\"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:229,isComposing:true,bubbles:true}))");
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.work-information-drawer'))"), true);
+      await screenshot(`${entry}-work-information`);
+      await key('Escape');
+      await waitFor("!document.querySelector('.work-information-drawer')");
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"), true);
+      checks.push({name:'shared-work-information-read-only-album-round-trip-and-topmost-escape',entry,informationBounds});
       const layout = await cdp.evaluate(`(() => {
         const theater = document.querySelector('.cinema-lightbox-theater');
         const buttons = Array.from(theater.querySelectorAll('.cinema-hud-island button,.cinema-hud-island summary')).filter(el=>el.checkVisibility());

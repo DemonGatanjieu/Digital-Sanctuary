@@ -1,4 +1,5 @@
 import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
+import { WorkInformationDrawer } from "./WorkInformationDrawer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ArtworkRecord, VisionEvaluationResult, WorkRecord } from "@sanctuary/domain";
@@ -35,7 +36,8 @@ export function ArtworkLightbox({
 
   const [showRadar, setShowRadar] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
-  const interactionSuspended = showInspector || showRadar;
+  const [showInformation, setShowInformation] = useState(false);
+  const interactionSuspended = showInspector || showRadar || showInformation;
   const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
   const readingLookup = useRef<{ workId: string; promise: Promise<WorkRecord | null> } | null>(null);
   const resolveReadingAssetId = useCallback(async () => {
@@ -49,7 +51,7 @@ export function ArtworkLightbox({
     imageKey: artwork.id + ":" + artwork.path, pages: viewerPages, pageIndex: currentIndex,
     onPageChange: (index) => { const page = pages[index]; if (page && page.id !== artwork.id) onSelect(page); }, onClose,
     interactionSuspended,
-    onDismissOverlay: showInspector ? undefined : showRadar ? () => setShowRadar(false) : undefined
+    onDismissOverlay: showInspector ? undefined : showInformation ? () => setShowInformation(false) : showRadar ? () => setShowRadar(false) : undefined
   });
   const { zoom, nativeMode, isPanning, imageLoaded, imageFailed, hudVisible, resetHudTimer } = viewer;
   // Preserve the clicked page, and retain its mapping until a brief successfully displayed visit has flushed.
@@ -120,11 +122,12 @@ export function ArtworkLightbox({
           </button>
 
           <ArtworkToolsMenu>
+          <button type="button" className="cinema-btn-fit" onClick={() => { setShowInformation(true); setShowRadar(false); setShowInspector(false); }}>作品信息与相册</button>
           <button
             type="button"
             className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
             title="查看多维视觉雷达图画像"
-            onClick={() => { setShowRadar((prev) => !prev); if (!showRadar) setShowInspector(false); }}
+            onClick={() => { setShowRadar((prev) => !prev); setShowInformation(false); if (!showRadar) setShowInspector(false); }}
           >
             📊 雷达画像 {evaluations.length > 0 ? `(${evaluations.length})` : ""}
           </button>
@@ -133,7 +136,7 @@ export function ArtworkLightbox({
             type="button"
             className={`cinema-btn-fit ${showInspector ? "active" : ""}`}
             title="查看当前画作 AI 视觉标签并设置拦截黑名单"
-            onClick={() => { setShowInspector((prev) => !prev); if (!showInspector) setShowRadar(false); }}
+            onClick={() => { setShowInspector((prev) => !prev); setShowInformation(false); if (!showInspector) setShowRadar(false); }}
           >
             🔍 元素透视
           </button>
@@ -161,6 +164,9 @@ export function ArtworkLightbox({
       </header>
 
       {/* Element Inspector Drawer */}
+      {showInformation && <WorkInformationDrawer workId={libraryWorkId} pageIndex={sourcePageIndex} onClose={() => setShowInformation(false)}
+        onInspector={() => { setShowInformation(false); setShowInspector(true); }} onRadar={() => { setShowInformation(false); setShowRadar(true); }}
+        onInspiration={() => { onClose(); onOpenInspiration(libraryWorkId, sourcePageIndex); }} onChanged={onReadingSaved} />}
       {showInspector && (
         <ElementInspectorDrawer
           target={{

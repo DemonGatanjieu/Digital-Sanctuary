@@ -1720,6 +1720,19 @@ export class LibraryDatabase {
     return row ? parseJson<VisionAssessment>(row.assessment_json) : null;
   }
 
+  getStoredAssetAssessment(workId: string, assetId: string): VisionAssessment | null {
+    const row = this.#database.prepare(
+      `SELECT COALESCE(
+         (SELECT r.assessment_json FROM analysis_asset_results r
+          WHERE r.asset_id = a.id AND r.asset_updated_at = a.updated_at
+          ORDER BY r.analyzed_at DESC LIMIT 1), legacy.assessment_json) AS assessment_json
+       FROM assets a JOIN works w ON w.id = a.work_id
+       LEFT JOIN artworks legacy ON legacy.id = a.legacy_artwork_id
+       WHERE a.work_id = ? AND a.id = ? AND w.deleted_at IS NULL`
+    ).get(workId, assetId) as { assessment_json: string | null } | undefined;
+    return row ? parseJson<VisionAssessment>(row.assessment_json) : null;
+  }
+
   completeAnalysisItem(item: AnalysisQueueItem, assessment: VisionAssessment, cached: boolean): void {
     const now = new Date().toISOString();
     this.#database.exec("BEGIN IMMEDIATE");
