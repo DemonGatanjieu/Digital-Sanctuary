@@ -1,5 +1,6 @@
 import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
 import { WorkInformationDrawer } from "./WorkInformationDrawer";
+import { SavedWorkFilters } from "./SavedWorkFilters";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -242,6 +243,7 @@ export function WorkLibrary({
           onChange={(next) => onQueryChange(applyWorkPreset(query, next, normalSort))}
         />
         {preset === "recent" && <small>按最近浏览排列 · 自动记住读到的页</small>}
+        <SavedWorkFilters query={query} collections={collections} onApply={onQueryChange} />
       </div>
 
       <section className="work-library-controls" aria-label="画廊搜索与排序">

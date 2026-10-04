@@ -24,6 +24,8 @@ import type {
   RuleSandboxResult,
   SavedCollectionView,
   SavedCollectionViewDraft,
+  SavedWorkFilter,
+  SavedWorkFilterDraft,
   StorageLocationInfo,
   StorageMigrationResult,
   ActiveTheme,
@@ -186,6 +188,9 @@ export interface SanctuaryApi {
   createSavedCollectionView(draft: SavedCollectionViewDraft): Promise<SavedCollectionView>;
   updateSavedCollectionView(id: string, draft: SavedCollectionViewDraft): Promise<SavedCollectionView | null>;
   deleteSavedCollectionView(id: string): Promise<boolean>;
+  listSavedWorkFilters(): Promise<SavedWorkFilter[]>;
+  createSavedWorkFilter(draft: SavedWorkFilterDraft): Promise<SavedWorkFilter>;
+  deleteSavedWorkFilter(id: string): Promise<boolean>;
   addArtworkToCollection(artworkId: string, collectionId: string): Promise<ArtworkRecord[]>;
   addWorkToCollection(workId: string, collectionId: string): Promise<WorkRecord | null>;
   removeWorkFromCollection(workId: string, collectionId: string): Promise<WorkRecord | null>;
@@ -350,6 +355,9 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("saved-collection-views:update", id, draft) as Promise<SavedCollectionView | null>,
   deleteSavedCollectionView: (id) =>
     ipcRenderer.invoke("saved-collection-views:delete", id) as Promise<boolean>,
+  listSavedWorkFilters: () => ipcRenderer.invoke("saved-work-filters:list") as Promise<SavedWorkFilter[]>,
+  createSavedWorkFilter: (draft) => ipcRenderer.invoke("saved-work-filters:create", draft) as Promise<SavedWorkFilter>,
+  deleteSavedWorkFilter: (id) => ipcRenderer.invoke("saved-work-filters:delete", id) as Promise<boolean>,
   addArtworkToCollection: (artworkId, collectionId) =>
     ipcRenderer.invoke(
       "collections:add-artwork",

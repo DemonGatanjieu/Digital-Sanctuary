@@ -735,3 +735,4 @@ export * from "./vision-suites.js";
 export * from "./typography.js";
 export * from "./local-import.js";
 export * from "./work-information.js";
+export * from "./saved-work-filter.js";

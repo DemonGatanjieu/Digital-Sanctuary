@@ -112,6 +112,7 @@ try {
       await waitFor("Boolean(document.querySelector('.cinema-image-entity')?.complete && document.querySelector('.cinema-image-entity')?.naturalWidth > 0 && document.querySelector('.cinema-image-entity')?.getAttribute('aria-busy') === 'false')");
     }
     async function screenshot(name) {
+      await cdp.evaluate("new Promise(resolve => setTimeout(resolve, 280))");
       const result = await cdp.send("Page.captureScreenshot", { format: "png", fromSurface: true });
       await writeFile(join(screenshots, `${name}.png`), Buffer.from(result.data, "base64"));
     }
@@ -485,6 +486,22 @@ try {
     assert.equal(await cdp.evaluate("Boolean(document.querySelector('.work-operation-notice'))"), false, "failed assignment claimed success");
     checks.push({ name: "failed-card-assignment-surfaces-error-and-releases-busy-without-success-or-rejection" });
 
+    await changeControl('.work-search input', '横竖');
+    await changeControl('[aria-label="作品类型"]', 'illustration');
+    await changeControl('[aria-label="排序字段"]', 'title');
+    await click('[data-saved-filters="open"]');
+    await waitFor("Boolean(document.querySelector('.saved-work-filters-dialog input'))");
+    await changeControl('[aria-label="筛选名称"]', '三页参考');
+    await clickText('.saved-work-filters-dialog button', '保存筛选');
+    await waitFor("document.querySelectorAll('[data-filter-apply]').length === 1");
+    assert.equal(await cdp.evaluate("document.querySelector('.saved-work-filter-list').textContent.includes('搜索“横竖” · 插画')"), true);
+    const savedBounds = await cdp.evaluate("(()=>{const n=document.querySelector('.saved-work-filters-dialog'),r=n.getBoundingClientRect();return {left:r.left,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight,overflow:n.scrollWidth-n.clientWidth};})()");
+    assert.ok(savedBounds.left >= 0 && savedBounds.right <= savedBounds.width && savedBounds.bottom <= savedBounds.height && savedBounds.overflow <= 2);
+    await screenshot('saved-work-filter-900');
+    await key('Escape');
+    await changeControl('.work-search input', '');
+    await changeControl('[aria-label="作品类型"]', '');
+
     // Restart the actual Electron process, keeping only this disposable SQLite library.
     cdp.close();
     main.close();
@@ -507,6 +524,19 @@ try {
     await clickText('[aria-label="常用筛选"] button', '最近浏览');
     await waitFor("document.querySelectorAll('.work-library-card').length === 1");
     checks.push({ name: 'successful-reading-page-and-recent-history-survive-real-electron-restart' });
+    await click('[data-saved-filters="open"]');
+    await waitFor("document.querySelectorAll('[data-filter-apply]').length === 1");
+    await click('[data-filter-apply]');
+    await waitFor("document.querySelector('.work-search input')?.value === '横竖'");
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"作品类型\"]').value"), 'illustration');
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').value"), 'title');
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"常用筛选\"] button.active').textContent"), '全部');
+    await click('[data-saved-filters="open"]');
+    await click('[aria-label="删除筛选 三页参考"]');
+    await waitFor("document.querySelectorAll('[data-filter-apply]').length === 0");
+    assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()"), 1);
+    await key('Escape');
+    checks.push({name:'saved-filter-create-restart-replace-conditions-and-delete-without-removing-works'});
     console.log(JSON.stringify({ status: "passed", checks, screenshots }, null, 2));
   } finally {
     cdp.close();

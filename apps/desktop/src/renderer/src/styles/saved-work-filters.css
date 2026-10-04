@@ -1,0 +1,13 @@
+.saved-work-filters-dialog { width: min(620px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); overflow-y: auto; background: var(--ds-bg-card); display: grid; gap: 16px; }
+.saved-work-filters-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.saved-work-filters-dialog h2, .saved-work-filters-dialog h3, .saved-work-filters-dialog p { margin: 0; }
+.saved-work-filters-dialog h3 { font-size: 15px; }
+.saved-work-filters-dialog p { font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.saved-work-filters-dialog form { padding: 16px; border-radius: 12px; background: var(--ds-bg-card-subtle); display: grid; gap: 10px; }
+.saved-work-filters-dialog form label { display: grid; gap: 6px; font-size: 13px; }
+.saved-work-filters-dialog input { width: 100%; padding: 10px; border: 1px solid var(--ds-border-light); border-radius: 8px; background: var(--ds-bg-card); color: var(--ds-text-body); }
+.saved-work-filters-dialog form .ui-button { justify-self: end; }
+.saved-work-filter-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+.saved-work-filter-list li { border: 1px solid var(--ds-border-light); border-radius: 12px; padding: 14px; display: grid; gap: 8px; }
+.saved-work-filter-list strong { overflow-wrap: anywhere; }
+.saved-work-filter-actions { display: flex; gap: 8px; justify-content: flex-end; }
