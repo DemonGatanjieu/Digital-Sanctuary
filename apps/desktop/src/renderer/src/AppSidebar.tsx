@@ -22,6 +22,8 @@ export function AppSidebar({
   storageLocation,
   onOpenGallery,
   onQuickActions,
+  onOpenTasks,
+  taskCount = 0,
   onViewChange,
   onDownloadCurrentArtwork,
   onPreviewBookmarks,
@@ -37,6 +39,8 @@ export function AppSidebar({
   storageLocation?: StorageLocationInfo | null;
   onOpenGallery: () => void | Promise<void>;
   onQuickActions?: () => void;
+  onOpenTasks?: () => void;
+  taskCount?: number;
   onViewChange: (view: ActiveView) => void;
   onDownloadCurrentArtwork: () => void | Promise<void>;
   onPreviewBookmarks: () => void | Promise<void>;
@@ -76,6 +80,9 @@ export function AppSidebar({
 
       {onQuickActions && <button type="button" className="sidebar-quick-actions" onClick={onQuickActions} title="快捷操作 (Ctrl+K)">
         <span>⌕ 快捷操作</span><kbd>Ctrl K</kbd>
+      </button>}
+      {onOpenTasks && <button type="button" className="sidebar-task-entry" aria-label="任务与进度" onClick={onOpenTasks}>
+        <span>任务与进度</span><span>{taskCount > 0 ? `${taskCount} 项待完成` : "查看"}</span>
       </button>}
       <nav aria-label="主导航">
         {MAIN_NAVIGATION.map((item) => (

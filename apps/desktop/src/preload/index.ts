@@ -3,6 +3,7 @@ import type {
   AppearancePreferences,
   AnalysisApplyResult,
   AnalysisJob,
+  AnalysisTaskSummary,
   AnalysisScope,
   AnalysisScopePreview,
   ArtistRecord,
@@ -225,6 +226,7 @@ export interface SanctuaryApi {
   previewAnalysis(scope: AnalysisScope, engine?: string): Promise<AnalysisScopePreview>;
   createAnalysisJob(scope: AnalysisScope, engine?: string): Promise<AnalysisJob>;
   listAnalysisJobs(): Promise<AnalysisJob[]>;
+  listAnalysisTaskSummaries(): Promise<AnalysisTaskSummary[]>;
   startAnalysisJob(jobId: string): Promise<AnalysisJob>;
   cancelAnalysisJob(jobId: string): Promise<AnalysisJob>;
   applyAnalysisSuggestions(jobId: string, suggestionIds: string[]): Promise<AnalysisApplyResult>;
@@ -443,6 +445,7 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("analysis:create", scope, engine) as Promise<AnalysisJob>,
   listAnalysisJobs: () =>
     ipcRenderer.invoke("analysis:list") as Promise<AnalysisJob[]>,
+  listAnalysisTaskSummaries: () => ipcRenderer.invoke("tasks:analysis") as Promise<AnalysisTaskSummary[]>,
   startAnalysisJob: (jobId) =>
     ipcRenderer.invoke("analysis:start", jobId) as Promise<AnalysisJob>,
   cancelAnalysisJob: (jobId) =>

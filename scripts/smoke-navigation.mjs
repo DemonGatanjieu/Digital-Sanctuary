@@ -101,7 +101,19 @@ try {
       await target.send("Input.dispatchKeyEvent", { type: "keyDown", key, code, modifiers });
       await target.send("Input.dispatchKeyEvent", { type: "keyUp", key, code, modifiers });
     }
+    async function checkButtonContrast(selector) {
+      const ratio = await cdp.evaluate(`(() => {
+        const style = getComputedStyle(document.querySelector(${JSON.stringify(selector)}));
+        const luminance = color => color.match(/[\\d.]+/g).slice(0, 3).map(Number).map(v => {
+          const s = v / 255; return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        }).reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+        const foreground = luminance(style.color), background = luminance(style.backgroundColor);
+        return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+      })()`);
+      assert.ok(ratio >= 4.5, `${selector}: insufficient button text contrast (${ratio})`);
+    }
     async function checkLayout(name, screenshot = false) {
+      if (screenshot) await new Promise((done) => setTimeout(done, 280));
       // Inspect the scroll container as well as the document: inner overflow is otherwise missed.
       const metrics = await cdp.evaluate(`(() => {
         const main = document.querySelector('main');
@@ -382,6 +394,11 @@ try {
       await checkLayout(`appearance-${theme}-900`);
       await click('[data-nav="home"]');
       await checkLayout(`home-${theme}-900`, true);
+      await click('[aria-label="任务与进度"]');
+      await waitFor("Boolean(document.querySelector('.task-center-dialog'))");
+      await checkLayout(`task-center-${theme}-900`, true);
+      await checkButtonContrast('.task-center-dialog .ui-button--secondary');
+      await key('Escape', 'Escape');
       await click('[data-home-task="organize"]');
       await waitFor("document.querySelector('.studio-root')?.textContent.includes('默认使用探索的元素规则')");
       await checkLayout(`organize-${theme}-900`, true);
@@ -495,6 +512,16 @@ try {
       assert.equal(await mainInspector.evaluate(visibleNativeView), true, "an expired show response hid the current exploration view");
       assert.equal(await native.evaluate("document.hasFocus()"), true, "an expired show response interrupted restored native focus");
       checks.push({ name: "native-expired-show-response-preserves-newer-show" });
+      await mainInspector.sendHostKey(nativeContents.id, "K", ["control"]);
+      await fill('.quick-actions-search', '任务与进度');
+      await key('Enter', 'Enter');
+      await waitFor("Boolean(document.querySelector('.task-center-dialog'))");
+      await waitFor(`!${visibleNativeView}`, mainInspector);
+      await checkLayout('task-center-native-900', true);
+      await key('Escape', 'Escape');
+      await waitFor(visibleNativeView, mainInspector);
+      await waitFor("document.hasFocus()", native);
+      checks.push({name:'task-center-from-native-quick-actions-hides-view-and-restores-focus'});
 
       // Use production rule persistence; only hold/fail a reply and provide two disposable
       // model identities to exercise the contextual picker without downloading weights.
@@ -648,6 +675,12 @@ try {
     await mainInspector.evaluate(`(() => {
       const dialog=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').dialog;
       const state=globalThis.__homeImportSmoke={original:dialog.showOpenDialog,calls:0};
+      const ipc=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').ipcMain;
+      state.thumbOriginal=ipc._invokeHandlers.get('library:generate-thumbnails');state.failNextThumb=true;
+      ipc.removeHandler('library:generate-thumbnails');ipc.handle('library:generate-thumbnails',(...args)=>{
+        if(state.failNextThumb){state.failNextThumb=false;return {attempted:6,generated:0,reused:0,failedAssetIds:['fixture-broken-thumbnail']};}
+        return state.thumbOriginal(...args);
+      });
       dialog.showOpenDialog=async()=>++state.calls===1?{canceled:false,filePaths:${JSON.stringify([homeImportPath, duplicateImportPath, failedImportPath])}}:{canceled:true,filePaths:[]};
     })()`);
     try {
@@ -655,6 +688,13 @@ try {
       await click('[data-nav="home"]');
       await click('.home-library-entry button');
       await waitFor("Boolean(document.querySelector('.import-images-dialog'))");
+      await cdp.evaluate("window.sanctuary.setActiveTheme('builtin.cyber-deck')");
+      await cdp.evaluate("new Promise(done=>setTimeout(done,280))");
+      const importTheme = await cdp.evaluate("(()=>{const n=document.querySelector('.import-images-dialog');return {color:getComputedStyle(n).color,background:getComputedStyle(n).backgroundColor};})()");
+      assert.notEqual(importTheme.color, importTheme.background, 'dark import dialog lost text contrast');
+      await checkLayout('import-confirmation-cyber-900', true);
+      await checkButtonContrast('.import-images-dialog .ui-button--secondary');
+      await cdp.evaluate("window.sanctuary.setActiveTheme('builtin.sakura-dream')");
       assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()"), beforeImport);
       await fill('.import-images-dialog select', 'fixture-collection');
       await click('[data-import-action="start"]');
@@ -665,6 +705,16 @@ try {
       assert.equal(await cdp.evaluate("document.querySelector('.import-images-dialog').textContent.includes('已存在 1 · 失败 1')"), true);
       assert.equal(await cdp.evaluate(`(async()=> (await window.sanctuary.queryWorks({collectionId:'fixture-collection'})).items.some(w=>w.title==='首页导入.png'))()`), true);
       await checkLayout('import-result-narrow-window', true);
+      await key('Escape', 'Escape');
+      await click('[aria-label="任务与进度"]');
+      await waitFor("document.querySelector('[data-task-kind=import]')?.textContent.includes('失败 1')");
+      await waitFor("document.querySelector('[data-task-kind=thumbnails]')?.textContent.includes('失败 1')");
+      await click('[data-task-kind="thumbnails"] button');
+      await waitFor("!document.querySelector('[data-task-kind=thumbnails]')?.textContent.includes('失败 1')");
+      await checkLayout('task-center-import-and-thumbnail-retry-900', true);
+      await click('[data-task-kind="import"] button');
+      await waitFor("Boolean(document.querySelector('[data-import-action=retry]'))");
+      assert.equal(await mainInspector.evaluate('__homeImportSmoke.calls'), 1, 'returning to import opened another picker');
       await writeFile(failedImportPath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
       await click('[data-import-action="retry"]');
       await waitFor("document.querySelector('.import-images-dialog').textContent.includes('已存在 2 · 失败 0')");
@@ -678,8 +728,24 @@ try {
       assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()"), beforeImport+1);
       checks.push({name:"home-import-success-navigation-and-cancellation"});
     } finally {
-      await mainInspector.evaluate("process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').dialog.showOpenDialog=__homeImportSmoke.original; delete globalThis.__homeImportSmoke");
+      await mainInspector.evaluate("(()=>{const e=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron');e.dialog.showOpenDialog=__homeImportSmoke.original;e.ipcMain.removeHandler('library:generate-thumbnails');e.ipcMain.handle('library:generate-thumbnails',__homeImportSmoke.thumbOriginal);delete globalThis.__homeImportSmoke;return true;})()");
     }
+    const taskJob = await cdp.evaluate("window.sanctuary.createAnalysisJob({type:'selected',workIds:['fixture-work']},'fixture')");
+    const taskState = await cdp.evaluate("window.sanctuary.getExploreState()");
+    taskState.download = {...taskState.download,phase:'partial',scope:'current',totalArtworks:2,completedArtworks:1,failedArtworks:1,message:'夹具：部分完成',lastFailure:'夹具：网络读取失败'};
+    await mainInspector.evaluate(`process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').BrowserWindow.getAllWindows()[0].webContents.send('explore:state-changed',${JSON.stringify(taskState)})`);
+    await click('[aria-label="任务与进度"]');
+    await waitFor(`Boolean(document.querySelector('[data-task-id="${taskJob.id}"]'))`);
+    await waitFor("document.querySelector('[data-task-kind=download]')?.textContent.includes('成功 1 · 失败 1')");
+    assert.equal(await cdp.evaluate("document.querySelector('[data-task-kind=download]').textContent.includes('停止任务')"), false);
+    await cdp.evaluate(`Array.from(document.querySelectorAll('[data-task-id="${taskJob.id}"] button')).find(b=>b.textContent.includes('停止任务')).click()`);
+    await waitFor(`document.querySelector('[data-task-id="${taskJob.id}"]')?.textContent.includes('已停止')`);
+    assert.equal(await cdp.evaluate(`(async()=> (await window.sanctuary.listAnalysisJobs()).find(j=>j.id==='${taskJob.id}').status)()`), 'cancelled');
+    await checkLayout('task-center-download-and-cancelled-analysis-900', true);
+    await cdp.evaluate(`Array.from(document.querySelectorAll('[data-task-id="${taskJob.id}"] button')).find(b=>b.textContent.includes('到整理台')).click()`);
+    await waitFor(`Boolean(document.getElementById('analysis-job-${taskJob.id}'))`);
+    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"整理方式\"] button.active')?.textContent"), '推荐相册分类');
+    checks.push({name:'task-center-global-download-progress-queued-cancellation-and-exact-organizer-return'});
     console.log(JSON.stringify({ status: "passed", checkCount:checks.length, checks, screenshots: outputDir }, null, 2));
   } finally { cdp.close(); }
 } catch (error) {

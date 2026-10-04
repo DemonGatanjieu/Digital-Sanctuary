@@ -13,6 +13,8 @@
 
 ## 历史归档
 
+- [`archive/2026-10-04-serpent-workflow-adoption-complete.md`](./archive/2026-10-04-serpent-workflow-adoption-complete.md)：已完成的导入、作品信息、保存筛选与统一任务入口整合，四批完整门禁与真实窗口验收。
+
 - [`archive/2026-08-11-implementation-plan-draft.md`](./archive/2026-08-11-implementation-plan-draft.md)：启动期技术选型及首个完整闭环的阶段草稿。
 - [`archive/2026-08-10-implementation-options.md`](./archive/2026-08-10-implementation-options.md)：路线 A/B/C 的早期比较。
 - [`archive/2026-08-10-project-structure-plan.md`](./archive/2026-08-10-project-structure-plan.md)：建仓前的目标目录设想。

@@ -6,9 +6,9 @@
 
 ## 当前施工任务
 
-### 执行中：日常素材工作流整合
+### 已完成：日常素材工作流整合
 
-按用户确认的顺序完善导入反馈与重复处理、统一作品信息、保存常用筛选和统一任务入口。任务范围、验收与进度见 [`TASK_SERPENT_WORKFLOW_ADOPTION.md`](./TASK_SERPENT_WORKFLOW_ADOPTION.md)，每批先验证提交再推进。
+导入确认与就地入册、逐项反馈与失败重试，共用作品信息，持久保存筛选，以及侧栏/快捷操作的统一任务入口均已完成。完整门禁与隔离窗口验收通过，按批本地提交；范围、证据与会话级任务限制见 [`归档任务`](./archive/2026-10-04-serpent-workflow-adoption-complete.md)。后续优先收集实际使用反馈与发布构建验收。
 
 ### 已完成：引导首页与整理台减负
 
@@ -20,7 +20,7 @@
 
 ### 自主持续推进：日常图库与创作闭环
 
-用户已授权持续加入合适能力与优化；常用图库筛选、阅读位置、创作 Markdown 保存、小窗口输入布局、目录摘要、范围读取、分页批量入册，以及第三批详情返航和小窗口画册均已完成验证。执行边界与验收见 [`TASK_EVERYDAY_LIBRARY_AND_CREATION.md`](./TASK_EVERYDAY_LIBRARY_AND_CREATION.md)。下一步评估导入反馈与可恢复任务、创作玩法卡及发布构建验收；后续仍按单批完整门禁与 Git 里程碑推进。
+用户已授权持续加入合适能力与优化；常用图库筛选、阅读位置、创作 Markdown 保存、小窗口输入布局、目录摘要、范围读取、分页批量入册、详情返航和小窗口画册均已完成验证；导入、作品信息、保存筛选与任务入口已在上述四批中落实。执行边界与验收见 [`TASK_EVERYDAY_LIBRARY_AND_CREATION.md`](./TASK_EVERYDAY_LIBRARY_AND_CREATION.md)。下一步评估实际使用反馈、创作玩法卡及发布构建验收；后续仍按单批完整门禁与 Git 里程碑推进。
 
 模型中心和视觉雷达运行时第二阶段已经完成代码闭环与真实本地模型烟雾测试；设计真值见 [`../design/MODEL_CENTER_AND_RADAR_RUNTIME.md`](../design/MODEL_CENTER_AND_RADAR_RUNTIME.md)。
 

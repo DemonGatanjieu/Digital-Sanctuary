@@ -26,11 +26,14 @@ import { GalleryDetailSessionCache, type GalleryDetailScope, type GalleryDetailS
 import { galleryScopeKey } from "./gallery-model";
 import { QuickActions, type QuickAction } from "./QuickActions";
 import { useLocalImport } from "./useLocalImport";
+import { useAnalysisTasks } from "./useAnalysisTasks";
+import { activeTaskCount, INITIAL_THUMBNAIL_ACTIVITY, type ThumbnailActivity } from "./task-center-model";
 import { AppNotice } from "./AppNotice";
 import { applyWorkPreset, clearWorkCollectionFilters, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
 
 const SettingsView = lazy(() => import("./SettingsView").then((module) => ({ default: module.SettingsView })));
 const ImportImagesDialog = lazy(() => import("./ImportImagesDialog").then((module) => ({ default: module.ImportImagesDialog })));
+const TaskCenter = lazy(() => import("./TaskCenter").then((module) => ({ default: module.TaskCenter })));
 const HomeView = lazy(() => import("./HomeView").then((module) => ({ default: module.HomeView })));
 const ExploreProtectionPanel = lazy(() => import("./ExploreProtectionPanel").then((module) => ({ default: module.ExploreProtectionPanel })));
 const AnalysisView = lazy(() => import("./AnalysisView").then((module) => ({ default: module.AnalysisView })));
@@ -54,6 +57,9 @@ export function App() {
   const [, setDetailRevision] = useState(0);
   const detailCapture = useRef<{ scope: GalleryDetailScope; capture: () => GalleryDetailSessionPatch } | null>(null);
   const [thumbnailRevision, setThumbnailRevision] = useState(0);
+  const [thumbnailActivity, setThumbnailActivity] = useState<ThumbnailActivity>(INITIAL_THUMBNAIL_ACTIVITY);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const analysisTasks = useAnalysisTasks(tasksOpen);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [protectionOpen, setProtectionOpen] = useState(false);
   const [protectionBusy, setProtectionBusy] = useState(false);
@@ -123,6 +129,7 @@ export function App() {
     setGalleryModeState(next);
   }, [rememberGalleryPosition]);
   const [analysisWorkIds, setAnalysisWorkIds] = useState<string[]>([]);
+  const [analysisTaskId, setAnalysisTaskId] = useState<string | null>(null);
   const [inspectorTarget, setInspectorTarget] = useState<ElementInspectorTarget | null>(null);
   const [inspirationLaunch, setInspirationLaunch] = useState<{ workId: string; pageIndex: number } | null>(null);
   const showError = useCallback((caught: unknown) => {
@@ -134,7 +141,7 @@ export function App() {
     if (navigationState.current.activeView === "home") setActiveView("gallery");
   }, showError);
   const busy = localImport.choosing;
-  blockingAppOverlay.current = Boolean(collectionEditor || bookmarkPreview || inspectorTarget || localImport.open);
+  blockingAppOverlay.current = Boolean(collectionEditor || bookmarkPreview || inspectorTarget || localImport.open || tasksOpen);
   const directory = useGalleryDirectory(galleryMode, galleryScope, activeView === "gallery", showError);
   const { refresh: refreshGalleryData, refreshDirectory } = directory;
   useEffect(() => {
@@ -231,6 +238,8 @@ export function App() {
   useEffect(() => {
     return window.sanctuary.onAppStatus(setStatus);
   }, []);
+  useEffect(() => window.sanctuary.onExploreState((next) => setExploreState((current) =>
+    navigationState.current.activeView === "explore" || JSON.stringify(current.download) !== JSON.stringify(next.download) ? next : current)), []);
 
   useEffect(() => {
     // 动态主题热注入
@@ -291,24 +300,37 @@ export function App() {
 
   useEffect(() => {
     let active = true;
+    const activity: ThumbnailActivity = { ...INITIAL_THUMBNAIL_ACTIVITY, phase: "running", limited: true };
+    const failedAssets = new Set<string>();
+    setThumbnailActivity({ ...activity });
     void (async () => {
       let changed = false;
       for (let batch = 0; batch < 80 && active; batch += 1) {
         await waitForRendererIdle();
         if (!active) return;
         const result = await window.sanctuary.generateThumbnails();
+        if (!active) return;
+        activity.generated += result.generated;
+        activity.reused += result.reused;
+        result.failedAssetIds.forEach((id) => failedAssets.add(id));
+        activity.failed = failedAssets.size;
+        if (batch === 0 || batch % 10 === 0) setThumbnailActivity({ ...activity });
         changed ||= result.generated + result.reused > 0;
         if (!active) return;
         if (changed && (batch === 0 || batch % 10 === 0)) {
           await refreshWorks();
           changed = false;
         }
-        if (result.attempted < 6 || result.generated + result.reused === 0) break;
+        if (result.attempted < 6 || result.generated + result.reused === 0) { activity.limited = false; break; }
         await new Promise((resolveTask) => window.setTimeout(resolveTask, 120));
       }
       if (active && changed) await refreshWorks();
       if (active) await refreshDirectory();
-    })().catch(showError);
+      if (active) setThumbnailActivity({ ...activity, phase: activity.failed ? activity.generated + activity.reused > 0 ? "partial" : "failed" : "completed",
+        message: activity.failed ? "有图片补图失败，请检查文件后重新尝试。" : activity.limited ? "补图分轮处理，以保持操作流畅。可继续检查下一轮。" : "本轮补图已结束。" });
+    })().catch((cause) => {
+      if (active) { setThumbnailActivity({ ...activity, phase: "failed", message: "补图未完成，可检查图片文件后重新尝试。" }); showError(cause); }
+    });
     return () => {
       active = false;
     };
@@ -518,6 +540,7 @@ export function App() {
   }
 
   const quickActions: QuickAction[] = [
+    { id: "tasks", label: "任务与进度", description: "查看导入、下载、补图与批量识别", keywords: ["任务", "进度", "失败", "重试"], onSelect: () => setTasksOpen(true) },
     { id: "home", label: "回到开始", description: "选择今天想做的事", shortcut: "Ctrl 0", keywords: ["首页", "引导"], onSelect: () => setActiveView("home") },
     { id: "gallery", label: "打开图库", description: "继续浏览刚才的位置", shortcut: "Ctrl 1", keywords: ["浏览", "作品"], onSelect: openGallery },
     { id: "favorites", label: "喜欢的作品", description: "浏览图库中标记喜欢的作品", keywords: ["收藏", "喜爱"], onSelect: () => openWorkPreset("favorites") },
@@ -554,6 +577,8 @@ export function App() {
         storageLocation={storageLocation}
         onOpenGallery={openGallery}
         onQuickActions={openQuickActions}
+        onOpenTasks={() => setTasksOpen(true)}
+        taskCount={activeTaskCount(localImport.batch, exploreState.download, thumbnailActivity, analysisTasks.jobs)}
         onViewChange={setActiveView}
         onDownloadCurrentArtwork={downloadCurrentArtwork}
         onPreviewBookmarks={previewAllBookmarks}
@@ -660,6 +685,8 @@ export function App() {
           />
         ) : activeView === "organize" ? (
           <AnalysisView
+            initialJobId={analysisTaskId}
+            onJobOpened={() => setAnalysisTaskId(null)}
             collections={collections}
             artists={artists}
             selectedWorkIds={analysisWorkIds}
@@ -720,7 +747,7 @@ export function App() {
             state={exploreState}
             error={error}
             isDrawerOpen={Boolean(inspectorTarget)}
-            isModalOpen={Boolean(bookmarkPreview || collectionEditor || quickActionsOpen || localImport.open)}
+            isModalOpen={Boolean(bookmarkPreview || collectionEditor || quickActionsOpen || localImport.open || tasksOpen)}
             focusOnShow={nativeFocusPending.current}
             onFocusRestored={() => { nativeFocusPending.current = false; }}
             protectionOpen={protectionOpen}
@@ -739,6 +766,13 @@ export function App() {
         </Suspense>
       </main>
       <Suspense fallback={null}>
+      {tasksOpen && <TaskCenter batch={localImport.batch} download={exploreState.download} thumbnails={thumbnailActivity}
+        jobs={analysisTasks.jobs} loading={analysisTasks.loading} error={analysisTasks.error} onRefresh={analysisTasks.refresh}
+        onImport={() => { setTasksOpen(false); localImport.show(); }}
+        onExplore={() => { setTasksOpen(false); nativeFocusPending.current = true; setActiveView("explore"); }}
+        onOrganize={(id) => { setTasksOpen(false); setAnalysisWorkIds([]); setAnalysisTaskId(id); setActiveView("organize"); }}
+        onOpenStorage={() => window.sanctuary.openStorageDirectory()} onRetryThumbnails={() => setThumbnailRevision((value) => value + 1)}
+        onClose={() => { setTasksOpen(false); if (navigationState.current.activeView === "explore") nativeFocusPending.current = true; }} />}
       {localImport.open && localImport.batch && <ImportImagesDialog key={localImport.batch.id} batch={localImport.batch} collections={collections}
         busy={localImport.commandBusy} error={localImport.error} onCommand={localImport.command} onClose={localImport.close} />}
       {inspectorTarget && (

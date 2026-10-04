@@ -55,7 +55,7 @@
 .ui-button--secondary {
   border: 1px solid var(--ds-border-light);
   color: var(--ds-text-body);
-  background: #ffffff;
+  background: var(--ds-bg-card);
   box-shadow: var(--ds-shadow-xs);
 }
 

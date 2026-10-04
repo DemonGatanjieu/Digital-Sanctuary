@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import type {
   ArtworkRecord,
   AnalysisJob,
+  AnalysisTaskSummary,
   AnalysisJobStatus,
   AnalysisScope,
   AnalysisScopePreview,
@@ -1663,6 +1664,17 @@ export class LibraryDatabase {
   listAnalysisJobs(): AnalysisJob[] {
     const rows = this.#database.prepare("SELECT * FROM analysis_jobs ORDER BY created_at DESC LIMIT 50").all() as unknown as AnalysisJobRow[];
     return rows.map((row) => this.#mapAnalysisJob(row));
+  }
+
+  /** Task chrome never expands per-image outcomes or recomputes album suggestions. */
+  listAnalysisTaskSummaries(): AnalysisTaskSummary[] {
+    const rows = this.#database.prepare(`SELECT j.*,
+      (SELECT COUNT(*) FROM analysis_job_items i WHERE i.job_id = j.id AND i.status = 'error') AS failed_items
+      FROM analysis_jobs j ORDER BY j.created_at DESC LIMIT 30`).all() as unknown as (AnalysisJobRow & { failed_items: number })[];
+    return rows.map((row) => ({ id: row.id, status: row.status as AnalysisTaskSummary["status"],
+      scopeType: parseJson<AnalysisScope>(row.scope_json)?.type ?? "all", engine: row.engine,
+      workCount: row.work_count, totalItems: row.total_items, processedItems: row.processed_items,
+      failedItems: row.failed_items, cancelRequested: row.cancel_requested === 1, error: row.error, createdAt: row.created_at }));
   }
 
   recoverInterruptedAnalysisJobs(): number {

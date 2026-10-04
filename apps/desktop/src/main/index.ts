@@ -657,6 +657,7 @@ function registerIpc(): void {
   registerLocalImportIpc(ipcMain, database, dialog);
   registerWorkInformationIpc(ipcMain, database);
   registerSavedWorkFilterIpc(ipcMain, database);
+  ipcMain.handle("tasks:analysis", () => database?.listAnalysisTaskSummaries() ?? []);
   registerThemeIpc({
     ipc: ipcMain,
     dialog,

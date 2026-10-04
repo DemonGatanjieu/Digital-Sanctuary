@@ -72,7 +72,9 @@ export function AnalysisView({
   onApplied,
   onError,
   onOpenProtection,
-  onRulesChanged
+  onRulesChanged,
+  initialJobId,
+  onJobOpened
 }: {
   collections: CollectionRecord[];
   artists: ArtistRecord[];
@@ -83,8 +85,10 @@ export function AnalysisView({
   onError: (error: unknown) => void;
   onOpenProtection: () => void;
   onRulesChanged?: () => Promise<void>;
+  initialJobId?: string | null;
+  onJobOpened?: () => void;
 }) {
-  const [tab, setTab] = useState<StudioTab>(selectedWorkIds.length ? "suggestions" : "triage");
+  const [tab, setTab] = useState<StudioTab>(selectedWorkIds.length || initialJobId ? "suggestions" : "triage");
 
   // Shared Scope State
   const [scopeType, setScopeType] = useState<AnalysisScope["type"]>(selectedWorkIds.length ? "selected" : "all");
@@ -94,6 +98,15 @@ export function AnalysisView({
 
   // Suggestions Mode State
   const [jobs, setJobs] = useState<AnalysisJob[]>([]);
+  useEffect(() => { if (initialJobId) setTab("suggestions"); }, [initialJobId]);
+  useEffect(() => {
+    if (!initialJobId || tab !== "suggestions" || !jobs.some((job) => job.id === initialJobId)) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(`analysis-job-${initialJobId}`)?.scrollIntoView({ block: "nearest", behavior: "instant" });
+      onJobOpened?.();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [initialJobId, jobs, tab, onJobOpened]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [selectedSuggestions, setSelectedSuggestions] = useState<Record<string, string[]>>({});
@@ -489,7 +502,7 @@ export function AnalysisView({
                   const progress = job.totalItems ? Math.round((job.processedItems / job.totalItems) * 100) : 100;
                   const chosen = selectedSuggestions[job.id] ?? [];
                   return (
-                    <article className="studio-job-card" key={job.id}>
+                    <article className="studio-job-card" id={`analysis-job-${job.id}`} key={job.id}>
                       <header className="studio-job-card-top">
                         <div className="studio-job-meta">
                           <span className={`analysis-status ${job.status}`}>
