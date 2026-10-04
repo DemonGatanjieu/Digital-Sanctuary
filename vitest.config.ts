@@ -16,6 +16,8 @@ export default defineConfig({
     }
   },
   test: {
+    // SQLite/file fixtures compete for Windows disk I/O when every suite gets its own worker.
+    maxWorkers: 4,
     include: [
       "packages/**/src/**/*.test.{ts,tsx}",
       "services/**/src/**/*.test.{ts,tsx}",

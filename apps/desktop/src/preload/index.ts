@@ -19,6 +19,8 @@ import type {
   CustomElementGroup,
   ElementFilterSetting,
   LibraryPreferences,
+  LocalImportBatch,
+  LocalImportOptions,
   RuleSandboxResult,
   SavedCollectionView,
   SavedCollectionViewDraft,
@@ -168,7 +170,11 @@ export interface SanctuaryApi {
   createLibraryBackup(): Promise<string | null>;
   previewWorkDeletion(workIds: string[]): Promise<WorkDeletionPreview>;
   confirmWorkDeletion(token: string): Promise<WorkDeletionResult>;
-  importImages(): Promise<ArtworkRecord[]>;
+  importImages(): Promise<LocalImportBatch | null>;
+  getImportBatch(id: string): Promise<LocalImportBatch>;
+  startImportBatch(id: string, options: LocalImportOptions): Promise<LocalImportBatch>;
+  cancelImportBatch(id: string): Promise<LocalImportBatch>;
+  retryImportBatch(id: string): Promise<LocalImportBatch>;
   listCollections(): Promise<CollectionRecord[]>;
   createCollection(draft: { name: string; description: string }): Promise<CollectionRecord[]>;
   updateCollection(collectionId: string, draft: { name: string; description: string }): Promise<CollectionRecord[]>;
@@ -318,7 +324,11 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:delete-preview", workIds) as Promise<WorkDeletionPreview>,
   confirmWorkDeletion: (token) =>
     ipcRenderer.invoke("library:delete-confirmed", token) as Promise<WorkDeletionResult>,
-  importImages: () => ipcRenderer.invoke("library:import") as Promise<ArtworkRecord[]>,
+  importImages: () => ipcRenderer.invoke("library:import") as Promise<LocalImportBatch | null>,
+  getImportBatch: (id) => ipcRenderer.invoke("library:import-get", id) as Promise<LocalImportBatch>,
+  startImportBatch: (id, options) => ipcRenderer.invoke("library:import-start", id, options) as Promise<LocalImportBatch>,
+  cancelImportBatch: (id) => ipcRenderer.invoke("library:import-cancel", id) as Promise<LocalImportBatch>,
+  retryImportBatch: (id) => ipcRenderer.invoke("library:import-retry", id) as Promise<LocalImportBatch>,
   listCollections: () => ipcRenderer.invoke("collections:list") as Promise<CollectionRecord[]>,
   createCollection: (draft) =>
     ipcRenderer.invoke("collections:create", draft) as Promise<CollectionRecord[]>,

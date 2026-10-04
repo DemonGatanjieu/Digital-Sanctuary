@@ -6,6 +6,10 @@
 
 ## 当前施工任务
 
+### 执行中：日常素材工作流整合
+
+按用户确认的顺序完善导入反馈与重复处理、统一作品信息、保存常用筛选和统一任务入口。任务范围、验收与进度见 [`TASK_SERPENT_WORKFLOW_ADOPTION.md`](./TASK_SERPENT_WORKFLOW_ADOPTION.md)，每批先验证提交再推进。
+
 ### 已完成：引导首页与整理台减负
 
 启动默认进入“今天想做什么”，四个任务直接跳转；整理默认复用探索元素规则，范围和精确标签查找按需展开，保留未分析提示、显式任务和二次确认处理。范围/模型版本一致性、慢请求、部分失败重试与小窗口已验证。归档任务见 [`archive/2026-10-04-guided-home-and-rule-based-organizing-complete.md`](./archive/2026-10-04-guided-home-and-rule-based-organizing-complete.md)。下一步优先收集首页与整理路径的实际使用反馈。

@@ -122,6 +122,7 @@ import { normalizeWindowState, type PersistedWindowState } from "./window-state.
 import { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import { registerAnalysisIpc } from "./analysis-ipc.js";
 import { registerSavedCollectionViewIpc } from "./saved-collection-view-ipc.js";
+import { registerLocalImportIpc } from "./local-import-ipc.js";
 import { ThemeManagerService } from "./theme/theme-manager.js";
 import { ThemeStoreService } from "./theme/theme-store.js";
 import { registerThemeIpc } from "./theme/theme-ipc.js";
@@ -651,6 +652,7 @@ function registerIpc(): void {
     getWindow: () => mainWindow
   });
   registerSavedCollectionViewIpc(ipcMain, database);
+  registerLocalImportIpc(ipcMain, database, dialog);
   registerThemeIpc({
     ipc: ipcMain,
     dialog,
@@ -720,24 +722,6 @@ function registerIpc(): void {
   ipcMain.handle("collections:list", () => database?.listCollections() ?? []);
   ipcMain.handle("artists:list", () => database?.listArtists() ?? []);
   ipcMain.handle("artists:repair-avatars", () => repairMissingArtistAvatars());
-
-  ipcMain.handle("library:import", async () => {
-    if (!database || !vision) throw new Error("Application is not ready");
-    const selected = await dialog.showOpenDialog({
-      title: "选择要加入纯净领域的图片",
-      properties: ["openFile", "multiSelections"],
-      filters: [
-        { name: "图片", extensions: ["jpg", "jpeg", "png", "webp", "gif", "avif"] }
-      ]
-    });
-    if (selected.canceled || selected.filePaths.length === 0) return [];
-
-    for (const imagePath of selected.filePaths) {
-      const artwork = database.importArtwork(imagePath);
-      database.trustArtwork(artwork.id);
-    }
-    return database.listArtworks();
-  });
 
   ipcMain.handle("filters:list", () => database?.listElementFilterSettings() ?? []);
   ipcMain.handle("filters:custom-list", () => customElementGroups());

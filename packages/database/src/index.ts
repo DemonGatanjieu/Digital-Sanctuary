@@ -393,6 +393,47 @@ export class LibraryDatabase {
     return artwork;
   }
 
+  findLocalImportMatch(path: string, contentHash?: string): { artworkId: string; path: string } | null {
+    const row = this.#database.prepare(
+      `SELECT a.legacy_artwork_id AS artworkId, a.path FROM assets a
+       JOIN works w ON w.id = a.work_id
+       WHERE a.legacy_artwork_id IS NOT NULL AND w.deleted_at IS NULL
+         AND (a.path = ? COLLATE NOCASE OR (? IS NOT NULL AND a.content_hash = ? AND a.file_state = 'available'))
+       ORDER BY CASE WHEN a.path = ? COLLATE NOCASE THEN 0 ELSE 1 END LIMIT 1`
+    ).get(path, contentHash ?? null, contentHash ?? null, path) as { artworkId: string; path: string } | undefined;
+    return row ?? null;
+  }
+
+  /** One indexed image and its album membership commit together; existing analysis survives reuse. */
+  commitLocalImport(path: string, contentHash: string, collectionId: string | null, reuseId?: string): string {
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      if (collectionId && !this.#database.prepare("SELECT id FROM collections WHERE id = ?").get(collectionId)) {
+        throw new Error("相册已不存在，请重新选择相册");
+      }
+      const existing = this.findLocalImportMatch(path);
+      const id = reuseId ?? existing?.artworkId ?? this.importArtwork(path).id;
+      const asset = this.#database.prepare("SELECT work_id, content_hash FROM assets WHERE legacy_artwork_id = ?")
+        .get(id) as { work_id: string; content_hash: string | null } | undefined;
+      if (!asset) throw new Error("图片已从图库移除，请重新选择后导入");
+      if (!reuseId && !existing) this.trustArtwork(id);
+      if (!reuseId || path.toLowerCase() === existing?.path.toLowerCase()) {
+        this.#database.prepare("UPDATE assets SET content_hash = ?, byte_length = ?, file_state = 'available', thumbnail_path = CASE WHEN content_hash IS NOT NULL AND content_hash != ? THEN NULL ELSE thumbnail_path END, updated_at = ? WHERE legacy_artwork_id = ?")
+          .run(contentHash, statSync(path).size, contentHash, new Date().toISOString(), id);
+        if (asset.content_hash && asset.content_hash !== contentHash) {
+          this.#database.prepare("UPDATE artworks SET assessment_json = NULL, decision_json = NULL WHERE id = ?").run(id);
+        }
+        this.#database.prepare("UPDATE works SET deleted_at = NULL WHERE id = ?").run(asset.work_id);
+      }
+      if (collectionId) this.addArtworkToCollection(id, collectionId);
+      this.#database.exec("COMMIT");
+      return id;
+    } catch (error) {
+      this.#database.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   saveAssessment(
     artworkId: string,
     assessment: VisionAssessment,
@@ -2330,6 +2371,8 @@ export class LibraryDatabase {
         WHERE deleted_at IS NULL AND last_viewed_at IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_works_artist ON works(artist_id, saved_at DESC);
       CREATE INDEX IF NOT EXISTS idx_assets_work ON assets(work_id, page_index);
+      CREATE INDEX IF NOT EXISTS idx_assets_content_hash ON assets(content_hash)
+        WHERE content_hash IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_assets_legacy_images
         ON assets(legacy_artwork_id, work_id, id)
         WHERE media_type = 'image' AND legacy_artwork_id IS NOT NULL;

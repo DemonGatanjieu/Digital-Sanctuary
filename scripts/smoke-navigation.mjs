@@ -640,18 +640,37 @@ try {
       await click('[data-nav="gallery"]');
     } finally { native.close(); }
     const homeImportPath = join(userData, "首页导入.png");
+    const duplicateImportPath = join(userData, "重复图片.png");
+    const failedImportPath = join(userData, "待修复.png");
     await writeFile(homeImportPath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
+    await writeFile(duplicateImportPath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
+    await writeFile(failedImportPath, "not an image");
     await mainInspector.evaluate(`(() => {
       const dialog=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').dialog;
       const state=globalThis.__homeImportSmoke={original:dialog.showOpenDialog,calls:0};
-      dialog.showOpenDialog=async()=>++state.calls===1?{canceled:false,filePaths:[${JSON.stringify(homeImportPath)}]}:{canceled:true,filePaths:[]};
+      dialog.showOpenDialog=async()=>++state.calls===1?{canceled:false,filePaths:${JSON.stringify([homeImportPath, duplicateImportPath, failedImportPath])}}:{canceled:true,filePaths:[]};
     })()`);
     try {
       const beforeImport = await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()");
       await click('[data-nav="home"]');
       await click('.home-library-entry button');
+      await waitFor("Boolean(document.querySelector('.import-images-dialog'))");
+      assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()"), beforeImport);
+      await fill('.import-images-dialog select', 'fixture-collection');
+      await click('[data-import-action="start"]');
       await waitFor("document.querySelector('[data-nav=gallery]')?.getAttribute('aria-current')==='page'");
       await waitFor(`(async () => (await window.sanctuary.queryWorks({})).total === ${beforeImport + 1})()`);
+      await waitFor("document.querySelector('.import-images-dialog h2')?.textContent==='导入结果'");
+      assert.equal(await cdp.evaluate("document.querySelector('.import-images-dialog').textContent.includes('新增 1')"), true);
+      assert.equal(await cdp.evaluate("document.querySelector('.import-images-dialog').textContent.includes('已存在 1 · 失败 1')"), true);
+      assert.equal(await cdp.evaluate(`(async()=> (await window.sanctuary.queryWorks({collectionId:'fixture-collection'})).items.some(w=>w.title==='首页导入.png'))()`), true);
+      await checkLayout('import-result-narrow-window', true);
+      await writeFile(failedImportPath, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
+      await click('[data-import-action="retry"]');
+      await waitFor("document.querySelector('.import-images-dialog').textContent.includes('已存在 2 · 失败 0')");
+      assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()"), beforeImport+1);
+      checks.push({name:'import-preview-album-content-deduplication-and-failed-only-retry'});
+      await key('Escape', 'Escape');
       await click('[data-nav="home"]');
       await click('.home-library-entry button');
       await waitFor("__homeImportSmoke.calls===2", mainInspector);

@@ -25,10 +25,12 @@ import { useGalleryDirectory } from "./useGalleryDirectory";
 import { GalleryDetailSessionCache, type GalleryDetailScope, type GalleryDetailSessionPatch } from "./gallery-detail-session";
 import { galleryScopeKey } from "./gallery-model";
 import { QuickActions, type QuickAction } from "./QuickActions";
+import { useLocalImport } from "./useLocalImport";
 import { AppNotice } from "./AppNotice";
 import { applyWorkPreset, clearWorkCollectionFilters, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
 
 const SettingsView = lazy(() => import("./SettingsView").then((module) => ({ default: module.SettingsView })));
+const ImportImagesDialog = lazy(() => import("./ImportImagesDialog").then((module) => ({ default: module.ImportImagesDialog })));
 const HomeView = lazy(() => import("./HomeView").then((module) => ({ default: module.HomeView })));
 const ExploreProtectionPanel = lazy(() => import("./ExploreProtectionPanel").then((module) => ({ default: module.ExploreProtectionPanel })));
 const AnalysisView = lazy(() => import("./AnalysisView").then((module) => ({ default: module.AnalysisView })));
@@ -73,7 +75,6 @@ export function App() {
   const [artists, setArtists] = useState<ArtistRecord[]>([]);
   const [filterSettings, setFilterSettings] = useState<ElementFilterSetting[]>([]);
   const [status, setStatus] = useState<AppStatus | null>(null);
-  const [busy, setBusy] = useState(false);
   const [repairingAvatars, setRepairingAvatars] = useState(false);
   const [avatarRepairMessage, setAvatarRepairMessage] = useState("");
   const [error, setError] = useState("");
@@ -127,7 +128,13 @@ export function App() {
   const showError = useCallback((caught: unknown) => {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
-  blockingAppOverlay.current = Boolean(collectionEditor || bookmarkPreview || inspectorTarget);
+  const localImport = useLocalImport(async () => {
+    await refreshLibrary();
+    setThumbnailRevision((current) => current + 1);
+    if (navigationState.current.activeView === "home") setActiveView("gallery");
+  }, showError);
+  const busy = localImport.choosing;
+  blockingAppOverlay.current = Boolean(collectionEditor || bookmarkPreview || inspectorTarget || localImport.open);
   const directory = useGalleryDirectory(galleryMode, galleryScope, activeView === "gallery", showError);
   const { refresh: refreshGalleryData, refreshDirectory } = directory;
   useEffect(() => {
@@ -308,19 +315,8 @@ export function App() {
   }, [refreshWorks, refreshDirectory, showError, thumbnailRevision]);
 
   async function importImages() {
-    if (busy) return;
-    setBusy(true);
     setError("");
-    try {
-      const imported = await window.sanctuary.importImages();
-      await refreshLibrary();
-      setThumbnailRevision((current) => current + 1);
-      if (imported.length && navigationState.current.activeView === "home") setActiveView("gallery");
-    } catch (caught) {
-      showError(caught);
-    } finally {
-      setBusy(false);
-    }
+    await localImport.choose();
   }
 
   async function saveCollection(draft: CollectionDraft) {
@@ -724,7 +720,7 @@ export function App() {
             state={exploreState}
             error={error}
             isDrawerOpen={Boolean(inspectorTarget)}
-            isModalOpen={Boolean(bookmarkPreview || collectionEditor || quickActionsOpen)}
+            isModalOpen={Boolean(bookmarkPreview || collectionEditor || quickActionsOpen || localImport.open)}
             focusOnShow={nativeFocusPending.current}
             onFocusRestored={() => { nativeFocusPending.current = false; }}
             protectionOpen={protectionOpen}
@@ -743,6 +739,8 @@ export function App() {
         </Suspense>
       </main>
       <Suspense fallback={null}>
+      {localImport.open && localImport.batch && <ImportImagesDialog key={localImport.batch.id} batch={localImport.batch} collections={collections}
+        busy={localImport.commandBusy} error={localImport.error} onCommand={localImport.command} onClose={localImport.close} />}
       {inspectorTarget && (
         <ElementInspectorDrawer
           target={inspectorTarget}
