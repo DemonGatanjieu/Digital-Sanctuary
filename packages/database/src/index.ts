@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
-import { basename, extname, isAbsolute, relative, resolve } from "node:path";
+import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
   ArtworkRecord,
@@ -1132,7 +1132,27 @@ export class LibraryDatabase {
     );
   }
 
-  migrateArtworkStoragePaths(oldDirectory: string, newDirectory: string): StorageMigrationResult {
+  storageMigrationFiles(oldDirectory: string, newDirectory: string): { sourcePath: string; targetPath: string }[] {
+    const roots = [
+      [resolve(oldDirectory), resolve(newDirectory)],
+      [resolve(oldDirectory, "..", "avatars"), resolve(newDirectory, "..", "avatars")]
+    ];
+    const rows = this.#database.prepare(`SELECT path FROM artworks UNION SELECT path FROM assets
+      UNION SELECT thumbnail_path AS path FROM assets WHERE thumbnail_path IS NOT NULL
+      UNION SELECT avatar_local_path AS path FROM artists WHERE avatar_local_path IS NOT NULL`).all() as { path: string }[];
+    return rows.flatMap(({ path }) => {
+      for (const [source, target] of roots) {
+        const rel = relative(source!, resolve(path));
+        if (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) {
+          const targetPath = resolve(target!, rel);
+          return resolve(path).toLowerCase() === targetPath.toLowerCase() ? [] : [{ sourcePath: resolve(path), targetPath }];
+        }
+      }
+      return [];
+    });
+  }
+
+  migrateArtworkStoragePaths(oldDirectory: string, newDirectory: string, verifiedSourcePaths?: ReadonlySet<string>): StorageMigrationResult {
     const normOld = resolve(oldDirectory);
     const normNew = resolve(newDirectory);
     const normOldAvatarDir = resolve(normOld, "..", "avatars");
@@ -1144,6 +1164,9 @@ export class LibraryDatabase {
 
     this.#database.exec("BEGIN IMMEDIATE");
     try {
+      if (verifiedSourcePaths && this.storageMigrationFiles(normOld, normNew).some(({ sourcePath }) => !verifiedSourcePaths.has(sourcePath.toLowerCase()))) {
+        throw new Error("迁移期间图库发生变化，请重新迁移；原文件和图库记录均已保留");
+      }
       const artworks = this.#database
         .prepare("SELECT id, path FROM artworks")
         .all() as unknown as { id: string; path: string }[];
@@ -1153,7 +1176,7 @@ export class LibraryDatabase {
       );
       for (const artwork of artworks) {
         const rel = relative(normOld, resolve(artwork.path));
-        if (!rel.startsWith("..") && !isAbsolute(rel)) {
+        if (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)) {
           const nextPath = resolve(normNew, rel);
           updateArtworkStmt.run(nextPath, basename(nextPath), artwork.id);
           migratedArtworks += 1;
@@ -1173,7 +1196,7 @@ export class LibraryDatabase {
         let nextThumb = asset.thumbnail_path;
 
         const relPath = relative(normOld, resolve(asset.path));
-        if (!relPath.startsWith("..") && !isAbsolute(relPath)) {
+        if (relPath !== ".." && !relPath.startsWith(`..${sep}`) && !isAbsolute(relPath)) {
           nextPath = resolve(normNew, relPath);
           changed = true;
           migratedAssets += 1;
@@ -1181,7 +1204,7 @@ export class LibraryDatabase {
 
         if (asset.thumbnail_path) {
           const relThumb = relative(normOld, resolve(asset.thumbnail_path));
-          if (!relThumb.startsWith("..") && !isAbsolute(relThumb)) {
+          if (relThumb !== ".." && !relThumb.startsWith(`..${sep}`) && !isAbsolute(relThumb)) {
             nextThumb = resolve(normNew, relThumb);
             changed = true;
           }
@@ -1202,14 +1225,14 @@ export class LibraryDatabase {
       for (const artist of artists) {
         const resolvedAvatar = resolve(artist.avatar_local_path);
         const relToAvatars = relative(normOldAvatarDir, resolvedAvatar);
-        if (!relToAvatars.startsWith("..") && !isAbsolute(relToAvatars)) {
+        if (relToAvatars !== ".." && !relToAvatars.startsWith(`..${sep}`) && !isAbsolute(relToAvatars)) {
           const nextAvatar = resolve(normNewAvatarDir, relToAvatars);
           updateArtistStmt.run(nextAvatar, artist.id);
           migratedAvatars += 1;
           continue;
         }
         const relToOld = relative(normOld, resolvedAvatar);
-        if (!relToOld.startsWith("..") && !isAbsolute(relToOld)) {
+        if (relToOld !== ".." && !relToOld.startsWith(`..${sep}`) && !isAbsolute(relToOld)) {
           const nextAvatar = resolve(normNew, relToOld);
           updateArtistStmt.run(nextAvatar, artist.id);
           migratedAvatars += 1;

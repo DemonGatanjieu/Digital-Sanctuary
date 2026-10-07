@@ -104,7 +104,9 @@ npm.cmd run dist:win
 npm.cmd run smoke:installer
 ```
 
-产物位于 `release\Digital-Sanctuary-Setup-0.1.0.exe`。安装、启动、模型资源、模型整理页、卸载和临时目录清理均由 `smoke:installer` 在隔离目录验证。当前未配置商业代码签名证书；首次分发时 Windows 可能显示未知发布者提示。
+当前产物位于 `release\Digital-Sanctuary-Setup-0.1.2.exe`。`smoke:installer` 在隔离目录验证安装、启动、模型资源、整理入口、旧版多页图库升级、冲突保护、复制迁移、重启和卸载。当前未配置商业代码签名证书；首次分发时 Windows 可能显示未知发布者提示。
+
+旧版用户先备份，再覆盖安装；C 盘旧图片可继续原位读取，也可从设置复制到新目录。迁移校验内容并更新图库索引，保留原件。具体步骤及给智能体的迁移任务说明见 [旧版升级与图片迁移](docs/operations/UPGRADE_AND_STORAGE_MIGRATION.md)。
 
 ## 设计文档
 

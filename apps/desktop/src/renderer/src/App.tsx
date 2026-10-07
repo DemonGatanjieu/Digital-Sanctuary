@@ -584,10 +584,12 @@ export function App() {
         onPreviewBookmarks={previewAllBookmarks}
         onOpenSettings={openSettings}
         onChooseDownloadDirectory={async () => {
-          const res = await window.sanctuary.chooseDownloadDirectory();
-          setLibraryPreferences(res.preferences);
-          setStorageLocation(res.location);
-          await refreshLibrary();
+          try {
+            const res = await window.sanctuary.chooseDownloadDirectory();
+            setLibraryPreferences(res.preferences);
+            setStorageLocation(res.location);
+            await refreshLibrary();
+          } catch (caught) { showError(caught); }
         }}
         onOpenStorageDirectory={async () => {
           await window.sanctuary.openStorageDirectory();

@@ -12,6 +12,8 @@ npm.cmd run build
 
 ## 启动与窗口
 
+- 发布安装包须运行 `npm.cmd run dist:win` 与 `npm.cmd run smoke:installer`；测试使用隔离库，覆盖早期双页作品/相册升级、同名冲突、复制迁移、备份、原件保留、收藏与重启。实际用户升级步骤见 `docs/operations/UPGRADE_AND_STORAGE_MIGRATION.md`。
+
 - 双击 `E:\PIxiv\启动纯净领域.cmd` 能启动构建版；失败时保留终端输出，不应无提示闪退。
 - 重复启动只唤醒现有窗口，不创建第二个 Electron 主进程或第二份 Pixiv session。
 - 构建更新后关闭旧进程再启动，确认窗口加载的是最新资源。

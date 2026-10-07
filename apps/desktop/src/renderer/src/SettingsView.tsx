@@ -55,6 +55,7 @@ export function SettingsView({
 }: SettingsViewProps) {
   const [migrating, setMigrating] = useState(false);
   const [storageMessage, setStorageMessage] = useState("");
+  const [storageFailed, setStorageFailed] = useState(false);
   const [backupMessage, setBackupMessage] = useState("");
   const currentSection = SETTINGS_SECTIONS.find((item) => item.id === section) ?? SETTINGS_SECTIONS[0];
 
@@ -209,17 +210,17 @@ export function SettingsView({
           </div>
 
           <div className="storage-action-row">
-            <Button onClick={() => void onChooseDownloadDirectory()}>更改存储盘 / 目录</Button>
+            <Button disabled={migrating} onClick={() => void onChooseDownloadDirectory().catch(onError)}>更改存储盘 / 目录</Button>
             <Button variant="secondary" onClick={() => void onOpenStorageDirectory?.()}>在资源管理器中打开</Button>
 
-            <Button variant="ghost" onClick={() => void onLibraryPreferencesChange(restoreDefaultDownloadLocation(libraryPreferences))}>恢复默认位置</Button>
+            <Button variant="ghost" disabled={migrating} onClick={() => void onLibraryPreferencesChange(restoreDefaultDownloadLocation(libraryPreferences))}>恢复默认位置</Button>
           </div>
           <SettingsDisclosure name="storage-maintenance" title="备份与迁移" description={storageLocation?.migratableArtworkCount ? `${storageLocation.migratableArtworkCount} 件作品可迁移到此目录` : "备份图库数据库，或整理历史存储位置。"}>
           {storageLocation && storageLocation.migratableArtworkCount > 0 && (
             <div className="storage-migratable-banner">
               <div className="storage-migratable-text">
-                <span>提示：图库中有 <strong>{storageLocation.migratableArtworkCount}</strong> 部作品保存在其他目录或旧磁盘中。</span>
-                <small>点击一键迁移可将所有历史照片合并移动至当前选择的存储盘，并自动释放原磁盘空间。</small>
+                <span>旧默认目录中还有 <strong>{storageLocation.migratableArtworkCount}</strong> 张已索引图片。</span>
+                <small>复制并校验图片和头像后更新图库路径，原文件保留。生成图片、备份和导出仍在原处；确认新位置正常后再清理旧副本。</small>
               </div>
               <Button
                 variant="primary"
@@ -229,18 +230,20 @@ export function SettingsView({
                 onClick={async () => {
                   try {
                     setMigrating(true);
+                    setStorageFailed(false);
                     const res = await onMigrateStorage?.();
                     if (res) {
-                      setStorageMessage(`已成功迁移 ${res.migratedArtworks} 部作品（共 ${res.migratedAssets} 张照片）至当前存储盘！`);
+                      setStorageMessage(`已复制并更新 ${res.migratedAssets} 张图片、${res.migratedAvatars} 个头像。原文件已保留；请先检查新位置再清理旧副本。`);
                     }
                   } catch (e) {
+                    setStorageFailed(true);
                     setStorageMessage(`迁移失败: ${e instanceof Error ? e.message : String(e)}`);
                   } finally {
                     setMigrating(false);
                   }
                 }}
               >
-                一键迁移已有照片至此
+                复制旧目录图片至此
               </Button>
             </div>
           )}
@@ -248,7 +251,7 @@ export function SettingsView({
             <Button variant="secondary" onClick={() => void onCreateBackup().then((path) => path && setBackupMessage(`备份已保存到 ${path}`))}>备份数据库</Button>
           </SettingsDisclosure>
           {storageMessage && (
-            <AppNotice className="storage-notice" tone="success" onDismiss={() => setStorageMessage("")}>
+            <AppNotice className="storage-notice" tone={storageFailed ? "error" : "success"} onDismiss={() => setStorageMessage("")}>
               {storageMessage}
             </AppNotice>
           )}

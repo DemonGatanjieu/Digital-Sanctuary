@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream, existsSync } from "node:fs";
-import { mkdir, rename, unlink, writeFile, cp, rm, statfs } from "node:fs/promises";
+import { mkdir, rename, unlink, writeFile, statfs } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, parse, relative, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -44,6 +44,7 @@ import {
   type InspectArtworkResponse
 } from "@sanctuary/domain";
 import { VisionClient } from "./vision-client.js";
+import { migrateStorageFiles } from "./storage-migration.js";
 import type { VisionProcessOptions } from "./vision-client.js";
 import {
   applyFeedbackChanges,
@@ -180,6 +181,7 @@ let exploreError = "";
 let exploreStateTimer: ReturnType<typeof setTimeout> | undefined;
 let exploreDownloadState: ExploreDownloadState = { ...IDLE_EXPLORE_DOWNLOAD_STATE };
 let activeExploreDownload: Promise<ExploreDownloadResult> | undefined;
+let activeStorageMigration = false;
 let activeArtistAvatarRepair: Promise<ArtistAvatarRepairResult> | undefined;
 let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
 const analysisJobScheduler = new AnalysisJobScheduler();
@@ -1672,6 +1674,7 @@ function registerIpc(): void {
   ipcMain.handle("preferences:library:get", (): LibraryPreferences => libraryPreferences());
   ipcMain.handle("preferences:library:update", (_event, value: unknown): LibraryPreferences => {
     if (!database || !isLibraryPreferences(value)) throw new Error("Invalid library preferences");
+    if (activeStorageMigration && value.downloadDirectory !== libraryPreferences().downloadDirectory) throw new Error("图片正在迁移，请等待完成后再更改保存位置");
     database.setPreference("library.preferences", value);
     return value;
   });
@@ -1690,14 +1693,12 @@ function registerIpc(): void {
     if (!database) throw new Error("本地画廊尚未准备好");
     const currentEffective = pixivGalleryDirectory();
     const defaultDir = defaultPixivGalleryDirectory();
-    const sourceDir = currentEffective.toLowerCase() === defaultDir.toLowerCase()
-      ? defaultDir
-      : defaultDir;
-    return await migrateDiskFiles(sourceDir, currentEffective);
+    return await migrateDiskFiles(defaultDir, currentEffective);
   });
 
   ipcMain.handle("preferences:library:choose-download-directory", async () => {
     if (!database || !mainWindow) throw new Error("Application window is unavailable");
+    if (activeStorageMigration) throw new Error("图片正在迁移，请等待完成后再更改保存位置");
     const previousEffective = pixivGalleryDirectory();
     const selected = await dialog.showOpenDialog(mainWindow, {
       title: "选择 Pixiv 作品保存目录（支持任意磁盘与文件夹）",
@@ -1730,12 +1731,12 @@ function registerIpc(): void {
     if (hasExistingInOld && currentArtworks.length > 0) {
       const choice = await dialog.showMessageBox(mainWindow, {
         type: "question",
-        buttons: ["迁移已有照片并切换", "仅切换新下载目录", "取消"],
+        buttons: ["复制旧图片并切换", "仅切换新下载目录", "取消"],
         defaultId: 0,
         cancelId: 2,
         title: "迁移已有照片",
         message: `已选择新存储位置：\n${selectedDirectory}`,
-        detail: `检测到原目录中已有 ${currentArtworks.length} 部保存的作品。\n\n• 迁移已有照片并切换：将已下载照片复制移动到新磁盘/目录，同步更新图库记录，释放原盘空间。\n• 仅切换新下载目录：已有照片保留在原处，仅后续新下载保存到新目录。\n• 取消：保持当前存储位置不变。`
+        detail: "复制旧图片并切换：先备份数据库，校验复制图片和头像，再更新图库路径。原文件保留，不覆盖不同内容的同名文件；确认新位置正常后再自行清理旧副本。生成图片、备份和导出文件保持原位置。\n\n仅切换新下载目录：已有图片仍从原位置读取。\n\n取消：保持当前存储位置不变。"
       });
 
       if (choice.response === 2) {
@@ -2159,6 +2160,7 @@ function startExploreDownload(
   scope: Exclude<ExploreDownloadState["scope"], null>,
   task: () => Promise<ExploreDownloadResult>
 ): Promise<ExploreDownloadResult> {
+  if (activeStorageMigration) throw new Error("图片正在迁移，请等待完成后再下载");
   if (activeExploreDownload) {
     throw new Error("已有下载任务正在运行，请等待它完成");
   }
@@ -2242,8 +2244,13 @@ async function getStorageLocationInfo(): Promise<StorageLocationInfo> {
     }
   }
 
-  const artworkCount = database?.listArtworks().length ?? 0;
-  const migratableArtworkCount = database?.countArtworksOutsideDirectory(effective) ?? 0;
+  const artworks = database?.listArtworks() ?? [];
+  const artworkCount = artworks.length;
+  const legacyRoot = defaultPixivGalleryDirectory();
+  const migratableArtworkCount = effective.toLowerCase() === legacyRoot.toLowerCase() ? 0 : artworks.filter((artwork) => {
+    const rel = relative(legacyRoot, resolve(artwork.path));
+    return rel !== ".." && !rel.startsWith("..\\") && !isAbsolute(rel);
+  }).length;
 
   return {
     configuredPath: configured,
@@ -2256,111 +2263,18 @@ async function getStorageLocationInfo(): Promise<StorageLocationInfo> {
   };
 }
 
-async function migrateDiskFiles(
-  sourceDir: string,
-  targetDir: string
-): Promise<StorageMigrationResult> {
+async function migrateDiskFiles(sourceDir: string, targetDir: string): Promise<StorageMigrationResult> {
   if (!database) throw new Error("本地画廊尚未准备好");
-  const normSource = resolve(sourceDir);
-  const normTarget = resolve(targetDir);
-  if (normSource.toLowerCase() === normTarget.toLowerCase()) {
-    return {
-      migratedArtworks: 0,
-      migratedAssets: 0,
-      migratedAvatars: 0,
-      sourceDirectory: normSource,
-      targetDirectory: normTarget
-    };
-  }
-
-  await ensureStandardStorageDirectories(normTarget);
-
-  if (existsSync(normSource)) {
-    try {
-      await cp(normSource, normTarget, { recursive: true, force: true });
-    } catch (err) {
-      console.error("[storage-migration] Error copying files:", err);
-      throw new Error(`移动文件失败: ${errorMessage(err)}`);
-    }
-  }
-
-  const oldAvatarDir = resolve(normSource, "..", "avatars");
-  const newAvatarDir = resolve(normTarget, "..", "avatars");
-  if (existsSync(oldAvatarDir) && oldAvatarDir.toLowerCase() !== newAvatarDir.toLowerCase()) {
-    try {
-      await mkdir(newAvatarDir, { recursive: true });
-      await cp(oldAvatarDir, newAvatarDir, { recursive: true, force: true });
-    } catch (err) {
-      console.warn("[storage-migration] Error copying avatars:", err);
-    }
-  }
-
-  const oldGeneratedDir = resolve(normSource, "..", "Generated");
-  const newGeneratedDir = resolve(normTarget, "..", "Generated");
-  if (existsSync(oldGeneratedDir) && oldGeneratedDir.toLowerCase() !== newGeneratedDir.toLowerCase()) {
-    try {
-      await mkdir(newGeneratedDir, { recursive: true });
-      await cp(oldGeneratedDir, newGeneratedDir, { recursive: true, force: true });
-    } catch (err) {
-      console.warn("[storage-migration] Error copying generated files:", err);
-    }
-  }
-
-  const oldBackupsDir = resolve(normSource, "..", "Backups");
-  const newBackupsDir = resolve(normTarget, "..", "Backups");
-  if (existsSync(oldBackupsDir) && oldBackupsDir.toLowerCase() !== newBackupsDir.toLowerCase()) {
-    try {
-      await mkdir(newBackupsDir, { recursive: true });
-      await cp(oldBackupsDir, newBackupsDir, { recursive: true, force: true });
-    } catch (err) {
-      console.warn("[storage-migration] Error copying backups:", err);
-    }
-  }
-
-  const dbResult = database.migrateArtworkStoragePaths(normSource, normTarget);
-
-  if (existsSync(normSource)) {
-    try {
-      if (parse(normSource).root.toLowerCase() !== normSource.toLowerCase()) {
-        await rm(normSource, { recursive: true, force: true });
-      }
-    } catch (err) {
-      console.warn("[storage-migration] Could not delete old directory:", err);
-    }
-  }
-  if (existsSync(oldAvatarDir) && oldAvatarDir.toLowerCase() !== newAvatarDir.toLowerCase()) {
-    try {
-      if (parse(oldAvatarDir).root.toLowerCase() !== oldAvatarDir.toLowerCase()) {
-        await rm(oldAvatarDir, { recursive: true, force: true });
-      }
-    } catch (err) {
-      console.warn("[storage-migration] Could not delete old avatars directory:", err);
-    }
-  }
-  if (existsSync(oldGeneratedDir) && oldGeneratedDir.toLowerCase() !== newGeneratedDir.toLowerCase()) {
-    try {
-      if (parse(oldGeneratedDir).root.toLowerCase() !== oldGeneratedDir.toLowerCase()) {
-        await rm(oldGeneratedDir, { recursive: true, force: true });
-      }
-    } catch (err) {
-      console.warn("[storage-migration] Could not delete old generated directory:", err);
-    }
-  }
-  if (existsSync(oldBackupsDir) && oldBackupsDir.toLowerCase() !== newBackupsDir.toLowerCase()) {
-    try {
-      if (parse(oldBackupsDir).root.toLowerCase() !== oldBackupsDir.toLowerCase()) {
-        await rm(oldBackupsDir, { recursive: true, force: true });
-      }
-    } catch (err) {
-      console.warn("[storage-migration] Could not delete old backups directory:", err);
-    }
-  }
-
-  return dbResult;
+  if (activeStorageMigration || activeExploreDownload || activeArtistAvatarRepair) throw new Error("已有下载、头像补全或迁移正在进行，请等待完成后重试");
+  activeStorageMigration = true;
+  try {
+    return await migrateStorageFiles(database, sourceDir, targetDir, join(app.getPath("userData"), "Backups"));
+  } finally { activeStorageMigration = false; }
 }
 
 function repairMissingArtistAvatars(): Promise<ArtistAvatarRepairResult> {
   if (!database) throw new Error("本地画廊尚未准备好");
+  if (activeStorageMigration) throw new Error("图片正在迁移，请等待完成后再补全头像");
   if (activeExploreDownload) {
     throw new Error("作品下载任务正在运行，请等待完成后再补全作者头像");
   }
