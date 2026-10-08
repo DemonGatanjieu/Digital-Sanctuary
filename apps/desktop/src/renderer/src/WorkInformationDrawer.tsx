@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { WorkInformation, WorkRecord } from "@sanctuary/domain";
 import { Button } from "./Button";
 import { DialogOverlay } from "./DialogOverlay";
+import { ExportImagesButton, SingleImageActions } from "./ImageOutputActions";
 
 export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector, onRadar, onInspiration, onChanged, onRenamed }: {
   workId: string; pageIndex: number; onClose: () => void;
@@ -95,6 +96,11 @@ export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector,
           <dt>尺寸与大小</dt><dd>{asset?.width && asset.height ? `${asset.width} × ${asset.height}` : "尺寸待读取"} · {formatInformationBytes(asset?.byteLength ?? null)}</dd>
           <dt>文件状态</dt><dd>{asset?.fileState === "available" ? "可读取" : asset?.fileState === "missing" ? "文件缺失" : "未记录"}</dd>
         </dl>
+        <section aria-label="取用图片"><h3>拿出去使用</h3>
+          {asset&&<SingleImageActions target={{workId,assetId:asset.id}} disabled={busy} />}
+          <ExportImagesButton targets={[{workId}]} label={`复制整件作品原图（${work.pageCount} 页）`} disabled={busy} />
+          <small className="muted">原图复制保留文件名，同名自动另存。剪贴板图片用于粘贴，超大图可能缩小。</small>
+        </section>
         <section aria-label="作品相册"><h3>相册</h3>
           {work.collectionIds.length ? <ul className="work-information-albums">{work.collectionIds.map((id) => <li key={id}>
             <span>{information?.collections.find((item) => item.id === id)?.name ?? "相册已移除"}</span>

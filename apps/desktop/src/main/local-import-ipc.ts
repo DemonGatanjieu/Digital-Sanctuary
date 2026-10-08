@@ -13,4 +13,5 @@ export function registerLocalImportIpc(ipc: Pick<IpcMain, "handle">, database: L
   ipc.handle("library:import-start", (event, id: unknown, options: unknown) => service.start(event.sender.id, id, options));
   ipc.handle("library:import-cancel", (event, id: unknown) => service.cancel(event.sender.id, id));
   ipc.handle("library:import-retry", (event, id: unknown) => service.retry(event.sender.id, id));
+  return service;
 }

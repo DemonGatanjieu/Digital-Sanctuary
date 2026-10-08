@@ -124,6 +124,10 @@ import { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import { registerAnalysisIpc } from "./analysis-ipc.js";
 import { registerSavedCollectionViewIpc } from "./saved-collection-view-ipc.js";
 import { registerLocalImportIpc } from "./local-import-ipc.js";
+import { ImageWorkbenchService } from "./image-workbench-service.js";
+import { ImageOutputService } from "./image-output-service.js";
+import { createImageOutputHost, registerImageWorkbenchIpc } from "./image-workbench-ipc.js";
+import { SemanticClient, SemanticVectorStore } from "./semantic-client.js";
 import { registerWorkInformationIpc } from "./work-information-ipc.js";
 import { registerSavedWorkFilterIpc } from "./saved-work-filter-ipc.js";
 import { ThemeManagerService } from "./theme/theme-manager.js";
@@ -185,6 +189,8 @@ let activeStorageMigration = false;
 let activeArtistAvatarRepair: Promise<ArtistAvatarRepairResult> | undefined;
 let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
 const analysisJobScheduler = new AnalysisJobScheduler();
+let imageWorkbench: ImageWorkbenchService | undefined;
+let semanticVectors: SemanticVectorStore | undefined;
 interface RemoteReviewOutcome {
   state: "allowed" | "blocked" | "unavailable";
   reasons: string[];
@@ -346,6 +352,8 @@ app.on("before-quit", () => {
   saveWindowState();
   vision?.close();
   localArtCriticService?.close();
+  imageWorkbench?.close();
+  semanticVectors?.close();
   database?.close();
 });
 
@@ -580,7 +588,15 @@ async function deleteConfirmedWorks(workIds: readonly string[]): Promise<WorkDel
 }
 
 function registerImageProtocol(): void {
-  protocol.handle("sanctuary-image", (request) => {
+  protocol.handle("sanctuary-image", async (request) => {
+    if (new URL(request.url).hostname === "workbench") {
+      const path = await imageWorkbench?.preview(request.url);
+      if (!path) return new Response("Not found", { status: 404 });
+      try {
+        const preview = await nativeImage.createThumbnailFromPath(path, { width: 384, height: 384 });
+        return preview.isEmpty() ? new Response("Not found", { status: 404 }) : new Response(new Uint8Array(preview.toPNG()), { headers: { "Content-Type": "image/png", "Cache-Control": "no-store" } });
+      } catch { return new Response("Not found", { status: 404 }); }
+    }
     const rawPath = decodeURIComponent(new URL(request.url).pathname.slice(1));
     const imagePath = resolve(rawPath);
     const isArtwork =
@@ -656,7 +672,21 @@ function registerIpc(): void {
     getWindow: () => mainWindow
   });
   registerSavedCollectionViewIpc(ipcMain, database);
-  registerLocalImportIpc(ipcMain, database, dialog);
+  const localImporter = registerLocalImportIpc(ipcMain, database, dialog);
+  const semantic = new SemanticClient(app.isPackaged ? process.resourcesPath : resolve(moduleDirectory, "../../../.."));
+  semanticVectors = new SemanticVectorStore(join(app.getPath("userData"), "semantic-index.db"));
+  imageWorkbench = new ImageWorkbenchService(database, {
+    ready: () => Boolean(vision?.available && vision.engine === "wd-swinv2-tagger-v3"),
+    identity: () => `${vision!.engine}:${vision!.engineVersion}`,
+    classify: (path) => enqueueRemoteVisionTask(() => vision!.classify(path, 30_000)),
+    rules: () => buildElementFilterRules(database!.listElementFilterSettings(), customElementGroups(), adaptiveThresholdOverrides())
+  }, semantic, semanticVectors, localImporter);
+  const output = new ImageOutputService((owner, targets) => imageWorkbench!.resolveImages(owner, targets), createImageOutputHost(() => mainWindow ?? null));
+  registerImageWorkbenchIpc(ipcMain, imageWorkbench, output, semantic, async () => {
+    const options = { title: "选择要找图的本地文件夹", properties: ["openDirectory"] as Array<"openDirectory"> };
+    const selected = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+    return selected.canceled ? null : selected.filePaths[0] ?? null;
+  });
   registerWorkInformationIpc(ipcMain, database);
   registerSavedWorkFilterIpc(ipcMain, database);
   ipcMain.handle("tasks:analysis", () => database?.listAnalysisTaskSummaries() ?? []);

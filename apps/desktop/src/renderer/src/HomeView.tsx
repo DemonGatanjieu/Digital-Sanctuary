@@ -4,7 +4,7 @@ export type HomeDestination = "gallery" | "explore" | "organize" | "inspiration"
 export const HOME_TASKS: { id: HomeDestination; title: string; description: string; symbol: string }[] = [
   { id: "gallery", title: "看看我的收藏", description: "浏览作品、翻相册，继续上次阅读。", symbol: "▧" },
   { id: "explore", title: "发现新的作品", description: "浏览 Pixiv，按自己的规则过滤并保存喜欢的图。", symbol: "◈" },
-  { id: "organize", title: "整理一下图库", description: "按探索规则排查，或让模型推荐相册分类。", symbol: "▤" },
+  { id: "organize", title: "找图与整理", description: "从图库或文件夹找图，选择后复制使用或导入。", symbol: "▤" },
   { id: "inspiration", title: "找灵感，写点东西", description: "聊图、写故事、整理设定与提示词。", symbol: "✦" }
 ];
 

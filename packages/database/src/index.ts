@@ -1626,6 +1626,15 @@ export class LibraryDatabase {
     return Number(this.#database.prepare("DELETE FROM remote_image_reviews").run().changes);
   }
 
+  listWorkbenchAssets(scope: AnalysisScope, offset = 0, limit = 100): Array<{ asset: WorkAssetRecord; title: string }> {
+    const predicate = analysisScopePredicate(scope);
+    const rows = this.#database.prepare(`SELECT a.*, w.title AS work_title FROM assets a JOIN works w ON w.id=a.work_id
+      WHERE ${predicate.sql} AND a.media_type='image' AND a.file_state='available'
+      ORDER BY w.saved_at DESC, w.id, a.page_index, a.id LIMIT ? OFFSET ?`)
+      .all(...predicate.params, Math.max(1,Math.min(200,Math.trunc(limit))),Math.max(0,Math.trunc(offset))) as unknown as Array<WorkAssetRow & { work_title: string }>;
+    return rows.map(row => ({ asset: mapWorkAsset(row), title: row.work_title }));
+  }
+
   previewAnalysisScope(scope: AnalysisScope, engine: string, engineVersion?: string): AnalysisScopePreview {
     const predicate = analysisScopePredicate(scope);
     const countRow = this.#database.prepare("SELECT COUNT(*) AS count FROM works w WHERE " + predicate.sql).get(...predicate.params) as { count: number };

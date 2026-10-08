@@ -1,5 +1,6 @@
 import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
 import { WorkInformationDrawer } from "./WorkInformationDrawer";
+import { ExportImagesButton } from "./ImageOutputActions";
 import { SavedWorkFilters } from "./SavedWorkFilters";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -384,6 +385,7 @@ export function WorkLibrary({
       {selecting && (
         <section className="work-selection-bar" aria-live="polite">
           <div><strong>已选择 {selectedIds.size} 个作品</strong><span>批量操作以作品为单位，包含其全部页面。</span></div>
+          <ExportImagesButton targets={[...selectedIds].map(workId=>({workId}))} />
           <select
             value=""
             disabled={selectedIds.size === 0 || collections.length === 0}

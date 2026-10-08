@@ -61,6 +61,7 @@ export function App() {
   const [thumbnailActivity, setThumbnailActivity] = useState<ThumbnailActivity>(INITIAL_THUMBNAIL_ACTIVITY);
   const [tasksOpen, setTasksOpen] = useState(false);
   const analysisTasks = useAnalysisTasks(tasksOpen);
+  const [workbenchSource,setWorkbenchSource]=useState<"library"|"folder"|null>(null);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [protectionOpen, setProtectionOpen] = useState(false);
   const [protectionBusy, setProtectionBusy] = useState(false);
@@ -585,7 +586,7 @@ export function App() {
         onOpenGallery={openGallery}
         onQuickActions={openQuickActions}
         onOpenTasks={() => setTasksOpen(true)}
-        taskCount={activeTaskCount(localImport.batch, exploreState.download, thumbnailActivity, analysisTasks.jobs)}
+        taskCount={activeTaskCount(localImport.batch, exploreState.download, thumbnailActivity, analysisTasks.jobs)+analysisTasks.images.filter(t=>["running","scanning","analyzing"].includes(t.phase)).length}
         onViewChange={setActiveView}
         onDownloadCurrentArtwork={downloadCurrentArtwork}
         onPreviewBookmarks={previewAllBookmarks}
@@ -694,6 +695,9 @@ export function App() {
           />
         ) : activeView === "organize" ? (
           <AnalysisView
+            initialWorkbenchSource={workbenchSource}
+            onWorkbenchOpened={()=>setWorkbenchSource(null)}
+            onImportPrepared={localImport.adopt}
             initialJobId={analysisTaskId}
             onJobOpened={() => setAnalysisTaskId(null)}
             collections={collections}
@@ -776,7 +780,8 @@ export function App() {
       </main>
       <Suspense fallback={null}>
       {tasksOpen && <TaskCenter batch={localImport.batch} download={exploreState.download} thumbnails={thumbnailActivity}
-        jobs={analysisTasks.jobs} loading={analysisTasks.loading} error={analysisTasks.error} onRefresh={analysisTasks.refresh}
+        jobs={analysisTasks.jobs} images={analysisTasks.images} loading={analysisTasks.loading} error={analysisTasks.error} onRefresh={analysisTasks.refresh}
+        onImageTask={(source)=>{setTasksOpen(false);setAnalysisWorkIds([]);setAnalysisTaskId(null);setWorkbenchSource(source);setActiveView("organize");}}
         onImport={() => { setTasksOpen(false); localImport.show(); }}
         onExplore={() => { setTasksOpen(false); nativeFocusPending.current = true; setActiveView("explore"); }}
         onOrganize={(id) => { setTasksOpen(false); setAnalysisWorkIds([]); setAnalysisTaskId(id); setActiveView("organize"); }}

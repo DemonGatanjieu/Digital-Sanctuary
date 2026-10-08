@@ -7,7 +7,8 @@ import type {
   CollectionRecord,
   TriageQueryResultItem,
   WorkDeletionPreview,
-  ExploreTriageResult
+  ExploreTriageResult,
+  LocalImportBatch
 } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import type { AppStatus } from "./AppSidebar";
@@ -15,9 +16,11 @@ import { Button } from "./Button";
 import { SegmentedControl } from "./SegmentedControl";
 import { DialogOverlay } from "./DialogOverlay";
 import { SettingsDisclosure } from "./SettingsDisclosure";
+import { ExportImagesButton } from "./ImageOutputActions";
+import { ImageWorkbench } from "./ImageWorkbench";
 import { TRIAGE_SELECTION_LIMIT, toggleTriageSelection, visibleTriageSelection } from "./organize-selection";
 
-type StudioTab = "triage" | "features" | "suggestions";
+type StudioTab = "triage" | "features" | "suggestions" | "description";
 
 interface FeaturePreset {
   id: string;
@@ -74,7 +77,10 @@ export function AnalysisView({
   onOpenProtection,
   onRulesChanged,
   initialJobId,
-  onJobOpened
+  onJobOpened,
+  onImportPrepared,
+  initialWorkbenchSource,
+  onWorkbenchOpened
 }: {
   collections: CollectionRecord[];
   artists: ArtistRecord[];
@@ -87,8 +93,13 @@ export function AnalysisView({
   onRulesChanged?: () => Promise<void>;
   initialJobId?: string | null;
   onJobOpened?: () => void;
+  onImportPrepared: (batch: LocalImportBatch) => void;
+  initialWorkbenchSource?: "library"|"folder"|null;
+  onWorkbenchOpened?: ()=>void;
 }) {
   const [tab, setTab] = useState<StudioTab>(selectedWorkIds.length || initialJobId ? "suggestions" : "triage");
+  const [source, setSource] = useState<"library" | "folder">("library");
+  useEffect(()=>{if(initialWorkbenchSource){setSource(initialWorkbenchSource);if(initialWorkbenchSource==="library")setTab("description");onWorkbenchOpened?.();}},[initialWorkbenchSource,onWorkbenchOpened]);
 
   // Shared Scope State
   const [scopeType, setScopeType] = useState<AnalysisScope["type"]>(selectedWorkIds.length ? "selected" : "all");
@@ -98,7 +109,7 @@ export function AnalysisView({
 
   // Suggestions Mode State
   const [jobs, setJobs] = useState<AnalysisJob[]>([]);
-  useEffect(() => { if (initialJobId) setTab("suggestions"); }, [initialJobId]);
+  useEffect(() => { if (initialJobId) { setSource("library"); setTab("suggestions"); } }, [initialJobId]);
   useEffect(() => {
     if (!initialJobId || tab !== "suggestions" || !jobs.some((job) => job.id === initialJobId)) return;
     const frame = requestAnimationFrame(() => {
@@ -379,16 +390,18 @@ export function AnalysisView({
     </SettingsDisclosure>
   </>;
   const invalidScope = (scopeType === "selected" && !selectedWorkIds.length) || (scopeType === "artist" && !artistId) || (scopeType === "collection" && !collectionId);
-  return <div className="studio-root organize-simple">
+  return <div className={`studio-root organize-simple ${source==="folder"||tab==="description"?"organize-workbench":""}`}>
     <header className="topbar studio-topbar">
-      <div><h1>整理与分类</h1><p className="page-description">先找出作品，再决定怎样整理。</p></div>
+      <div><h1>找图与整理</h1><p className="page-description">先找出图片，再选择收进图库或拿出去使用。</p></div>
     </header>
     {error && <AppNotice tone="error">{error}</AppNotice>}
     {queryError && <AppNotice tone="error" onDismiss={() => setQueryError("")}>{queryError}</AppNotice>}
     {notice && <AppNotice tone="info" onDismiss={() => setNotice("")}>{notice}</AppNotice>}
-    <SegmentedControl label="整理方式" value={tab} options={[
-      {value: "triage", label: "按探索规则排查"}, {value: "features", label: "按特征查找"}, {value: "suggestions", label: "推荐相册分类"}
-    ]} onChange={(value) => { if (!busy && !deletingWorks) setTab(value as StudioTab); }} />
+    <div className="organize-source-tools"><SegmentedControl label="图片来源" value={source} options={[{value:"library",label:"我的图库"},{value:"folder",label:"本地文件夹"}]} onChange={value=>{if(!busy&&!deletingWorks)setSource(value as "library"|"folder");}} />
+    {source==="library"&&<SegmentedControl label="整理方式" value={tab} options={[
+      {value: "triage", label: "按探索规则排查"}, {value: "features", label: "按特征查找"}, {value: "description", label: "按画面描述"}, {value: "suggestions", label: "推荐相册分类"}
+    ]} onChange={(value) => { if (!busy && !deletingWorks) setTab(value as StudioTab); }} />}</div>
+    {source==="folder"||tab==="description"?<div>{source==="library"&&<div className="workbench-scope">{scopeControls}</div>}<ImageWorkbench key={source} source={source} scope={scope} collections={collections} onChanged={onApplied} onImportPrepared={onImportPrepared} onOpenProtection={onOpenProtection}/></div>:<>
     <div className="studio-layout">
       <section className="analysis-scope-card studio-control-deck">
         {tab === "suggestions" && <h2>选择要整理的范围</h2>}
@@ -633,6 +646,7 @@ export function AnalysisView({
 
               {triageResults.length > 0 && (
                 <div className="studio-batch-toolbar">
+                  <ExportImagesButton targets={[...selectedTriageIds].map(workId=>({workId}))} disabled={busy} />
                   <Button
                     size="small"
                     variant="ghost"
@@ -773,7 +787,7 @@ export function AnalysisView({
             )}
             {triageResults.length > resultLimit && <Button variant="secondary" disabled={busy} onClick={() => setResultLimit((limit) => limit + 40)}>显示更多作品</Button>}
           </section></>}
-    </div>
+    </div></>}
       {/* Work Deletion Dialog for Triage */}
       {deletionPreview && (
         <DialogOverlay busy={deletingWorks} onClose={() => setDeletionPreview(null)}>

@@ -51,6 +51,7 @@ export function useLocalImport(onChanged: () => Promise<void>, onError: (error: 
     } catch (error) { setError(error instanceof Error ? error.message : "导入操作失败，请重试"); }
     finally { setCommandBusy(false); }
   }
-  return { batch, open, choosing, commandBusy, error, choose, command,
+  function adopt(next: LocalImportBatch) { setBatch(next); setOpen(true); setError(""); }
+  return { batch, open, choosing, commandBusy, error, choose, command, adopt,
     show: () => setOpen(true), close: () => { setOpen(false); setError(""); if (batch?.phase === "ready") setBatch(null); } };
 }

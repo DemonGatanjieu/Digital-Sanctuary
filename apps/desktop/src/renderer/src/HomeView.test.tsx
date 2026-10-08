@@ -14,7 +14,7 @@ describe("task-oriented entry points", () => {
 
   it("defaults organizing to exploration rules without exposing technical inputs", () => {
     const markup = renderToStaticMarkup(<AnalysisView collections={[]} artists={[]} selectedWorkIds={[]}
-      status={null} error="" onApplied={async () => {}} onError={() => {}} onOpenProtection={() => {}} />);
+      status={null} error="" onApplied={async () => {}} onError={() => {}} onOpenProtection={() => {}} onImportPrepared={() => {}} />);
     expect(markup).toContain("默认使用探索的元素规则");
     expect(markup).toContain("查找需要关注的作品");
     expect(markup).not.toContain("type=\"range\"");

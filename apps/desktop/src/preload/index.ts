@@ -38,6 +38,7 @@ import type {
   WorkQueryResult,
   WorkRecord,
   WorkInformation,
+  ImageTarget, ImageExportBatch, WorkbenchSnapshot, WorkbenchSource, WorkbenchQuery, SemanticAvailability, ImageTaskSummary,
   WorkReadingProgress,
   WorkDeletionPreview,
   WorkDeletionResult,
@@ -161,6 +162,22 @@ export interface SanctuaryApi {
   getWork(workId: string): Promise<WorkRecord | null>;
   getWorkInformation(workId: string, pageIndex: number): Promise<WorkInformation | null>;
   renameWork(workId: string, name: string): Promise<WorkRecord>;
+  exportImages(targets: ImageTarget[]): Promise<ImageExportBatch | null>;
+  getImageExport(id: string): Promise<ImageExportBatch>;
+  currentImageExport(): Promise<ImageExportBatch | null>;
+  cancelImageExport(id: string): Promise<ImageExportBatch>;
+  retryImageExport(id: string): Promise<ImageExportBatch>;
+  useImage(target: ImageTarget, action: "copy" | "reveal"): Promise<void>;
+  chooseWorkbenchFolder(recursive: boolean): Promise<WorkbenchSnapshot | null>;
+  chooseWorkbenchLibrary(scope: AnalysisScope): Promise<WorkbenchSnapshot>;
+  currentWorkbench(source: WorkbenchSource): Promise<WorkbenchSnapshot | null>;
+  getWorkbench(id: string, offset?: number, filter?: "matches" | "all" | "failed"): Promise<WorkbenchSnapshot>;
+  startWorkbench(id: string, query: WorkbenchQuery): Promise<WorkbenchSnapshot>;
+  cancelWorkbench(id: string): Promise<WorkbenchSnapshot>;
+  prepareWorkbenchImport(id: string, itemIds: string[]): Promise<LocalImportBatch | null>;
+  assignWorkbenchImages(id: string, itemIds: string[], collectionId: string): Promise<number>;
+  semanticAvailability(): Promise<SemanticAvailability>;
+  listImageTaskSummaries(): Promise<ImageTaskSummary[]>;
   recordWorkView(workId: string, assetId: string): Promise<WorkReadingProgress | null>;
   getGenerationProvenance(workId: string): Promise<GenerationProvenance | null>;
   listInspirationConversations(): Promise<InspirationConversation[]>;
@@ -299,6 +316,22 @@ const api: SanctuaryApi = {
   getWorkInformation: (workId, pageIndex) =>
     ipcRenderer.invoke("library:work-information", workId, pageIndex) as Promise<WorkInformation | null>,
   renameWork: (workId, name) => ipcRenderer.invoke("library:rename-work", workId, name) as Promise<WorkRecord>,
+  exportImages: (targets) => ipcRenderer.invoke("images:export", targets),
+  getImageExport: (id) => ipcRenderer.invoke("images:export-get", id),
+  currentImageExport: () => ipcRenderer.invoke("images:export-current"),
+  cancelImageExport: (id) => ipcRenderer.invoke("images:export-cancel", id),
+  retryImageExport: (id) => ipcRenderer.invoke("images:export-retry", id),
+  useImage: (target, action) => ipcRenderer.invoke("images:use", target, action),
+  chooseWorkbenchFolder: (recursive) => ipcRenderer.invoke("workbench:folder", recursive),
+  chooseWorkbenchLibrary: (scope) => ipcRenderer.invoke("workbench:library", scope),
+  currentWorkbench: (source) => ipcRenderer.invoke("workbench:current", source),
+  getWorkbench: (id, offset = 0, filter = "matches") => ipcRenderer.invoke("workbench:get", id, offset, filter),
+  startWorkbench: (id, query) => ipcRenderer.invoke("workbench:start", id, query),
+  cancelWorkbench: (id) => ipcRenderer.invoke("workbench:cancel", id),
+  prepareWorkbenchImport: (id, ids) => ipcRenderer.invoke("workbench:import", id, ids),
+  assignWorkbenchImages: (id, ids, collectionId) => ipcRenderer.invoke("workbench:assign", id, ids, collectionId),
+  semanticAvailability: () => ipcRenderer.invoke("workbench:semantic-status"),
+  listImageTaskSummaries: () => ipcRenderer.invoke("tasks:images"),
   recordWorkView: (workId, assetId) =>
     ipcRenderer.invoke("library:record-work-view", { workId, assetId }) as Promise<WorkReadingProgress | null>,
   getGenerationProvenance: (workId) =>
