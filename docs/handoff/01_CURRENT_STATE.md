@@ -2,7 +2,7 @@
 
 - 最新工作流补充：2026-10-08（历史基础记录保留）
 - 工作区：`E:\PIxiv`
-- 当前基线：本文件所在提交；导入、作品信息、保存筛选、统一任务入口及安全复制迁移已完成，另有轻量按钮反馈、画册结束事件修复和独立 EmbeddingGemma 2 离线运行环境。现有 0.1.2 Windows x64 安装包来自上一批，不含本批源码更新。
+- 当前基线：本文件所在提交；导入、作品信息、保存筛选、统一任务入口及安全复制迁移已完成，另有轻量按钮反馈、画册结束事件修复、图库显示名称、探索切换修复和独立 EmbeddingGemma 2 离线运行环境。现有 0.1.2 Windows x64 安装包来自上一批，不含这些源码更新。
 - 平台：Windows
 - 桌面框架：Electron 43.3.0 + React 19 + TypeScript
 - Python：3.14.6
@@ -10,7 +10,7 @@
 
 ## 接手前必读
 
-本轮整合的入口和边界见 README“从哪里开始”及 `docs/plans/archive/2026-10-04-serpent-workflow-adoption-complete.md`。最新 439 项 TS、9 项 Python、完整类型与构建、58 组导航及 33 组画册真实窗口检查通过；本批按钮反馈与减少动画覆盖见 `docs/reviews/2026-10-08-interaction-motion.md`。导入和查看信息不自动启动模型，外部原文件保留；一般筛选保存在 SQLite 偏好，任务页使用轻量摘要，不全库读取。导入/下载/补图状态为会话级，批量识别沿用原有持久任务。
+本轮整合的入口和边界见 README“从哪里开始”及 `docs/plans/archive/2026-10-04-serpent-workflow-adoption-complete.md`。最新 444 项 TS、9 项 Python、完整类型与构建、59 组导航、20 组大图及 33 组画册真实窗口检查通过；图库命名与探索切换见 `docs/reviews/2026-10-08-gallery-names-and-explore-transitions.md`，按钮反馈与减少动画覆盖见 `docs/reviews/2026-10-08-interaction-motion.md`。导入和查看信息不自动启动模型，外部原文件保留；一般筛选保存在 SQLite 偏好，任务页使用轻量摘要，不全库读取。导入/下载/补图状态为会话级，批量识别沿用原有持久任务。
 
 0.1.2 安装包、哈希及验证记录见 `docs/releases/0.1.2.md`。旧版 C 盘原图可原位读取；存储迁移先备份、校验复制、事务改路径，保留原件，不再覆盖同名冲突或删除旧目录。给朋友及其智能体的步骤见 `docs/operations/UPGRADE_AND_STORAGE_MIGRATION.md`。未打包自然语言筛图、EmbeddingGemma2、多站点探索等讨论中的能力。
 
@@ -77,7 +77,7 @@ EmbeddingGemma 2 已下载并校验固定官方快照，独立 CPU / CUDA 离线
 
 ### 发布与恢复
 
-- SQLite schema 版本为 `3`（包含 `saved_collection_views` 表）；设置页可用 `VACUUM INTO` 创建一致性数据库备份，恢复步骤见 `docs/operations/BACKUP_AND_RECOVERY.md`。
+- SQLite schema 版本为 `7`；本批 `works.custom_title` 独立保存图库显示名称，源标题与磁盘文件保留，旧库自动补列升级。设置页可用 `VACUUM INTO` 创建一致性数据库备份，恢复步骤见 `docs/operations/BACKUP_AND_RECOVERY.md`。
 - `npm.cmd run dist:win` 生成带 DS 图标、CPU WD Tagger、自包含 Python 运行时和模型的 NSIS 安装包。
 - `npm.cmd run smoke:installer` 在隔离目录完成安装、生产 UI、导航可访问性状态、真实 WD Tagger 推理、卸载和清理验收。
 - 安装包当前没有商业代码签名证书；向他人分发前需确认模型/第三方依赖许可并处理 Windows 发布者信誉。
