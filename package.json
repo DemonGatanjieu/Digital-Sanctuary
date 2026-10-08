@@ -28,6 +28,7 @@
     "smoke:local-critic": "node scripts/smoke-local-art-critic.mjs",
     "smoke:image-workbench": "node scripts/smoke-image-workbench.mjs",
     "smoke:discovery": "node scripts/smoke-discovery-workflow.mjs",
+    "smoke:gallery-search": "node scripts/smoke-gallery-search.mjs",
     "smoke:gallery-actions": "node scripts/smoke-gallery-actions.mjs",
     "typecheck": "npm run build:core && tsc -p apps/desktop/tsconfig.json --noEmit",
     "test": "npm run build:core && vitest run && npm run test:python",

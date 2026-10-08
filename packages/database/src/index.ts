@@ -624,7 +624,20 @@ export class LibraryDatabase {
     return this.#queryWorkPage(query);
   }
 
-  #queryWorkPage(query: WorkQuery): WorkQueryResult {
+  matchingWorkIds(ids: string[], query: WorkQuery): Set<string> {
+    if(!ids.length)return new Set();
+    const predicate=workQueryPredicate(query),unique=[...new Set(ids)].slice(0,10000);
+    const rows=this.#database.prepare(`SELECT w.id FROM works w LEFT JOIN artists ar ON ar.id=w.artist_id
+      WHERE ${predicate.sql} AND w.id IN (${unique.map(()=>"?").join(",")})`).all(...predicate.params,...unique) as Array<{id:string}>;
+    return new Set(rows.map(row=>row.id));
+  }
+
+  queryWorkIds(ids: string[]): WorkListItem[] {
+    return this.#queryWorkPage({ limit: 200 }, [...new Set(ids)].slice(0, 200)).items;
+  }
+
+  #queryWorkPage(query: WorkQuery, ids?: string[]): WorkQueryResult {
+    let whereIds = "";
     const search = typeof query.search === "string" ? query.search.trim().slice(0, 200) : "";
     const limit = clampInteger(query.limit, 60, 1, 200);
     const offset = clampInteger(query.offset, 0, 0, 10_000_000);
@@ -643,81 +656,19 @@ export class LibraryDatabase {
     const nullableSort = sortBy === "publishedAt" || sortBy === "artist" || (sortBy === "lastViewedAt" && query.viewedOnly !== true);
     const pageSort = `sort_value ${direction}, w.id ASC`;
     const resultSort = `page.sort_value${sortBy === "title" || sortBy === "artist" ? " COLLATE NOCASE" : ""} ${direction}, w.id ASC`;
-    const clauses = ["w.deleted_at IS NULL"];
-    const parameters: Array<string | number> = [];
-    if (query.ownership === "managed" || query.ownership === "external") {
-      clauses.push("w.ownership = ?");
-      parameters.push(query.ownership);
+    const { sql: where, params: parameters } = workQueryPredicate(query);
+    if (ids) {
+      if (!ids.length) return { items: [], total: 0, totalPages: 0, offset, limit, hasMore: false };
+      whereIds = ` AND w.id IN (${ids.map(() => "?").join(",")})`;
+      parameters.push(...ids);
     }
-    if (typeof query.favorite === "boolean") {
-      clauses.push("w.favorite = ?");
-      parameters.push(query.favorite ? 1 : 0);
-    }
-    if (query.uncollected === true) {
-      clauses.push("NOT EXISTS (SELECT 1 FROM collection_works uncollected_cw WHERE uncollected_cw.work_id = w.id)");
-    }
-    if (query.viewedOnly === true) clauses.push("w.last_viewed_at IS NOT NULL");
-    if (query.unattributed === true) clauses.push("w.artist_id IS NULL");
-    if (search) {
-      clauses.push(
-        `(instr(lower(w.title), lower(?)) > 0
-          OR instr(lower(COALESCE(ar.name, '')), lower(?)) > 0
-          OR instr(lower(COALESCE(w.source_work_id, '')), lower(?)) > 0)`
-      );
-      parameters.push(search, search, search);
-    }
-    if (isWorkType(query.workType)) {
-      clauses.push("w.work_type = ?");
-      parameters.push(query.workType);
-    }
-    if (typeof query.artistId === "string" && query.artistId) {
-      clauses.push("w.artist_id = ?");
-      parameters.push(query.artistId);
-    }
-    const includedCollections = Array.isArray(query.collectionIds)
-      ? [...new Set(query.collectionIds.filter((id): id is string => typeof id === "string" && Boolean(id)))]
-      : (typeof query.collectionId === "string" && query.collectionId ? [query.collectionId] : []);
-    const excludedCollections = Array.isArray(query.excludedCollectionIds)
-      ? [...new Set(query.excludedCollectionIds.filter((id): id is string => typeof id === "string" && Boolean(id)))]
-      : [];
-
-    if (includedCollections.length === 1 && includedCollections[0]) {
-      clauses.push(
-        "EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id = ?)"
-      );
-      parameters.push(includedCollections[0]);
-    } else if (includedCollections.length > 1) {
-      if (query.collectionMatchMode === "all") {
-        for (const colId of includedCollections) {
-          clauses.push(
-            "EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id = ?)"
-          );
-          parameters.push(colId);
-        }
-      } else {
-        const placeholders = includedCollections.map(() => "?").join(", ");
-        clauses.push(
-          `EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id IN (${placeholders}))`
-        );
-        parameters.push(...includedCollections);
-      }
-    }
-
-    if (excludedCollections.length > 0) {
-      const placeholders = excludedCollections.map(() => "?").join(", ");
-      clauses.push(
-        `NOT EXISTS (SELECT 1 FROM collection_works filter_ex WHERE filter_ex.work_id = w.id AND filter_ex.collection_id IN (${placeholders}))`
-      );
-      parameters.push(...excludedCollections);
-    }
-    const where = clauses.join(" AND ");
 
     const totalRow = this.#database
       .prepare(
         `SELECT COUNT(*) AS total, COALESCE(SUM(w.page_count), 0) AS total_pages
            FROM works w
            ${search ? "LEFT JOIN artists ar ON ar.id = w.artist_id" : ""}
-          WHERE ${where}`
+          WHERE ${where}${whereIds}`
       )
       .get(...parameters) as { total: number; total_pages: number };
     const rows = this.#database
@@ -726,7 +677,7 @@ export class LibraryDatabase {
            SELECT w.id, ${sortExpression} AS sort_value
              FROM works w
              LEFT JOIN artists ar ON ar.id = w.artist_id
-            WHERE ${where}
+            WHERE ${where}${whereIds}
             ORDER BY ${nullableSort ? "(sort_value IS NULL) ASC, " : ""}${pageSort}
             LIMIT ? OFFSET ?
          )
@@ -1664,6 +1615,23 @@ export class LibraryDatabase {
 
   clearRemoteImageReviews(): number {
     return Number(this.#database.prepare("DELETE FROM remote_image_reviews").run().changes);
+  }
+
+  gallerySearchAsset(workId: string, assetId: string): WorkAssetRecord | null {
+    const row = this.#database.prepare(`SELECT a.* FROM assets a JOIN works w ON w.id=a.work_id
+      WHERE a.id=? AND a.work_id=? AND w.deleted_at IS NULL AND a.media_type='image' AND a.file_state='available'`)
+      .get(assetId,workId) as unknown as WorkAssetRow | undefined;
+    return row ? mapWorkAsset(row) : null;
+  }
+
+  listGallerySearchAssets(query: WorkQuery, offset = 0, limit = 100): Array<{ asset: WorkAssetRecord; title: string }> {
+    const predicate = workQueryPredicate(query);
+    const rows = this.#database.prepare(`SELECT a.*, w.title AS work_title FROM assets a JOIN works w ON w.id=a.work_id
+      LEFT JOIN artists ar ON ar.id=w.artist_id
+      WHERE ${predicate.sql} AND a.media_type='image' AND a.file_state='available'
+      ORDER BY w.saved_at DESC, w.id, a.page_index, a.id LIMIT ? OFFSET ?`)
+      .all(...predicate.params, clampInteger(limit,100,1,200),clampInteger(offset,0,0,10_000_000)) as unknown as Array<WorkAssetRow & { work_title: string }>;
+    return rows.map(row => ({ asset: mapWorkAsset(row), title: row.work_title }));
   }
 
   listWorkbenchAssets(scope: AnalysisScope, offset = 0, limit = 100): Array<{ asset: WorkAssetRecord; title: string }> {
@@ -2963,4 +2931,76 @@ function canonicalVisionDimensionLabel(
 ): string {
   const suite = getVisionSuite(suiteId, suiteVersion);
   return suite?.dimensions.find((dimension) => dimension.key === dimensionKey)?.label ?? fallback;
+}
+
+function workQueryPredicate(query: WorkQuery): { sql: string; params: Array<string | number> } {
+    const search = typeof query.search === "string" ? query.search.trim().slice(0, 200) : "";
+    const clauses = ["w.deleted_at IS NULL"];
+    const parameters: Array<string | number> = [];
+    if (query.ownership === "managed" || query.ownership === "external") {
+      clauses.push("w.ownership = ?");
+      parameters.push(query.ownership);
+    }
+    if (typeof query.favorite === "boolean") {
+      clauses.push("w.favorite = ?");
+      parameters.push(query.favorite ? 1 : 0);
+    }
+    if (query.uncollected === true) {
+      clauses.push("NOT EXISTS (SELECT 1 FROM collection_works uncollected_cw WHERE uncollected_cw.work_id = w.id)");
+    }
+    if (query.viewedOnly === true) clauses.push("w.last_viewed_at IS NOT NULL");
+    if (query.unattributed === true) clauses.push("w.artist_id IS NULL");
+    if (search) {
+      clauses.push(
+        `(instr(lower(w.title), lower(?)) > 0
+          OR instr(lower(COALESCE(ar.name, '')), lower(?)) > 0
+          OR instr(lower(COALESCE(w.source_work_id, '')), lower(?)) > 0)`
+      );
+      parameters.push(search, search, search);
+    }
+    if (isWorkType(query.workType)) {
+      clauses.push("w.work_type = ?");
+      parameters.push(query.workType);
+    }
+    if (typeof query.artistId === "string" && query.artistId) {
+      clauses.push("w.artist_id = ?");
+      parameters.push(query.artistId);
+    }
+    const includedCollections = Array.isArray(query.collectionIds)
+      ? [...new Set(query.collectionIds.filter((id): id is string => typeof id === "string" && Boolean(id)))]
+      : (typeof query.collectionId === "string" && query.collectionId ? [query.collectionId] : []);
+    const excludedCollections = Array.isArray(query.excludedCollectionIds)
+      ? [...new Set(query.excludedCollectionIds.filter((id): id is string => typeof id === "string" && Boolean(id)))]
+      : [];
+
+    if (includedCollections.length === 1 && includedCollections[0]) {
+      clauses.push(
+        "EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id = ?)"
+      );
+      parameters.push(includedCollections[0]);
+    } else if (includedCollections.length > 1) {
+      if (query.collectionMatchMode === "all") {
+        for (const colId of includedCollections) {
+          clauses.push(
+            "EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id = ?)"
+          );
+          parameters.push(colId);
+        }
+      } else {
+        const placeholders = includedCollections.map(() => "?").join(", ");
+        clauses.push(
+          `EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id IN (${placeholders}))`
+        );
+        parameters.push(...includedCollections);
+      }
+    }
+
+    if (excludedCollections.length > 0) {
+      const placeholders = excludedCollections.map(() => "?").join(", ");
+      clauses.push(
+        `NOT EXISTS (SELECT 1 FROM collection_works filter_ex WHERE filter_ex.work_id = w.id AND filter_ex.collection_id IN (${placeholders}))`
+      );
+      parameters.push(...excludedCollections);
+    }
+    return { sql: clauses.join(" AND "), params: parameters };
 }

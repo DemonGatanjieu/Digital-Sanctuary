@@ -1,3 +1,4 @@
+import { parseWorkQuery } from "../shared/library-query.js";
 import type { BrowserWindow, IpcMain } from "electron";
 import type { ImageWorkbenchService } from "./image-workbench-service.js";
 import { ImageOutputService, type ImageOutputHost } from "./image-output-service.js";
@@ -40,6 +41,18 @@ export function registerImageWorkbenchIpc(ipc: Pick<IpcMain,"handle">, workbench
     if(typeof recursive!=="boolean")throw new Error("文件夹选项无效");
     if(choosing)throw new Error("请先完成当前文件夹选择");choosing=true;
     try {const path=await chooseFolder();return path?workbench.chooseFolder(e.sender.id,path,recursive):null;} finally{choosing=false;}
+  });
+  ipc.handle("gallery:search-pictures",(e,text: unknown,query: unknown)=>{
+    if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
+    return workbench.searchGallery(e.sender.id,text,parseWorkQuery(query));
+  });
+  ipc.handle("gallery:picture-results",(e,id: unknown,offset: unknown)=>{
+    if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
+    return workbench.galleryResults(e.sender.id,id,offset);
+  });
+  ipc.handle("gallery:current-picture-search",e=>{
+    if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
+    return workbench.currentGallery(e.sender.id);
   });
   ipc.handle("workbench:library",(e,scope: unknown)=>workbench.chooseLibrary(e.sender.id,scope));
   ipc.handle("workbench:current",(e,source: unknown)=>workbench.current(e.sender.id,source));

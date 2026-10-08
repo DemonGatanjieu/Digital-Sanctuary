@@ -3,13 +3,13 @@ import { lstat, opendir, realpath } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { LibraryDatabase } from "@sanctuary/database";
 import { isAnalysisScope, type AnalysisScope, type FilterRule, type ImageTarget, type VisionAssessment,
-  type WorkbenchItem, type WorkbenchQuery, type WorkbenchSnapshot, type WorkbenchSource, type ImageTaskSummary } from "@sanctuary/domain";
+  type WorkbenchItem, type WorkbenchQuery, type WorkbenchSnapshot, type WorkbenchSource, type ImageTaskSummary, type WorkAssetRecord, type WorkQuery, type GallerySearchSnapshot } from "@sanctuary/domain";
 import { fingerprintImage, LocalImportService } from "./local-import-service.js";
 import { parseImageTargets, type ResolvedImage } from "./image-output-service.js";
 import type { SemanticClient, SemanticVectorStore } from "./semantic-client.js";
 
-const MAX_IMAGES=1000, MAX_ENTRIES=20000;
-interface Entry { item: WorkbenchItem; path: string; hash?: string; assessment?: VisionAssessment; assessmentHash?: string; assessmentModel?: string }
+const MAX_IMAGES=1000, MAX_GALLERY_IMAGES=10000, MAX_ENTRIES=20000;
+interface Entry { asset?: WorkAssetRecord; item: WorkbenchItem; path: string; hash?: string; assessment?: VisionAssessment; assessmentHash?: string; assessmentModel?: string }
 interface Session { owner: number; state: WorkbenchSnapshot; root?: string; entries: Entry[]; cancelled: boolean; touched: number }
 export interface WorkbenchVision {
   ready(): boolean;
@@ -35,7 +35,7 @@ export function parseWorkbenchQuery(value: unknown): WorkbenchQuery {
 /** Session-only folder manifests. Paths never enter renderer commands or an unrestricted protocol. */
 export class ImageWorkbenchService {
   #sessions=new Map<string,Session>();
-  constructor(private database: Pick<LibraryDatabase,"getWork"|"listWorkbenchAssets"|"addArtworksToCollection">, private vision: WorkbenchVision,
+  constructor(private database: Pick<LibraryDatabase,"getWork"|"listWorkbenchAssets"|"listGallerySearchAssets"|"gallerySearchAsset"|"matchingWorkIds"|"queryWorkIds"|"addArtworksToCollection">, private vision: WorkbenchVision,
     private semantic: Pick<SemanticClient,"availability"|"encode"|"close">, private vectors: Pick<SemanticVectorStore,"get"|"put">,
     private importer: LocalImportService) {}
 
@@ -48,12 +48,62 @@ export class ImageWorkbenchService {
   }
   current(owner: number, source: unknown): WorkbenchSnapshot | null {
     this.#prune();if(source!=="folder"&&source!=="library")throw new Error("图片来源无效");
-    const s=[...this.#sessions.values()].reverse().find(s=>s.owner===owner&&s.state.source===source);
+    const s=[...this.#sessions.values()].reverse().find(s=>s.owner===owner&&s.state.source===source&&!s.state.galleryQuery);
     return s?this.#snapshot(s,0,"all"):null;
+  }
+  searchGallery(owner: number, value: unknown, query: WorkQuery): GallerySearchSnapshot {
+    const description = parseWorkbenchQuery({mode:"description",text:value,include:[],exclude:[]});
+    if(!this.semantic.availability().available)throw new Error(this.semantic.availability().message);
+    this.#assertIdle();
+    const {search:_search,sortBy:_sort,direction:_direction,offset:_offset,limit:_limit,...filters}=query;
+    const s=this.#create(owner,"library",description.text,false,filters);
+    s.state.query=description;
+    void this.#scanGallery(s,filters,description);
+    return this.galleryResults(owner,s.state.id,0);
+  }
+  galleryResults(owner: number, id: unknown, offset: unknown=0): GallerySearchSnapshot {
+    if(typeof offset!=="number"||!Number.isSafeInteger(offset)||offset<0||offset>MAX_GALLERY_IMAGES)throw new Error("分页请求无效");
+    const s=this.#owned(owner,id);if(!s.state.galleryQuery)throw new Error("这不是图库画面搜索，请重新找图");
+    const ready=s.entries.filter(e=>e.item.status==="ready"&&e.item.score!==undefined&&e.asset);
+    ready.sort((a,b)=>b.item.score!-a.item.score!||a.item.id.localeCompare(b.item.id));
+    const best=new Map<string,Entry>();
+    for(const entry of ready)if(!best.has(entry.asset!.workId))best.set(entry.asset!.workId,entry);
+    const eligible=this.database.matchingWorkIds([...best.keys()],s.state.galleryQuery);
+    const entries=[...best.values()].filter(entry=>eligible.has(entry.asset!.workId)),page=entries.slice(offset,offset+60);
+    const matchingPages=ready.filter(entry=>eligible.has(entry.asset!.workId)).length;
+    const records=new Map(this.database.queryWorkIds(page.map(e=>e.asset!.workId)).map(work=>[work.id,work]));
+    const items=page.flatMap(entry=>{
+      const work=records.get(entry.asset!.workId);if(!work)return [];
+      const asset=work.coverAsset?.id===entry.asset!.id?work.coverAsset:this.database.gallerySearchAsset(work.id,entry.asset!.id);
+      return asset?[{...work,coverAsset:asset,matchedPage:asset.pageIndex}]:[];
+    });
+    return {progress:structuredClone({...s.state,items:[],hasMore:false,matched:matchingPages,unanalysed:s.entries.filter(e=>e.item.status==="pending").length}),
+      result:{items,total:entries.length,totalPages:matchingPages,offset,limit:60,hasMore:offset+60<entries.length}};
+  }
+  currentGallery(owner: number): GallerySearchSnapshot | null {
+    this.#prune();const s=[...this.#sessions.values()].reverse().find(s=>s.owner===owner&&s.state.galleryQuery);
+    return s?this.galleryResults(owner,s.state.id):null;
+  }
+  async #scanGallery(s: Session,query: WorkQuery,description: WorkbenchQuery) {
+    try {
+      for(let offset=0;!s.cancelled;offset+=100){
+        const rows=this.database.listGallerySearchAssets(query,offset,100);
+        for(const {asset,title} of rows){
+          if(s.entries.length>=MAX_GALLERY_IMAGES){s.state.limitReached=true;break;}
+          this.#entry(s,asset.path,title,{workId:asset.workId,assetId:asset.id},asset.thumbnailPath??asset.path,asset);
+        }
+        if(s.state.limitReached||rows.length<100)break;
+        await new Promise<void>(done=>setImmediate(done));
+      }
+      if(s.state.limitReached)s.state.warnings.push("本次已达到 10,000 张图片的上限，其余图片尚未搜索。请按相册、画师或保存方式缩小范围。");
+      s.state.phase=s.cancelled?"cancelled":"ready";
+      if(s.cancelled||!s.entries.length){if(!s.cancelled)s.state.phase="completed";return;}
+      this.start(s.owner,s.state.id,description);
+    }catch(error){s.state.phase=s.cancelled?"cancelled":"failed";if(!s.cancelled)s.state.error=this.#message(error);}
   }
   tasks(owner: number): ImageTaskSummary[] {
     this.#prune();return [...this.#sessions.values()].filter(s=>s.owner===owner).map(s=>({id:s.state.id,kind:"workbench",source:s.state.source,name:s.state.name,
-      phase:s.state.phase,total:s.entries.length,processed:s.state.processed,failed:s.state.failed,cancelRequested:s.cancelled}));
+      phase:s.state.phase,total:s.entries.length,processed:s.state.processed,failed:s.state.failed,cancelRequested:s.cancelled,...(s.state.galleryQuery?{gallerySearch:true}:{})}));
   }
   get(owner: number,id: unknown,offset: unknown=0,filter: unknown="matches"): WorkbenchSnapshot {
     if(typeof offset!=="number"||!Number.isSafeInteger(offset)||offset<0||offset>MAX_IMAGES||!["matches","all","failed"].includes(String(filter)))throw new Error("分页请求无效");
@@ -125,13 +175,13 @@ export class ImageWorkbenchService {
     }catch{return null;}
   }
   close(){for(const s of this.#sessions.values())s.cancelled=true;this.semantic.close();}
-  #create(owner: number,source: WorkbenchSource,name: string,recursive: boolean): Session {
-    this.#prune();for(const [id,s] of this.#sessions)if(s.owner===owner&&s.state.source===source)this.#sessions.delete(id);
-    const s: Session={owner,entries:[],cancelled:false,touched:Date.now(),state:{id:randomUUID(),source,name,recursive,phase:"scanning",cancelRequested:false,total:0,processed:0,failed:0,matched:0,unanalysed:0,visited:0,limitReached:false,warnings:[],items:[],hasMore:false}};
+  #create(owner: number,source: WorkbenchSource,name: string,recursive: boolean,galleryQuery?: WorkQuery): Session {
+    this.#prune();for(const [id,s] of this.#sessions)if(s.owner===owner&&s.state.source===source&&Boolean(s.state.galleryQuery)===Boolean(galleryQuery))this.#sessions.delete(id);
+    const s: Session={owner,entries:[],cancelled:false,touched:Date.now(),state:{...(galleryQuery?{galleryQuery}:{}),id:randomUUID(),source,name,recursive,phase:"scanning",cancelRequested:false,total:0,processed:0,failed:0,matched:0,unanalysed:0,visited:0,limitReached:false,warnings:[],items:[],hasMore:false}};
     this.#sessions.set(s.state.id,s);return s;
   }
-  #entry(s: Session,path: string,title: string,target?: ImageTarget,previewPath?: string) {
-    const id=randomUUID();s.entries.push({path,item:{id,fileName:basename(path),title,
+  #entry(s: Session,path: string,title: string,target?: ImageTarget,previewPath?: string,asset?: WorkAssetRecord) {
+    const id=randomUUID();s.entries.push({path,...(asset?{asset}:{}),item:{id,fileName:basename(path),title,
       previewUrl:target?`sanctuary-image://local/${encodeURIComponent(previewPath??path)}`:`sanctuary-image://workbench/${s.state.id}/${id}`,
       target:target??{sessionId:s.state.id,itemId:id},status:"pending"}});s.state.total=s.entries.length;
   }
@@ -181,7 +231,11 @@ export class ImageWorkbenchService {
       for(const e of s.entries){
         if(s.cancelled)break;
         try {
-          await this.resolveImages(s.owner,[e.item.target]);
+          if(s.state.galleryQuery&&e.asset){
+            const current=this.database.gallerySearchAsset(e.asset.workId,e.asset.id);
+            if(!current||current.path!==e.path)throw new Error("图片记录或原位置已变化，请重新找图");
+            e.asset=current;
+          }else await this.resolveImages(s.owner,[e.item.target]);
           const hash=await fingerprintImage(e.path);e.hash=hash;
           let labels: Record<string,number>={};
           if(q.mode!=="description"||q.include.length||q.exclude.length){
@@ -228,7 +282,7 @@ export class ImageWorkbenchService {
   }
   #owned(owner: number,id: unknown): Session {
     this.#prune();const s=typeof id==="string"?this.#sessions.get(id):undefined;
-    if(!s||s.owner!==owner)throw new Error("本次文件夹授权已过期，请重新选择");s.touched=Date.now();return s;
+    if(!s||s.owner!==owner)throw new Error("这次找图记录已过期，请重新找图或选择文件夹");s.touched=Date.now();return s;
   }
   #selectedIds(value: unknown): string[] {
     if(!Array.isArray(value)||!value.length||value.length>500||!value.every(id=>typeof id==="string"&&id.length<=100))throw new Error("请一次选择 1–500 张图片");return [...new Set(value as string[])];

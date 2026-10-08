@@ -20,6 +20,7 @@ import { GalleryView, type GalleryMode } from "./GalleryView";
 import type { SettingsSection } from "./app-navigation";
 import type { HomeDestination } from "./HomeView";
 import type { BookmarkDownloadPreview } from "../../shared/pixiv-download.js";
+import { useGalleryPictureSearch } from "./useGalleryPictureSearch";
 import { useLibraryQuery } from "./useLibraryQuery";
 import { useGalleryDirectory } from "./useGalleryDirectory";
 import { GalleryDetailSessionCache, type GalleryDetailScope, type GalleryDetailSessionPatch } from "./gallery-detail-session";
@@ -170,6 +171,7 @@ export function App() {
   }, [galleryScope, galleryMode, directory.directoryLoading, directory.directoryReadyMode, directory.collectionSummaries, directory.artistSummaries]);
   const { query: workQuery, result: workResult, loading: workLoading,
     setQuery: setWorkQuery, refresh: refreshWorks, loadMore: loadMoreWorks } = useLibraryQuery(showError);
+  const pictureSearch = useGalleryPictureSearch(workQuery,activeView === "gallery" && !tasksOpen);
   const normalSort = useRef<WorkSortSnapshot>({ sortBy: "savedAt", direction: "desc" });
   if (workQuery.sortBy !== "lastViewedAt") {
     normalSort.current = { sortBy: workQuery.sortBy ?? "savedAt", direction: workQuery.direction ?? "desc" };
@@ -555,7 +557,7 @@ export function App() {
     { id: "favorites", label: "喜欢的作品", description: "浏览图库中标记喜欢的作品", keywords: ["收藏", "喜爱"], onSelect: () => openWorkPreset("favorites") },
     { id: "recent", label: "最近浏览", description: "找到看过的作品，继续上次阅读", keywords: ["历史", "继续", "阅读"], onSelect: () => openWorkPreset("recent") },
     { id: "uncollected", label: "未分相册", description: "找出还没有加入任何相册的作品", keywords: ["整理", "分类"], onSelect: () => openWorkPreset("uncollected") },
-    { id: "search", label: "搜索图库", description: "按标题、画师或 Pixiv ID 找作品", shortcut: "Ctrl F", keywords: ["查找"], onSelect: () => {
+    { id: "search", label: "搜索图库", description: "用中文描述画面找图，也可搜名称和画师", shortcut: "Ctrl F", keywords: ["查找"], onSelect: () => {
       setPendingSearchFocus(true); setActiveView("gallery"); void changeGalleryMode("flat");
     } },
     { id: "import", label: "导入本地图片", description: "将图片加入图库", shortcut: "Ctrl O", disabled: busy, disabledReason: "正在导入，请稍候", keywords: ["添加", "文件"], onSelect: importImages },
@@ -632,6 +634,7 @@ export function App() {
           </>
         ) : activeView === "gallery" ? (
           <GalleryView
+            pictureSearch={pictureSearch}
             collectionSummaries={directory.collectionSummaries}
             artistSummaries={directory.artistSummaries}
             artistCount={artists.length}
@@ -788,7 +791,7 @@ export function App() {
       <Suspense fallback={null}>
       {tasksOpen && <TaskCenter batch={localImport.batch} download={exploreState.download} thumbnails={thumbnailActivity}
         jobs={analysisTasks.jobs} images={analysisTasks.images} loading={analysisTasks.loading} error={analysisTasks.error} onRefresh={analysisTasks.refresh}
-        onImageTask={(source)=>{setTasksOpen(false);setAnalysisWorkIds([]);setAnalysisTaskId(null);setWorkbenchSource(source);setActiveView("organize");}}
+        onImageTask={(source,gallerySearch)=>{if(gallerySearch){setTasksOpen(false);setGalleryMode("flat");setActiveView("gallery");return;}setTasksOpen(false);setAnalysisWorkIds([]);setAnalysisTaskId(null);setWorkbenchSource(source);setActiveView("organize");}}
         onImport={() => { setTasksOpen(false); localImport.show(); }}
         onExplore={() => { setTasksOpen(false); nativeFocusPending.current = true; setActiveView("explore"); }}
         onOrganize={(id) => { setTasksOpen(false); setAnalysisWorkIds([]); setAnalysisTaskId(id); setActiveView("organize"); }}

@@ -194,3 +194,15 @@
   color: var(--ds-primary);
   font-weight: 600;
 }
+
+/* Picture search is the first gallery action; low-frequency filters stay below it. */
+.gallery-search { margin: 0 0 16px; min-width: 0; }
+.gallery-search-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gallery-search-form .work-search { flex: 1 1 240px; }
+.gallery-search-form select { min-height: 42px; max-width: 100%; padding: 0 12px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); color: var(--ds-text-body); background: var(--ds-bg-card); }
+.gallery-search-form .work-search input { min-height: 42px; color: var(--ds-text-heading); background: var(--ds-bg-card); font-size: 14px; }
+.gallery-search-form .ui-button { min-height: 42px; flex-shrink: 0; }
+.gallery-search-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; font-size: 12px; color: var(--ds-text-secondary); overflow-wrap: anywhere; }
+.gallery-search-feedback p { margin: 0; }
+.gallery-search-feedback [role="alert"] { color: var(--ds-error, var(--ds-text-heading)); }
+.work-library-controls.work-library-filters { display: flex; flex-wrap: wrap; }

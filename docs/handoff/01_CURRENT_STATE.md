@@ -1,5 +1,7 @@
 # 交接一：当前状态
 
+2026-10-08：图库搜索框默认“搜画面”，输入后回车自动扫描/索引，无需进入整理页或手动载入。切换“搜名称 / 画师”可继续传统搜索；筛选范围、普通卡片、最匹配页大图、进度/停止、清除与页面返航已接通。当前源码新能力，旧 0.1.2 安装包未重打。详情见 `docs/reviews/2026-10-08-gallery-picture-search.md`。
+
 - 最新工作流补充：2026-10-08（历史基础记录保留）
 - 最新图库补充：卡片直接改名、复制与原生拖出；横幅可自定义、恢复自动精选；普通图库按 managed/external 保存方式筛选，计数与保存筛选一致。见 `docs/reviews/2026-10-08-gallery-quick-use.md`。本轮新增复制/引用导入、外部重新定位、按归属迁移、普通网站收图与来源保存、找图结果 1–4 页带入创作（文件夹先确认导入）。见 `docs/reviews/2026-10-08-discovery-and-multiple-images.md`。
 - 工作区：`E:\PIxiv`
@@ -11,11 +13,11 @@
 
 ## 接手前必读
 
-本轮整合的入口和边界见 README“从哪里开始”及 `docs/reviews/2026-10-08-image-workbench.md`。最新门禁为 502 项 TS、9 项 Python、完整类型与构建；图库快用 10 组、导航 59 组、大图 20 组隔离真实窗口检查通过，见 `docs/reviews/2026-10-08-gallery-quick-use.md`。真实模型工作台证据保留在前批记录。图库命名与探索切换见 `docs/reviews/2026-10-08-gallery-names-and-explore-transitions.md`，按钮反馈见 `docs/reviews/2026-10-08-interaction-motion.md`。导入和查看信息不自动启动模型，外部原文件保留；任务页使用轻量摘要。导入/下载/补图/文件夹/找图/原图复制状态为会话级，原有批量识别沿用持久任务。
+本轮整合的入口和边界见 README“从哪里开始”及 `docs/reviews/2026-10-08-image-workbench.md`。最新门禁为 513 项 TS、9 项 Python、完整类型与构建；图库快用 10 组、导航 59 组、大图 20 组隔离真实窗口检查通过，见 `docs/reviews/2026-10-08-gallery-quick-use.md`。真实模型工作台证据保留在前批记录。图库命名与探索切换见 `docs/reviews/2026-10-08-gallery-names-and-explore-transitions.md`，按钮反馈见 `docs/reviews/2026-10-08-interaction-motion.md`。导入和查看信息不自动启动模型，外部原文件保留；任务页使用轻量摘要。导入/下载/补图/文件夹/找图/原图复制状态为会话级，原有批量识别沿用持久任务。
 
 0.1.2 安装包、哈希及验证记录见 `docs/releases/0.1.2.md`。旧版 C 盘原图可原位读取；存储迁移先备份、校验复制、事务改路径，保留原件，不再覆盖同名冲突或删除旧目录。给朋友及其智能体的步骤见 `docs/operations/UPGRADE_AND_STORAGE_MIGRATION.md`。源码已接通自然语言筛图和多站点探索，旧安装包尚不包含；EmbeddingGemma2 环境与权重也未纳入发布包。
 
-EmbeddingGemma 2 已接入工作台的图库和文件夹画面描述找图，应用当前使用 CPU；GPU 仅有独立探针证据（RTX 4050 三张合成图编码 1,383ms，PyTorch 峰值分配显存约 940MiB）。基础 Python 3.12.14 在 `runtime-data/semantic-python`，环境为 `.venv-semantic` / `.venv-semantic-gpu`，不改现有 WD 环境；尚未接入模型中心或普通搜索栏。可重建索引为 userData 下 `semantic-index.db`，按 SHA-256 + 版本缓存最多 10,000 条。首次 CPU 查询较慢，闲置 60 秒释放模型；文件夹临时授权最多 1,000 张，30 分钟过期。重建与限制见 `services/semantic/README.md`。
+EmbeddingGemma 2 已接入工作台的图库和文件夹画面描述找图，应用当前使用 CPU；GPU 仅有独立探针证据（RTX 4050 三张合成图编码 1,383ms，PyTorch 峰值分配显存约 940MiB）。基础 Python 3.12.14 在 `runtime-data/semantic-python`，环境为 `.venv-semantic` / `.venv-semantic-gpu`，不改现有 WD 环境；尚未接入模型中心；图库主页搜索框已默认直接搜画面，输入后自动扫描/索引并显示普通作品卡片，原整理页保留复杂元素条件。可重建索引为 userData 下 `semantic-index.db`，按 SHA-256 + 版本缓存最多 10,000 条。首次 CPU 查询较慢，闲置 60 秒释放模型；文件夹临时授权最多 1,000 张，30 分钟过期。重建与限制见 `services/semantic/README.md`。
 
 按顺序阅读：
 

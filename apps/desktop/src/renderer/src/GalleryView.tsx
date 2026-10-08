@@ -1,3 +1,4 @@
+import type { GalleryPictureSearch } from "./useGalleryPictureSearch";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type {
   AppearancePreferences,
@@ -28,6 +29,7 @@ import type { GalleryDetailScope, GalleryDetailSession, GalleryDetailSessionPatc
 export type GalleryMode = "flat" | "author-work" | "collections";
 
 export function GalleryView({
+  pictureSearch,
   scopedArtworks,
   scope,
   scopeLoading,
@@ -77,6 +79,7 @@ export function GalleryView({
   onOpenPixivArtist,
   onError
 }: {
+  pictureSearch?: GalleryPictureSearch;
   scopedArtworks: ScopedArtworkRecord[];
   scope: GalleryScope | null;
   scopeLoading: boolean;
@@ -355,6 +358,7 @@ export function GalleryView({
         )
       ) : mode === "flat" ? (
         <WorkLibrary
+          pictureSearch={pictureSearch}
           result={workResult}
           query={workQuery}
           normalSort={normalSort}

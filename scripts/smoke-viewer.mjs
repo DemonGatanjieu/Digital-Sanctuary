@@ -398,6 +398,7 @@ try {
     await cdp.evaluate("window.sanctuary.updateWorkFavorite(['pixiv:123456789'], true)");
     await clickText('[aria-label="常用筛选"] button', '喜欢');
     await waitFor("document.querySelectorAll('.work-library-card').length === 1 && document.querySelector('.work-card-favorite').classList.contains('active')");
+    await changeControl('[aria-label="搜索方式"]', 'name');
     await changeControl('input[type="search"]', '不可能匹配的测试标题');
     await waitFor("document.querySelector('.compact-empty h2')?.textContent === '当前条件下没有喜欢的作品'");
     await changeControl('input[type="search"]', '我的三页');
@@ -508,6 +509,7 @@ try {
     assert.equal(await cdp.evaluate("Boolean(document.querySelector('.work-operation-notice'))"), false, "failed assignment claimed success");
     checks.push({ name: "failed-card-assignment-surfaces-error-and-releases-busy-without-success-or-rejection" });
 
+    await changeControl('[aria-label="搜索方式"]', 'name');
     await changeControl('.work-search input', '我的三页');
     await changeControl('[aria-label="作品类型"]', 'illustration');
     await changeControl('[aria-label="排序字段"]', 'title');

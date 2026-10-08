@@ -1,4 +1,4 @@
-import type { AnalysisScope } from "./index.js";
+import type { WorkQuery, WorkQueryResult, AnalysisScope } from "./index.js";
 
 export type ImageTarget = { workId: string; assetId?: string } | { sessionId: string; itemId: string };
 export interface ImageExportItem { id: string; target: ImageTarget; fileName: string; status: "pending" | "copied" | "failed" | "cancelled"; error?: string }
@@ -17,9 +17,12 @@ export interface WorkbenchSnapshot {
   total: number; processed: number; failed: number; matched: number; unanalysed: number;
   visited: number; limitReached: boolean; warnings: string[]; error?: string; query?: WorkbenchQuery;
   items: WorkbenchItem[]; hasMore: boolean; engine?: string;
+  galleryQuery?: WorkQuery;
 }
+export interface GallerySearchSnapshot { progress: WorkbenchSnapshot; result: WorkQueryResult }
 export interface SemanticAvailability { available: boolean; model: string; device: "cpu"; message: string }
 export interface ImageTaskSummary {
   id: string; kind: "workbench" | "copy"; source: WorkbenchSource; name: string;
   phase: string; total: number; processed: number; failed: number; cancelRequested: boolean;
+  gallerySearch?: boolean;
 }

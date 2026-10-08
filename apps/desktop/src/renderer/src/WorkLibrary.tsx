@@ -1,3 +1,6 @@
+import { GallerySearchBar } from "./GallerySearchBar";
+import type { GalleryPictureSearch } from "./useGalleryPictureSearch";
+import { pictureSearchScopeKey } from "./gallery-picture-search";
 import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
 import { WorkInformationDrawer } from "./WorkInformationDrawer";
 import { DragImageButton, ExportImagesButton } from "./ImageOutputActions";
@@ -30,20 +33,22 @@ import { useWorkReading } from "./useWorkReading";
 
 
 export function WorkLibrary({
-  result,
+  pictureSearch,
+  result: normalResult,
   query,
   normalSort,
   collections,
   appearance,
-  loading,
+  loading: normalLoading,
   onQueryChange,
-  onLoadMore,
+  onLoadMore: loadMoreWorks,
   onAssignCollection,
-  onLibraryChanged,
+  onLibraryChanged: libraryChanged,
   onAnalyzeWorks,
   onOpenInspiration,
   onError
 }: {
+  pictureSearch?: GalleryPictureSearch | undefined;
   result: WorkQueryResult;
   query: WorkQuery;
   normalSort: WorkSortSnapshot;
@@ -58,6 +63,16 @@ export function WorkLibrary({
   onOpenInspiration: (workId: string, pageIndex: number) => void;
   onError: (error: unknown) => void;
 }) {
+  const searchingPictures=Boolean(pictureSearch?.mode==="picture"&&(pictureSearch.snapshot||pictureSearch.pending||pictureSearch.error));
+  const stalePictureScope=Boolean(pictureSearch?.snapshot&&pictureSearchScopeKey(pictureSearch.snapshot.progress.galleryQuery??{})!==pictureSearchScopeKey(query));
+  const result: WorkQueryResult=searchingPictures?(stalePictureScope?{items:[],total:0,totalPages:0,offset:0,limit:60,hasMore:false}:pictureSearch?.snapshot?.result??{items:[],total:0,totalPages:0,offset:0,limit:60,hasMore:false}):normalResult;
+  const loading=searchingPictures?Boolean(pictureSearch?.pending||pictureSearch?.running&&!stalePictureScope):normalLoading;
+  const onLoadMore=searchingPictures?()=>void pictureSearch?.loadMore():loadMoreWorks;
+  const onLibraryChanged=async()=>{await libraryChanged();if(searchingPictures)await pictureSearch?.refresh();};
+  const [selectedAssetId,setSelectedAssetId]=useState<string|undefined>();
+  useEffect(()=>{
+    if(query.search&&pictureSearch?.mode==="picture"){pictureSearch.setMode("name");pictureSearch.setDraft(query.search);}
+  },[query.search]);
   const [selectedWork, setSelectedWork] = useState<WorkRecord | null>(null);
   const [renamingWork, setRenamingWork] = useState<{ id: string; title: string } | null>(null);
   const [openingWorkId, setOpeningWorkId] = useState("");
@@ -91,10 +106,12 @@ export function WorkLibrary({
     return str;
   }, [isCombinationFilter, query.collectionIds, query.excludedCollectionIds, query.collectionMatchMode, collections]);
 
-  const featuredWork = result.items[0] ?? null;
+  const featuredWork = normalResult.items[0] ?? null;
   const lastSelectedWorkId = useRef<string | null>(null);
+  useEffect(()=>{setSelectedIds(new Set());setSelecting(false);lastSelectedWorkId.current=null;},[searchingPictures,pictureSearch?.snapshot?.progress.id,stalePictureScope]);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const openRequestRef = useRef(0);
+  useEffect(()=>{openRequestRef.current+=1;setOpeningWorkId("");},[searchingPictures,pictureSearch?.snapshot?.progress.id,stalePictureScope]);
   useEffect(() => () => { openRequestRef.current += 1; }, []);
 
   useEffect(() => {
@@ -121,6 +138,7 @@ export function WorkLibrary({
       const work = await window.sanctuary.getWork(item.id);
       if (request !== openRequestRef.current) return;
       if (!work) throw new Error("作品记录不存在，可能已经被移出画廊。");
+      setSelectedAssetId(item.matchedPage!==undefined?item.coverAsset?.id:undefined);
       setSelectedWork(work);
     } catch (error) {
       if (request === openRequestRef.current) onError(error);
@@ -223,12 +241,13 @@ export function WorkLibrary({
   const handleCopyWork = useStableWorkCallback(async (work: WorkListItem) => {
     if (!work.coverAsset) return;
     await window.sanctuary.useImage({ workId: work.id, assetId: work.coverAsset.id }, "copy");
-    setNotice({ message: work.pageCount > 1 ? "封面图片已复制，可以粘贴使用。全部页面可在选择作品后复制原图。" : "图片已复制，可以粘贴使用。" });
+    setNotice({ message: work.pageCount > 1 ? "图片已复制，可以粘贴使用。全部页面可在选择作品后复制原图。" : "图片已复制，可以粘贴使用。" });
   });
 
   return (
     <>
-      <GalleryBanner featured={featuredWork} appearance={appearance} searching={Boolean(query.search)} heading={activeCollection ? "相册精选" : preset === "recent" ? "最近浏览" : preset === "favorites" ? "喜欢的作品" : "作品精选"} onOpen={work => void openWork(work)} />
+      {pictureSearch&&<GallerySearchBar search={pictureSearch} query={query} onQueryChange={onQueryChange}/>}
+      <GalleryBanner featured={featuredWork} appearance={appearance} searching={Boolean(query.search)||searchingPictures} heading={activeCollection ? "相册精选" : preset === "recent" ? "最近浏览" : preset === "favorites" ? "喜欢的作品" : "作品精选"} onOpen={work => void openWork(work)} />
       <div className="work-preset-row">
         <SegmentedControl
           label="常用筛选"
@@ -245,8 +264,8 @@ export function WorkLibrary({
         <SavedWorkFilters query={query} collections={collections} onApply={onQueryChange} />
       </div>
 
-      <section className="work-library-controls" aria-label="画廊搜索与排序">
-        <label className="work-search">
+      <section className={`work-library-controls ${pictureSearch?"work-library-filters":""}`} aria-label="画廊搜索与排序">
+        {!pictureSearch&&(<label className="work-search">
           <span>⌕</span>
           <input
             type="search"
@@ -254,7 +273,7 @@ export function WorkLibrary({
             placeholder="搜索标题、作者或 Pixiv ID"
             onChange={(event) => onQueryChange({ ...query, search: event.target.value, offset: 0 })}
           />
-        </label>
+        </label>)}
         <select aria-label="保存方式" value={query.ownership ?? ""} onChange={event => {
           const { ownership: _ownership, ...rest } = query;
           onQueryChange({ ...rest, ...(event.target.value ? { ownership: event.target.value as NonNullable<WorkQuery["ownership"]> } : {}), offset: 0 });
@@ -284,14 +303,15 @@ export function WorkLibrary({
         </select>
         <select
           aria-label="排序字段"
-          value={query.sortBy ?? "savedAt"}
-          disabled={preset === "recent"}
+          value={searchingPictures?"similarity":query.sortBy ?? "savedAt"}
+          disabled={preset === "recent"||searchingPictures}
           onChange={(event) => onQueryChange({
             ...query,
             sortBy: event.target.value as NonNullable<WorkQuery["sortBy"]>,
             offset: 0
           })}
         >
+          {searchingPictures&&<option value="similarity">画面相似程度</option>}
           <option value="savedAt">本地保存时间</option>
           {preset === "recent" && <option value="lastViewedAt">最近浏览时间</option>}
           <option value="publishedAt">Pixiv 发布时间</option>
@@ -303,7 +323,7 @@ export function WorkLibrary({
         <button
           type="button"
           className="work-sort-direction"
-          disabled={preset === "recent"}
+          disabled={preset === "recent"||searchingPictures}
           title={query.direction === "asc" ? "当前升序" : "当前降序"}
           onClick={() => onQueryChange({
             ...query,
@@ -316,6 +336,7 @@ export function WorkLibrary({
         <button
           type="button"
           className={`work-select-toggle ${selecting ? "active" : ""}`}
+          disabled={searchingPictures&&Boolean(pictureSearch?.running)}
           onClick={() => {
             setSelecting((value) => !value);
             setSelectedIds(new Set());
@@ -347,15 +368,15 @@ export function WorkLibrary({
       )}
 
       <div className="work-result-note">
-        <span>{result.total} 个作品 · {result.totalPages} 页{query.ownership ? ` · ${query.ownership === "managed" ? "图库保存" : "外部引用"}` : ""}</span>
+        <span>{result.total} 个作品 · {searchingPictures?`${result.totalPages} 张已搜索图片 · 每件显示最匹配页`:`${result.totalPages} 页`}{query.ownership ? ` · ${query.ownership === "managed" ? "图库保存" : "外部引用"}` : ""}</span>
         {loading && <span className="work-querying">正在更新…</span>}
       </div>
 
       {result.items.length === 0 && !loading ? (
         <section className="empty-state compact-empty">
           <p className="eyebrow">NO MATCHES</p>
-          <h2>{emptyMessage.title}</h2>
-          <p>{emptyMessage.description}</p>
+          <h2>{searchingPictures?stalePictureScope?"按当前范围重新找图":pictureSearch?.error||pictureSearch?.snapshot?.progress.error?"找图暂未完成":pictureSearch?.snapshot?.progress.phase==="cancelled"?"已停止找图":"当前范围没有可用的搜索结果":emptyMessage.title}</h2>
+          <p>{searchingPictures?"在上方输入中文画面描述后点“找图”。首次建立索引较慢，已完成的索引会保留。":emptyMessage.description}</p>
         </section>
       ) : (
         <section className="work-library-grid" aria-busy={loading}>
@@ -480,7 +501,7 @@ export function WorkLibrary({
       )}
 
       {selectedWork && (
-        <WorkLightbox work={selectedWork} onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} onOpenInspiration={onOpenInspiration} onError={onError} />
+        <WorkLightbox work={selectedWork} {...(selectedAssetId?{initialAssetId:selectedAssetId}:{})} onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} onOpenInspiration={onOpenInspiration} onError={onError} />
       )}
       {deletionPreview && (
         <DialogOverlay busy={deleting} onClose={() => setDeletionPreview(null)}>
@@ -564,7 +585,7 @@ const WorkCard = memo(function WorkCard({
         ) : (
           <span className="work-cover-missing">◇<small>封面待生成</small></span>
         )}
-        {work.pageCount > 1 && <span className="work-page-badge">▱ {work.pageCount}</span>}
+        {work.pageCount > 1 && <span className="work-page-badge">{work.matchedPage!==undefined?`匹配第 ${work.matchedPage+1} 页 / ${work.pageCount}`:`▱ ${work.pageCount}`}</span>}
         {opening && <span className="work-opening">正在打开…</span>}
       </button>
       {!selecting && (
@@ -577,8 +598,8 @@ const WorkCard = memo(function WorkCard({
         <div className="work-card-meta"><span title={work.artistName ?? "本地作品"}>{work.artistName ?? "本地作品"}</span>
           <small className="work-ownership-label" title={work.ownership === "managed" ? "由图库保存和管理原图" : "引用原位置；移动或删除原文件会影响使用"}>{work.ownership === "managed" ? "图库保存" : "外部引用"}</small></div>
         {!selecting && work.coverAsset?.mediaType === "image" && <div className="work-card-use-actions">
-          <Button size="small" variant="ghost" busy={mutating === "copy"} disabled={mutating !== null} onClick={() => void mutate("copy", () => onCopy(work))}>{work.pageCount > 1 ? "复制封面" : "复制图片"}</Button>
-          <DragImageButton target={{ workId: work.id, assetId: work.coverAsset.id }} label={work.pageCount > 1 ? "拖出封面" : "拖出图片"} disabled={mutating !== null} onError={onMutationError} />
+          <Button size="small" variant="ghost" busy={mutating === "copy"} disabled={mutating !== null} onClick={() => void mutate("copy", () => onCopy(work))}>{work.matchedPage!==undefined?"复制此页":work.pageCount > 1 ? "复制封面" : "复制图片"}</Button>
+          <DragImageButton target={{ workId: work.id, assetId: work.coverAsset.id }} label={work.matchedPage!==undefined?"拖出此页":work.pageCount > 1 ? "拖出封面" : "拖出图片"} disabled={mutating !== null} onError={onMutationError} />
         </div>}
         <div className="work-card-foot">
           <time dateTime={work.savedAt}>{formatDate(work.savedAt)}</time>
