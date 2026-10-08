@@ -60,6 +60,8 @@ export interface ArtworkRecord {
   id: string;
   path: string;
   fileName: string;
+  /** Optional user-chosen gallery name; the original file and source title stay intact. */
+  displayName?: string;
   importedAt: string;
   assessment: VisionAssessment | null;
   decision: FilterDecision | null;

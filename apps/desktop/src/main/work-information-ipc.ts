@@ -16,4 +16,9 @@ export function registerWorkInformationIpc(ipc: Pick<IpcMain, "handle">, databas
       assessment: asset ? database.getStoredAssetAssessment(work.id, asset.id) : null,
       evaluations: database.listVisionEvaluationsForWork(work.id), provenance: database.getGenerationProvenance(work.id) };
   });
+  ipc.handle("library:rename-work", (_event, value: unknown, name: unknown) => {
+    const id = parseWorkId(value);
+    if (!id || typeof name !== "string") throw new Error("图库名称请求无效");
+    return database.renameWork(id, name);
+  });
 }

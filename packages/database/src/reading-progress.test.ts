@@ -41,7 +41,7 @@ describe("local reading progress", () => {
       expect(test.database.getPreference("library.readingProgress")).toEqual([second]);
       expect(test.database.queryWorks({ viewedOnly: true }).items[0]?.lastViewedAt).toBe(second!.viewedAt);
       expect(test.database.listAnalysisJobs()).toEqual([]);
-      expect(test.database.schemaVersion()).toBe(6);
+      expect(test.database.schemaVersion()).toBe(7);
     } finally { test.close(); }
   });
 

@@ -29,13 +29,13 @@ export function ArtworkCard({
     <article className="art-card">
       <button
         className="art-preview art-preview-button"
-        aria-label={`放大 ${artwork.source?.title ?? artwork.fileName}`}
+        aria-label={`放大 ${artwork.displayName ?? artwork.source?.title ?? artwork.fileName}`}
         onClick={() => onOpen(artwork.id)}
       >
         <LazyArtworkImage src={imageUrl} />
       </button>
       <div className="art-meta">
-        <strong title={artwork.fileName}>{artwork.fileName}</strong>
+        <strong title={artwork.fileName}>{artwork.displayName ?? artwork.fileName}</strong>
         <small title={detail}>{detail}</small>
         <select
           aria-label="加入相册"

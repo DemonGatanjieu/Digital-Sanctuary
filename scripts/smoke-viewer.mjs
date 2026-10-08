@@ -135,6 +135,28 @@ try {
       assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"), true);
       await cdp.evaluate("document.querySelector('[aria-label=\"作品信息相册\"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:229,isComposing:true,bubbles:true}))");
       assert.equal(await cdp.evaluate("Boolean(document.querySelector('.work-information-drawer'))"), true);
+      await waitFor("Array.from(document.querySelectorAll('.work-information-drawer button')).some(button=>button.textContent.includes('修改图库名称') && !button.disabled)");
+      await clickText('.work-information-drawer button','修改图库名称');
+      await waitFor("document.activeElement?.getAttribute('aria-label')==='图库名称'");
+      await changeControl('[aria-label="图库名称"]',' ');
+      assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.work-information-drawer button')).find(button=>button.textContent.includes('保存名称')).disabled"),true);
+      const galleryName=`我的三页收藏 · ${entry} 中文长名称 / 只改图库显示`;
+      await changeControl('[aria-label="图库名称"]',galleryName);
+      await main.evaluate(`(() => {
+        const ipc=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').ipcMain;
+        const original=ipc._invokeHandlers.get('library:rename-work');ipc.removeHandler('library:rename-work');
+        ipc.handle('library:rename-work',(...args)=>{ipc.removeHandler('library:rename-work');ipc.handle('library:rename-work',original);throw new Error('隔离命名保存失败')});return true;
+      })()`);
+      await clickText('.work-information-drawer button','保存名称');
+      await waitFor("document.querySelector('.work-information-drawer [role=alert]')?.textContent.includes('隔离命名保存失败')");
+      assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"图库名称\"]').value"),galleryName,'failed rename lost the input');
+      await clickText('.work-information-drawer button','保存名称');
+      await waitFor("document.querySelector('.work-information-drawer [role=status]')?.textContent==='图库名称已保存'");
+      assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group strong').textContent"),galleryName);
+      const renamed=await cdp.evaluate("window.sanctuary.getWork('pixiv:123456789')");
+      assert.equal(renamed.title,galleryName);assert.deepEqual(renamed.assets.map(asset=>asset.path),fixturePaths);
+      assert.equal(await main.evaluate('__viewerInspect.requests.length'),inspectCount,'renaming started model analysis');
+      checks.push({name:'gallery-name-edit-focus-empty-failure-retry-original-paths-and-live-heading',entry});
       await screenshot(`${entry}-work-information`);
       await key('Escape');
       await waitFor("!document.querySelector('.work-information-drawer')");
@@ -378,7 +400,7 @@ try {
     await waitFor("document.querySelectorAll('.work-library-card').length === 1 && document.querySelector('.work-card-favorite').classList.contains('active')");
     await changeControl('input[type="search"]', '不可能匹配的测试标题');
     await waitFor("document.querySelector('.compact-empty h2')?.textContent === '当前条件下没有喜欢的作品'");
-    await changeControl('input[type="search"]', '横竖');
+    await changeControl('input[type="search"]', '我的三页');
     await waitFor("document.querySelectorAll('.work-library-card').length === 1");
     await changeControl('[aria-label="作品类型"]', 'local');
     await waitFor("document.querySelectorAll('.work-library-card').length === 0 && Boolean(document.querySelector('.compact-empty'))");
@@ -486,7 +508,7 @@ try {
     assert.equal(await cdp.evaluate("Boolean(document.querySelector('.work-operation-notice'))"), false, "failed assignment claimed success");
     checks.push({ name: "failed-card-assignment-surfaces-error-and-releases-busy-without-success-or-rejection" });
 
-    await changeControl('.work-search input', '横竖');
+    await changeControl('.work-search input', '我的三页');
     await changeControl('[aria-label="作品类型"]', 'illustration');
     await changeControl('[aria-label="排序字段"]', 'title');
     await click('[data-saved-filters="open"]');
@@ -494,7 +516,7 @@ try {
     await changeControl('[aria-label="筛选名称"]', '三页参考');
     await clickText('.saved-work-filters-dialog button', '保存筛选');
     await waitFor("document.querySelectorAll('[data-filter-apply]').length === 1");
-    assert.equal(await cdp.evaluate("document.querySelector('.saved-work-filter-list').textContent.includes('搜索“横竖” · 插画')"), true);
+    assert.equal(await cdp.evaluate("document.querySelector('.saved-work-filter-list').textContent.includes('搜索“我的三页” · 插画')"), true);
     const savedBounds = await cdp.evaluate("(()=>{const n=document.querySelector('.saved-work-filters-dialog'),r=n.getBoundingClientRect();return {left:r.left,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight,overflow:n.scrollWidth-n.clientWidth};})()");
     assert.ok(savedBounds.left >= 0 && savedBounds.right <= savedBounds.width && savedBounds.bottom <= savedBounds.height && savedBounds.overflow <= 2);
     await screenshot('saved-work-filter-900');
@@ -519,6 +541,8 @@ try {
     await click('.work-cover-button');
     await imageReady();
     assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 3/3 页')"), true, 'reading progress did not survive an Electron restart');
+    assert.match(await cdp.evaluate("document.querySelector('.cinema-heading-group strong').textContent"),/^我的三页收藏/,'gallery name did not survive restart');
+    checks.push({name:'gallery-display-name-survives-real-electron-restart'});
     await key('Escape');
     await waitForProgress(2);
     await clickText('[aria-label="常用筛选"] button', '最近浏览');
@@ -527,7 +551,7 @@ try {
     await click('[data-saved-filters="open"]');
     await waitFor("document.querySelectorAll('[data-filter-apply]').length === 1");
     await click('[data-filter-apply]');
-    await waitFor("document.querySelector('.work-search input')?.value === '横竖'");
+    await waitFor("document.querySelector('.work-search input')?.value === '我的三页'");
     assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"作品类型\"]').value"), 'illustration');
     assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').value"), 'title');
     assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"常用筛选\"] button.active').textContent"), '全部');

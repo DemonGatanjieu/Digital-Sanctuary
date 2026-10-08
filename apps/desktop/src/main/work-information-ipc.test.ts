@@ -33,10 +33,21 @@ describe("stored work information", () => {
     const database = new LibraryDatabase(":memory:");
     try {
       let read!: (...args: unknown[]) => unknown;
-      registerWorkInformationIpc({ handle: (_channel, handler) => { read = handler as (...args: unknown[]) => unknown; } } as Pick<IpcMain, "handle">, database);
+      registerWorkInformationIpc({ handle: (channel, handler) => { if (channel === "library:work-information") read = handler as (...args: unknown[]) => unknown; } } as Pick<IpcMain, "handle">, database);
       expect(() => read({}, "local:x", -1)).toThrow("无效");
       expect(() => read({}, "local:x", 1.5)).toThrow("无效");
       expect(() => read({}, { path: "arbitrary" }, 0)).toThrow("无效");
+    } finally { database.close(); }
+  });
+  it("accepts only a work ID and a display name, with no filesystem request", () => {
+    const database = new LibraryDatabase(":memory:");
+    try {
+      const image = database.importArtwork("E:/fixture/original.png");
+      let rename!: (...args: unknown[]) => unknown;
+      registerWorkInformationIpc({ handle: (channel, handler) => { if (channel === "library:rename-work") rename = handler as (...args: unknown[]) => unknown; } } as Pick<IpcMain, "handle">, database);
+      expect(() => rename({}, { path: "arbitrary" }, "name")).toThrow("无效");
+      expect(() => rename({}, `local:${image.id}`, { path: "arbitrary" })).toThrow("无效");
+      expect(rename({}, `local:${image.id}`, "我的参考图")).toMatchObject({ title: "我的参考图", assets: [{ path: "E:/fixture/original.png" }] });
     } finally { database.close(); }
   });
 });

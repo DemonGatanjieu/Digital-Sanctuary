@@ -40,7 +40,7 @@ export function buildAuthorGroups(
       work = {
         key: workKey,
         workId,
-        title: artwork.source?.title ?? (inferred ? `Pixiv 作品 ${workId}` : artwork.fileName),
+        title: artwork.displayName ?? artwork.source?.title ?? (inferred ? `Pixiv 作品 ${workId}` : artwork.fileName),
         pages: []
       };
       author.works.push(work);
@@ -97,7 +97,7 @@ export function authorDetailFromSummary(summary: ArtistSummary, pages: readonly 
   for (const page of pages) {
     let work = works.get(page.libraryWorkId);
     if (!work) {
-      work = { key: page.libraryWorkId, workId: page.source?.workId ?? page.libraryWorkId, title: page.source?.title ?? page.fileName, pages: [] };
+      work = { key: page.libraryWorkId, workId: page.source?.workId ?? page.libraryWorkId, title: page.displayName ?? page.source?.title ?? page.fileName, pages: [] };
       works.set(page.libraryWorkId, work);
     }
     work.pages.push(page);

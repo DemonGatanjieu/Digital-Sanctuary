@@ -33,6 +33,9 @@ export function ArtworkLightbox({
   const next = pages[currentIndex + 1];
   const libraryWorkId = artworkLibraryWorkId(artwork);
   const sourcePageIndex = artworkPageIndex(artwork);
+  const [renamedTitle, setRenamedTitle] = useState<string | null>(null);
+  useEffect(() => setRenamedTitle(null), [libraryWorkId]);
+  const displayTitle = renamedTitle ?? artwork.displayName ?? artwork.source?.title ?? artwork.fileName;
 
   const [showRadar, setShowRadar] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
@@ -72,7 +75,7 @@ export function ArtworkLightbox({
       className={`cinema-lightbox-theater ${hudVisible ? "hud-visible" : "hud-hidden"}`}
       role="dialog"
       aria-modal="true"
-      aria-label={artwork.source?.title ?? artwork.fileName}
+      aria-label={displayTitle}
       data-display-profile={viewer.displayProfile}
       data-reduced-motion={viewer.reducedMotion}
       onMouseMove={resetHudTimer}
@@ -82,7 +85,7 @@ export function ArtworkLightbox({
       {/* Floating Top Floating HUD Pill */}
       <header className="cinema-hud-island">
         <div className="cinema-heading-group">
-          <strong>{artwork.source?.title ?? artwork.fileName}</strong>
+          <strong>{displayTitle}</strong>
           <small>{artwork.source?.authorName ?? "本地作品"} {pages.length > 1 ? `· 第 ${currentIndex + 1}/${pages.length} 页` : ""}</small>
         </div>
 
@@ -166,12 +169,12 @@ export function ArtworkLightbox({
       {/* Element Inspector Drawer */}
       {showInformation && <WorkInformationDrawer workId={libraryWorkId} pageIndex={sourcePageIndex} onClose={() => setShowInformation(false)}
         onInspector={() => { setShowInformation(false); setShowInspector(true); }} onRadar={() => { setShowInformation(false); setShowRadar(true); }}
-        onInspiration={() => { onClose(); onOpenInspiration(libraryWorkId, sourcePageIndex); }} onChanged={onReadingSaved} />}
+        onInspiration={() => { onClose(); onOpenInspiration(libraryWorkId, sourcePageIndex); }} onChanged={onReadingSaved} onRenamed={(renamed) => setRenamedTitle(renamed.title)} />}
       {showInspector && (
         <ElementInspectorDrawer
           target={{
             workId: libraryWorkId,
-            title: artwork.source?.title ?? artwork.fileName,
+            title: displayTitle,
             pageIndex: sourcePageIndex
           }}
           onClose={() => setShowInspector(false)}
@@ -220,7 +223,7 @@ export function ArtworkLightbox({
             ref={viewer.imageRef}
             key={`${artwork.id}:${artwork.path}`}
             src={artworkImageUrl(artwork)}
-            alt={artwork.source?.title ?? artwork.fileName}
+          alt={displayTitle}
             className="cinema-image-entity"
             aria-busy={!imageLoaded}
             hidden={imageFailed}

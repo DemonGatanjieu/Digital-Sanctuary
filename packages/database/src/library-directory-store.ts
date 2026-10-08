@@ -8,7 +8,7 @@ const pageFrom = `FROM artworks aw JOIN assets a ON a.legacy_artwork_id = aw.id
 const validPage = "w.deleted_at IS NULL AND a.media_type = 'image' AND a.legacy_artwork_id IS NOT NULL";
 // Books retain their complete indexed manifest; new selections require a usable local asset.
 const availablePage = `${validPage} AND a.file_state = 'available'`;
-const pageSelect = `SELECT aw.*, a.work_id AS library_work_id, a.id AS asset_id,
+const pageSelect = `SELECT aw.*, w.custom_title AS display_name, a.work_id AS library_work_id, a.id AS asset_id,
   a.page_index AS asset_page_index, a.thumbnail_path,
   (SELECT GROUP_CONCAT(ca.collection_id, char(31)) FROM collection_artworks ca WHERE ca.artwork_id = aw.id) AS collection_ids`;
 const pageOrder = "aw.imported_at DESC, aw.id ASC";
@@ -144,7 +144,7 @@ export class LibraryDirectoryStore {
       JOIN works w ON w.id = a.work_id ${artistJoin} WHERE ${where}
       ORDER BY ${pageOrder} LIMIT ? OFFSET ?
     ) ${pageSelect} FROM selected selected_page JOIN artworks aw ON aw.id = selected_page.id
-      JOIN assets a ON a.legacy_artwork_id = aw.id ORDER BY ${pageOrder}`)
+      JOIN assets a ON a.legacy_artwork_id = aw.id JOIN works w ON w.id = a.work_id ORDER BY ${pageOrder}`)
       .all(...parameters, limit, offset) as Row[]).map(pageRecord);
     return { items, total, offset, limit, hasMore: offset + items.length < total };
   }
@@ -196,6 +196,7 @@ function pageRecord(row: Row): ScopedArtworkRecord {
   const source = row.source_platform === "pixiv" && row.source_work_id && row.source_page_index != null && row.author_id && row.author_name && row.work_title
     ? { platform: "pixiv" as const, workId: String(row.source_work_id), pageIndex: Number(row.source_page_index), authorId: String(row.author_id), authorName: String(row.author_name), title: String(row.work_title) } : null;
   return { id: String(row.id), path: String(row.path), fileName: String(row.file_name), importedAt: String(row.imported_at),
+    ...(row.display_name ? { displayName: String(row.display_name) } : {}),
     assessment: parse<VisionAssessment>(row.assessment_json), decision: parse<FilterDecision>(row.decision_json), source,
     collectionIds: typeof row.collection_ids === "string" ? row.collection_ids.split("\u001f") : [], libraryWorkId: String(row.library_work_id),
     assetId: String(row.asset_id), pageIndex: Number(row.asset_page_index), thumbnailPath: nullableString(row.thumbnail_path) };

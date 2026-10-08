@@ -106,7 +106,7 @@ export function PagedArtworkPicker({ collection, onClose, onAdd }: {
 function PickerArtwork({ artwork, selected, disabled, onToggle }: {
   artwork: ScopedArtworkRecord; selected: boolean; disabled: boolean; onToggle: () => void;
 }) {
-  const title = artwork.source?.title ?? artwork.fileName;
+  const title = artwork.displayName ?? artwork.source?.title ?? artwork.fileName;
   const path = artwork.thumbnailPath || artwork.path;
   return <button type="button" className={`paged-picker-artwork ${selected ? "selected" : ""}`} aria-pressed={selected}
     aria-label={`${selected ? "取消选择" : "选择"} ${title} 第 ${artwork.pageIndex + 1} 页`} disabled={disabled} onClick={onToggle}>

@@ -280,7 +280,7 @@ export function AuthorDetailPage({
 
                     <div className="catalog-title-cell">
                       <strong className="catalog-title">
-                        {artwork.source?.title ?? artwork.fileName}
+                        {artwork.displayName ?? artwork.source?.title ?? artwork.fileName}
                       </strong>
                       <small className="catalog-subtitle">
                         {workId ? `Work #${workId}` : "本地导入作品"} · {author.name}

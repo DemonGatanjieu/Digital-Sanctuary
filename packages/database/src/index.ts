@@ -48,6 +48,7 @@ import type {
 } from "@sanctuary/domain";
 import { SavedCollectionViewStore } from "./saved-collection-view-store.js";
 import { LibraryDirectoryStore } from "./library-directory-store.js";
+import { WorkNameStore } from "./work-name-store.js";
 import {
   DEFAULT_ELEMENT_FILTER_SETTINGS,
   getVisionSuite,
@@ -76,6 +77,7 @@ interface ArtworkRow {
   author_id: string | null;
   author_name: string | null;
   work_title: string | null;
+  display_name?: string | null;
 }
 
 interface CollectionRow {
@@ -294,12 +296,14 @@ export class LibraryDatabase {
   readonly #databasePath: string;
   readonly #savedCollectionViews: SavedCollectionViewStore;
   readonly #directory: LibraryDirectoryStore;
+  readonly #workNames: WorkNameStore;
 
   constructor(databasePath: string) {
     this.#databasePath = databasePath;
     this.#database = new DatabaseSync(databasePath);
     this.#savedCollectionViews = new SavedCollectionViewStore(this.#database);
     this.#directory = new LibraryDirectoryStore(this.#database, (query) => this.#queryWorkPage(query));
+    this.#workNames = new WorkNameStore(this.#database);
     this.#database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     this.#backupBeforeWorkMigration();
     this.#migrate();
@@ -312,6 +316,11 @@ export class LibraryDatabase {
   schemaVersion(): number {
     const row = this.#database.prepare("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations").get() as { version: number };
     return Number(row.version);
+  }
+
+  renameWork(workId: string, name: string): WorkRecord {
+    this.#workNames.rename(workId, name);
+    return this.getWork(workId)!;
   }
 
   backupTo(destinationPath: string): string {
@@ -384,8 +393,10 @@ export class LibraryDatabase {
       `SELECT a.id, a.path, a.file_name, a.imported_at,
               a.assessment_json, a.decision_json, ca.collection_id,
               a.source_platform, a.source_work_id, a.source_page_index,
-              a.author_id, a.author_name, a.work_title
+              a.author_id, a.author_name, a.work_title, w.custom_title AS display_name
          FROM artworks a
+         LEFT JOIN assets asset ON asset.legacy_artwork_id = a.id
+         LEFT JOIN works w ON w.id = asset.work_id
          LEFT JOIN collection_artworks ca ON ca.artwork_id = a.id
         WHERE a.id = ?`
     ).all(artworkId) as unknown as ArtworkRow[];
@@ -498,8 +509,10 @@ export class LibraryDatabase {
         `SELECT a.id, a.path, a.file_name, a.imported_at,
                 a.assessment_json, a.decision_json, ca.collection_id,
                 a.source_platform, a.source_work_id, a.source_page_index,
-                a.author_id, a.author_name, a.work_title
+                a.author_id, a.author_name, a.work_title, w.custom_title AS display_name
            FROM artworks a
+           LEFT JOIN assets asset ON asset.legacy_artwork_id = a.id
+           LEFT JOIN works w ON w.id = asset.work_id
            LEFT JOIN collection_artworks ca ON ca.artwork_id = a.id
           ORDER BY a.imported_at DESC, a.id`
       )
@@ -2239,6 +2252,7 @@ export class LibraryDatabase {
         ON artworks(source_platform, author_id, source_work_id);
     `);
     this.#ensureWorkSchema();
+    this.#workNames.ensureSchema();
     this.#migrateLegacyArtworksToWorks();
     this.#savedCollectionViews.ensureSchema();
     this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)").run(new Date().toISOString());
@@ -2617,7 +2631,7 @@ export class LibraryDatabase {
          VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            artist_id = COALESCE(excluded.artist_id, works.artist_id),
-           title = CASE WHEN excluded.source_platform = 'pixiv' THEN excluded.title ELSE works.title END,
+           title = CASE WHEN works.custom_title IS NOT NULL THEN works.custom_title WHEN excluded.source_platform = 'pixiv' THEN excluded.title ELSE works.title END,
            source_platform = COALESCE(excluded.source_platform, works.source_platform),
            source_work_id = COALESCE(excluded.source_work_id, works.source_work_id),
            ownership = CASE WHEN excluded.source_platform = 'pixiv' THEN 'managed' ELSE works.ownership END,
@@ -2745,6 +2759,7 @@ function mapArtworkRows(rows: readonly ArtworkRow[]): ArtworkRecord[] {
       id: row.id,
       path: row.path,
       fileName: row.file_name,
+      ...(row.display_name ? { displayName: row.display_name } : {}),
       importedAt: row.imported_at,
       assessment: parseJson<VisionAssessment>(row.assessment_json),
       decision: parseJson<FilterDecision>(row.decision_json),

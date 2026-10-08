@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { WorkInformation } from "@sanctuary/domain";
+import type { WorkInformation, WorkRecord } from "@sanctuary/domain";
 import { Button } from "./Button";
 import { DialogOverlay } from "./DialogOverlay";
 
-export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector, onRadar, onInspiration, onChanged }: {
+export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector, onRadar, onInspiration, onChanged, onRenamed }: {
   workId: string; pageIndex: number; onClose: () => void;
   onInspector: () => void; onRadar: () => void; onInspiration: () => void;
   onChanged: () => Promise<void> | void;
+  onRenamed?: (work: WorkRecord) => void;
 }) {
   const [information, setInformation] = useState<WorkInformation | null>(null);
   const [loading, setLoading] = useState(true);
@@ -14,16 +15,41 @@ export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector,
   const [error, setError] = useState("");
   const [album, setAlbum] = useState("");
   const [revision, setRevision] = useState(0);
+  const [editingName, setEditingName] = useState(false);
+  const [name, setName] = useState("");
+  const [notice, setNotice] = useState("");
+  const nameInput = useRef<HTMLInputElement>(null);
+  const composing = useRef(false);
   const generation = useRef(0);
+  useEffect(() => { if (editingName) { nameInput.current?.focus(); nameInput.current?.select(); } }, [editingName]);
   useEffect(() => {
     const request = ++generation.current;
     setLoading(true); setInformation(null); setError(""); setAlbum("");
+    setBusy(false); setEditingName(false); setNotice(""); composing.current = false;
     void window.sanctuary.getWorkInformation(workId, pageIndex).then((value) => {
       if (generation.current === request) { setInformation(value); if (!value) setError("这件作品已从图库移除"); }
     }).catch((cause) => { if (generation.current === request) setError(cause instanceof Error ? cause.message : "读取作品信息失败，请重试"); })
       .finally(() => { if (generation.current === request) setLoading(false); });
     return () => { generation.current += 1; };
   }, [workId, pageIndex, revision]);
+
+  async function rename() {
+    if (busy || composing.current || !name.trim()) return;
+    const request = generation.current;
+    let saved = false;
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const work = await window.sanctuary.renameWork(workId, name);
+      saved = true;
+      if (request === generation.current) {
+        setInformation((current) => current ? { ...current, work } : null);
+        setEditingName(false); setNotice("图库名称已保存"); onRenamed?.(work);
+      }
+      await onChanged();
+    } catch (cause) {
+      if (request === generation.current) setError(saved ? "名称已保存，但图库刷新失败，请重新读取。" : cause instanceof Error ? cause.message : "保存名称失败，请重试");
+    } finally { if (request === generation.current) setBusy(false); }
+  }
 
   async function membership(collectionId: string, remove = false) {
     if (busy) return;
@@ -48,7 +74,19 @@ export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector,
       {loading && <p role="status">正在读取作品信息…</p>}
       {error && <p role="alert">{error}<Button size="small" disabled={busy} onClick={() => setRevision((value) => value + 1)}>重新读取</Button></p>}
       {work && <>
-        <div><h3>{work.title}</h3><p className="muted">{work.artistName ?? "本地作品"} · 第 {pageIndex + 1} 页 / {work.pageCount} 页</p></div>
+        <div><div className="work-information-name-heading"><h3>{work.title}</h3>
+          {!editingName && <Button size="small" variant="ghost" disabled={busy} onClick={() => { setName(work.title); setEditingName(true); setNotice(""); }}>修改图库名称</Button>}</div>
+          {editingName && <form className="work-information-name" onSubmit={(event) => { event.preventDefault(); void rename(); }}>
+            <label>图库名称<input ref={nameInput} aria-label="图库名称" maxLength={200} value={name} disabled={busy}
+              onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
+              onChange={(event) => setName(event.target.value)} /></label>
+            <small className="muted">仅修改图库中的显示名称。{work.pageCount > 1 && "这件作品的所有页共用此名称。"}</small>
+            <div className="work-information-actions"><Button size="small" type="submit" variant="primary" busy={busy} disabled={!name.trim()}>保存名称</Button>
+              <Button size="small" disabled={busy} onClick={() => setEditingName(false)}>取消</Button></div>
+          </form>}
+          <p className="muted">{work.artistName ?? "本地作品"} · 第 {pageIndex + 1} 页 / {work.pageCount} 页</p>
+          {notice && <p role="status">{notice}</p>}
+        </div>
         <dl>
           <dt>来源</dt><dd>{work.sourcePlatform === "pixiv" ? `Pixiv · ${work.sourceWorkId}` : information?.provenance ? "本地生成" : "本地导入"}</dd>
           <dt>保存方式</dt><dd>{work.ownership === "managed" ? "应用保存的文件" : "外部文件，保留在原位置"}</dd>

@@ -616,6 +616,8 @@ function LazyWorkImage({ path }: { path: string }) {
 }
 
 export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpenInspiration, onError }: { work: WorkRecord; initialAssetId?: string; onClose: () => void; onGenerated: () => Promise<void> | void; onOpenInspiration: (workId: string, pageIndex: number) => void; onError: (error: unknown) => void }) {
+  const [displayTitle, setDisplayTitle] = useState(work.title);
+  useEffect(() => setDisplayTitle(work.title), [work.id, work.title]);
   const [pageIndex, setPageIndex] = useState(() => initialWorkPageIndex(work, initialAssetId));
   const [showRadar, setShowRadar] = useState(false);
   const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
@@ -653,7 +655,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
       className={`cinema-lightbox-theater ${hudVisible ? "hud-visible" : "hud-hidden"}`}
       role="dialog"
       aria-modal="true"
-      aria-label={work.title}
+      aria-label={displayTitle}
       data-display-profile={viewer.displayProfile}
       data-reduced-motion={viewer.reducedMotion}
       onMouseMove={resetHudTimer}
@@ -662,7 +664,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
     >
       <header className="cinema-hud-island">
         <div className="cinema-heading-group">
-          <strong>{work.title}</strong>
+          <strong>{displayTitle}</strong>
           <small>{work.artistName ?? "本地作品"} {work.assets.length > 1 ? `· 第 ${pageIndex + 1}/${work.assets.length} 页` : ""}</small>
         </div>
 
@@ -726,7 +728,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
       )}
       {showInformation && <WorkInformationDrawer workId={work.id} pageIndex={page.pageIndex} onClose={() => setShowInformation(false)}
         onInspector={() => { setShowInformation(false); setShowInspector(true); }} onRadar={() => { setShowInformation(false); setShowRadar(true); }}
-        onInspiration={() => { onClose(); onOpenInspiration(work.id, pageIndex); }} onChanged={onGenerated} />}
+        onInspiration={() => { onClose(); onOpenInspiration(work.id, pageIndex); }} onChanged={onGenerated} onRenamed={(renamed) => setDisplayTitle(renamed.title)} />}
 
       {showProvenance && provenance && (
         <aside className="cinema-radar-drawer generation-provenance-drawer" role="complementary" aria-label="生成来源与工作流摘要">
@@ -746,7 +748,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
 
       {showInspector && (
         <ElementInspectorDrawer
-          target={{ workId: work.id, title: work.title, pageIndex }}
+          target={{ workId: work.id, title: displayTitle, pageIndex }}
           onClose={() => setShowInspector(false)}
           onGenerated={onGenerated}
         />
@@ -768,7 +770,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
           ref={viewer.imageRef}
           key={page.id}
           src={workImageUrl(page.path)}
-          alt={work.title}
+          alt={displayTitle}
           className="cinema-image-entity"
           aria-busy={!imageLoaded}
           hidden={imageFailed}

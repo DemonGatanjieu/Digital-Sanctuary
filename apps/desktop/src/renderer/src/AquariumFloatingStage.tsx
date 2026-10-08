@@ -205,7 +205,7 @@ export function AquariumFloatingStage({
                   handleBubbleClick(artwork.id);
                 }
               }}
-              title={`${artwork.source?.title ?? artwork.fileName} (点击破茧进入影院大图)`}
+              title={`${artwork.displayName ?? artwork.source?.title ?? artwork.fileName} (点击破茧进入影院大图)`}
             >
               {/* Cover Artwork Glowing Orbit Halo */}
               {isCover && (
@@ -262,7 +262,7 @@ export function AquariumFloatingStage({
               <div className="bubble-info-capsule" onClick={(e) => e.stopPropagation()}>
                 <div className="capsule-pearl-indicator" />
                 <strong className="capsule-title">
-                  {artwork.source?.title ?? artwork.fileName}
+                  {artwork.displayName ?? artwork.source?.title ?? artwork.fileName}
                 </strong>
                 <small className="capsule-artist">
                   {artwork.source?.authorName ? `by ${artwork.source.authorName}` : "本地作品"}

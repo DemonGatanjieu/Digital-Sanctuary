@@ -221,7 +221,7 @@ export function CollectionDetailPage({
                       </div>
 
                       <div className="toc-title-cell">
-                        <strong className="toc-title">{artwork.source?.title ?? artwork.fileName}</strong>
+                        <strong className="toc-title">{artwork.displayName ?? artwork.source?.title ?? artwork.fileName}</strong>
                         <small className="toc-artist">
                           by {artwork.source?.authorName ?? "本地画师"}
                           {artwork.source?.pageIndex !== undefined ? ` · 第 ${artwork.source.pageIndex + 1} 页` : ""}
@@ -1260,6 +1260,7 @@ function PhotobookTocDrawer({
     if (!searchTerm.trim()) return true;
     const q = searchTerm.toLowerCase();
     return (
+      (it.displayName?.toLowerCase().includes(q) ?? false) ||
       (it.source?.title?.toLowerCase().includes(q) ?? false) ||
       (it.source?.authorName?.toLowerCase().includes(q) ?? false) ||
       it.fileName.toLowerCase().includes(q)
@@ -1337,7 +1338,7 @@ function PhotobookTocDrawer({
                   <span className="toc-card-badge">#{idxStr}</span>
                 </div>
                 <div className="toc-card-info">
-                  <h4 className="toc-card-title">{item.source?.title ?? item.fileName}</h4>
+                  <h4 className="toc-card-title">{item.displayName ?? item.source?.title ?? item.fileName}</h4>
                   <p className="toc-card-artist">
                     by {item.source?.authorName ?? "本地画师"}
                   </p>
@@ -1433,7 +1434,7 @@ function PhotoMountCard({
         {/* Polaroid Handwritten Caption Margin */}
         {mountStyle === "polaroid" && (
           <div className="polaroid-caption-bar">
-            <span className="polaroid-caption-title">{artwork.source?.title ?? artwork.fileName}</span>
+            <span className="polaroid-caption-title">{artwork.displayName ?? artwork.source?.title ?? artwork.fileName}</span>
             <span className="polaroid-caption-meta">
               № {pageNumStr} · {artwork.source?.authorName ?? "典藏原画"}
             </span>
