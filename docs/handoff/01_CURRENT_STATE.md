@@ -2,7 +2,7 @@
 
 - 最新工作流补充：2026-10-08（历史基础记录保留）
 - 工作区：`E:\PIxiv`
-- 当前基线：本文件所在提交；导入、作品信息、保存筛选、统一任务入口及安全复制迁移已完成，已重打 0.1.2 Windows x64 安装包。
+- 当前基线：本文件所在提交；导入、作品信息、保存筛选、统一任务入口及安全复制迁移已完成，另有轻量按钮反馈、画册结束事件修复和独立 EmbeddingGemma 2 离线运行环境。现有 0.1.2 Windows x64 安装包来自上一批，不含本批源码更新。
 - 平台：Windows
 - 桌面框架：Electron 43.3.0 + React 19 + TypeScript
 - Python：3.14.6
@@ -10,9 +10,11 @@
 
 ## 接手前必读
 
-本轮整合的入口和边界见 README“从哪里开始”及 `docs/plans/archive/2026-10-04-serpent-workflow-adoption-complete.md`。最新 434 项 TS、9 项 Python、完整类型与构建、57 组导航及实际安装包验收通过；上一批另有 17 组查看器窗口检查通过。导入和查看信息不自动启动模型，外部原文件保留；一般筛选保存在 SQLite 偏好，任务页使用轻量摘要，不全库读取。导入/下载/补图状态为会话级，批量识别沿用原有持久任务。
+本轮整合的入口和边界见 README“从哪里开始”及 `docs/plans/archive/2026-10-04-serpent-workflow-adoption-complete.md`。最新 439 项 TS、9 项 Python、完整类型与构建、58 组导航及 33 组画册真实窗口检查通过；本批按钮反馈与减少动画覆盖见 `docs/reviews/2026-10-08-interaction-motion.md`。导入和查看信息不自动启动模型，外部原文件保留；一般筛选保存在 SQLite 偏好，任务页使用轻量摘要，不全库读取。导入/下载/补图状态为会话级，批量识别沿用原有持久任务。
 
 0.1.2 安装包、哈希及验证记录见 `docs/releases/0.1.2.md`。旧版 C 盘原图可原位读取；存储迁移先备份、校验复制、事务改路径，保留原件，不再覆盖同名冲突或删除旧目录。给朋友及其智能体的步骤见 `docs/operations/UPGRADE_AND_STORAGE_MIGRATION.md`。未打包自然语言筛图、EmbeddingGemma2、多站点探索等讨论中的能力。
+
+EmbeddingGemma 2 已下载并校验固定官方快照，独立 CPU / CUDA 离线图文测试通过（RTX 4050 三张合成图编码 1,383ms，PyTorch 峰值分配显存约 940MiB）。基础 Python 3.12.14 在 `runtime-data/semantic-python`，环境为 `.venv-semantic` / `.venv-semantic-gpu`，不改现有 WD 环境；模型仍未接入搜索栏、模型中心或文件夹整理。重建与结果限制见 `services/semantic/README.md` 和 `docs/research/2026-10-08-embeddinggemma2-offline-runtime.md`。
 
 按顺序阅读：
 
@@ -82,7 +84,7 @@
 
 ## 当前限制与冻结项
 
-- `styles.css` 已收敛为有序清单，实际规则按设计令牌、应用壳、共享组件、画廊、探索、设置、分析、响应式和分类组合等 21 个模块维护；Vite 在内存中将它们合成单一虚拟 CSS 入口，禁止渲染代码直接逐个导入。分类组合的 IPC 与 SQLite store 也已从主进程/数据库总类抽离并有独立测试。
+- `styles.css` 已收敛为有序清单，实际规则按设计令牌、应用壳、共享组件、画廊、探索、设置、分析、响应式、分类组合和交互动效等职责维护；Vite 在内存中将它们合成单一虚拟 CSS 入口，禁止渲染代码直接逐个导入。分类组合的 IPC 与 SQLite store 也已从主进程/数据库总类抽离并有独立测试。
 - 主题后端已经打通：`ThemeManifest`、内置/用户主题发现、活跃主题偏好、文件夹/ZIP 导入、原子更新、删除回退、GitHub Contents API 商店、30 分钟持久缓存、限流熔断、IPC 与 Preload 类型均已完成。渲染层仍需实现 `<style id="ds-dynamic-theme">` 注入和主题管理/商店界面，接口见 `03_THEME_BACKEND_API.md`。
 - `apps/desktop/src/main/index.ts` 仍包含探索、下载和视觉生命周期协调；后续应继续按现有计划小步抽离，但分类组合等新功能不得再直接向组合根追加整套 CRUD。
 - 同步探索审查会暂停图片网络回调，未命中缓存时还存在“审查副本 + 页面重新下载”的双重流量和滚动等待。

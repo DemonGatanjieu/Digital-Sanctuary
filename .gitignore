@@ -3,6 +3,8 @@ node_modules/
 .npm/
 .venv/
 .venv-gpu/
+.venv-semantic/
+.venv-semantic-gpu/
 __pycache__/
 *.py[cod]
 .pytest_cache/

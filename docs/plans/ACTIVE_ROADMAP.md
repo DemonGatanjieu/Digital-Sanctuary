@@ -1,10 +1,18 @@
 # 现行实施路线：日常图库、创作闭环与模型能力
 
 - 状态：唯一现行路线索引
-- 更新日期：2026-10-04
+- 更新日期：2026-10-08
 - 已完成产品化路线：`archive/2026-08-14-productization-roadmap-p0-p11-complete.md`
 
 ## 当前施工任务
+
+### 已完成：点击反馈与联网模型准备
+
+按用户说明增加短促按钮按压/回弹，复用现有控件，不扩大导航或引入动画库；验证省电、系统/应用减少动画、弹层和画册翻页。模型按先前确定的官方 EmbeddingGemma 2 固定快照准备，单独建立 CPU / CUDA 环境并进行离线图文探针，不替换 WD，也不在当前应用暴露尚未接入的搜索能力。运行说明见 [`services/semantic`](../../services/semantic/README.md)，动效验收见 [`本轮记录`](../reviews/2026-10-08-interaction-motion.md)。
+
+完整门禁 439 项 TS / 9 项 Python、类型与生产构建、58 组导航及 33 组画册检查通过。模型全部文件完成校验，独立 CPU / CUDA 离线中文图文测试通过，GPU 速度与显存限制见 [`运行记录`](../research/2026-10-08-embeddinggemma2-offline-runtime.md)。既有 0.1.2 安装包未重打。
+
+后续用户已讨论并同意的工作流顺序是：文件夹先分析后入库、结果选择入库/复制导出、自然语言找图，再扩展通用网站探索。相关能力仍需各批完成实现、完整门禁和提交；模型下载完成不等于这条工作流已完成。
 
 ### 已完成：日常素材工作流整合
 
@@ -105,13 +113,13 @@
 5. 点击“这张不该隐藏”，核对具体页永久放行、阈值变化提示、撤销和重启后的持久性；
 6. 重建 NSIS 安装包并执行 `smoke:installer`。
 
-## 排队但未授权施工
+## 后续能力实施准备
 
-### T2：本地 CLIP / 向量语义搜索
+### T2：本地图文向量语义搜索
 
 - 提案：[`TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md`](./TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md)
-- 状态：架构提案；尚未形成经过评审的实施规划，不能直接开工。
-- 开工前必须补齐：模型许可与体积、embedding 版本和失效策略、向量索引基准、GPU/CPU 资源预算、隐私边界和迁移方案。
+- 状态：旧 CLIP 架构提案保留作候选参考；用户本轮已授权先准备官方 EmbeddingGemma 2 并验证本机 CPU / GPU 图文推理。应用向量索引、搜索栏与自然语言文件夹整理尚未实现。
+- 接入前补齐：实际二次元样本效果、embedding/预处理版本和失效策略、向量索引基准、资源排队/释放、隐私边界和迁移方案；使用本轮固定快照和已验证运行库，不沿用旧草案中“外部 LLM 必须翻译中文”的假设。
 
 ## 已完成基线
 
@@ -121,7 +129,7 @@
 - 排版系统与自定义字体：已完成并归档为 [`archive/2026-08-15-typography-system-and-custom-fonts-complete.md`](./archive/2026-08-15-typography-system-and-custom-fonts-complete.md)；验收报告在 `docs/reviews/typography/`。
 - 画册 3D 翻页、装裱、双页对开与闪烁根治：已完成并归档；技术分析见 [`archive/2026-08-15-photobook-flicker-technical-analysis.md`](./archive/2026-08-15-photobook-flicker-technical-analysis.md)。
 - 全产品视觉审计 Phase 1～6：已完成，报告保存在 `docs/reviews/visual-audit/2026-08-15/`；
-- 语义搜索仅完成任务拆分和 ADR，不等于功能已经实现。
+- 语义搜索已有任务拆分、ADR 和本轮独立模型运行准备，不等于应用功能已经实现。
 - 个人标签偏好与 Prompt Bridge P1～P4：已完成并归档；区域遮罩的“未过门、不实现”是本次评审结论。
 - 元素透视前端精修：已完成并归档为 [`archive/2026-08-24-element-inspector-frontend-polish-complete.md`](./archive/2026-08-24-element-inspector-frontend-polish-complete.md)；验收证据在 `docs/reviews/element-inspector-polish/2026-08-24/`。
 
