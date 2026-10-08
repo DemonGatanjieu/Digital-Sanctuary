@@ -89,13 +89,20 @@ export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector,
           {notice && <p role="status">{notice}</p>}
         </div>
         <dl>
-          <dt>来源</dt><dd>{work.sourcePlatform === "pixiv" ? `Pixiv · ${work.sourceWorkId}` : information?.provenance ? "本地生成" : "本地导入"}</dd>
+          <dt>来源</dt><dd>{work.sourcePlatform === "pixiv" ? `Pixiv · ${work.sourceWorkId}` : information?.webSource ? "网页收图" : information?.provenance ? "本地生成" : "本地导入"}</dd>
           <dt>保存方式</dt><dd>{work.ownership === "managed" ? "应用保存的文件" : "外部文件，保留在原位置"}</dd>
           <dt>加入图库</dt><dd>{new Date(work.savedAt).toLocaleDateString("zh-CN")}</dd>
           <dt>当前文件</dt><dd>{asset?.path.split(/[\\/]/).at(-1) ?? "未记录"}</dd>
           <dt>尺寸与大小</dt><dd>{asset?.width && asset.height ? `${asset.width} × ${asset.height}` : "尺寸待读取"} · {formatInformationBytes(asset?.byteLength ?? null)}</dd>
           <dt>文件状态</dt><dd>{asset?.fileState === "available" ? "可读取" : asset?.fileState === "missing" ? "文件缺失" : "未记录"}</dd>
         </dl>
+        {information?.webSource && <details><summary>图片来源页面</summary><p>{information.webSource.title}</p><p className="muted">{information.webSource.pageUrl}</p><Button size="small" onClick={() => void navigator.clipboard.writeText(information.webSource!.pageUrl).then(() => setNotice("来源网址已复制")).catch(() => setError("复制失败，请手动复制来源网址"))}>复制来源网址</Button></details>}
+        {work.ownership === "external" && asset && <div><Button size="small" busy={busy} onClick={() => {
+          setBusy(true); setError("");
+          void window.sanctuary.relinkExternalImage(work.id, asset.id).then(async (updated) => {
+            if (updated) { setInformation((current) => current ? { ...current, work: updated } : null); setNotice("已更新图片位置"); await onChanged(); }
+          }).catch((cause) => setError(cause instanceof Error ? cause.message : "重新定位失败，请重试")).finally(() => setBusy(false));
+        }}>重新定位原文件…</Button><small className="muted">原文件移动到其他位置时使用，名称和相册会保留。{!asset.contentHash && "旧版未记录内容指纹，重新定位后会清除无法校验的分析记录。"}</small></div>}
         <section aria-label="取用图片"><h3>拿出去使用</h3>
           {asset&&<SingleImageActions target={{workId,assetId:asset.id}} disabled={busy} />}
           <ExportImagesButton targets={[{workId}]} label={`复制整件作品原图（${work.pageCount} 页）`} disabled={busy} />

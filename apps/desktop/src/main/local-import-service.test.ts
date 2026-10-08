@@ -14,7 +14,7 @@ function fixture() {
   const database = new LibraryDatabase(":memory:");
   cleanups.push(() => { database.close(); rmSync(directory, { recursive: true, force: true }); });
   const image = (name: string, content: Buffer | string = png) => { const path = join(directory, name); writeFileSync(path, content); return path; };
-  return { database, image, service: new LocalImportService(database) };
+  return { database, image, directory, service: new LocalImportService(database) };
 }
 async function finish(service: LocalImportService, batch: LocalImportBatch) {
   for (let attempt = 0; attempt < 200; attempt += 1) {
@@ -25,6 +25,26 @@ async function finish(service: LocalImportService, batch: LocalImportBatch) {
   throw new Error("import did not finish");
 }
 describe("native-picker local import", () => {
+  it("creates a managed copy without promoting an existing external reference, and reuses only managed copies", async () => {
+    const {image,database,directory}=fixture(),path=image("original.png");
+    const external=database.importArtwork(path);
+    const service=new LocalImportService(database,undefined,()=>join(directory,"managed"));
+    const album=database.createCollection("副本");
+    const result=await finish(service,service.start(1,service.choose(1,[path])!.id,{collectionId:album.id,duplicatePolicy:"reuse",storageMode:"copy"}));
+    expect(result.items[0]!.status).toBe("imported");expect(result.items[0]!.artworkId).not.toBe(external.id);
+    const managed=database.listWorks().find(work=>work.ownership==="managed")!;
+    expect(managed.collectionIds).toEqual([album.id]);expect(managed.assets[0]!.path).not.toBe(path);expect(readFileSync(managed.assets[0]!.path)).toEqual(png);
+    expect(database.getWork(`local:${external.id}`)!.ownership).toBe("external");
+    const again=await finish(service,service.start(1,service.choose(1,[path])!.id,{collectionId:null,duplicatePolicy:"reuse",storageMode:"copy"}));
+    expect(again.items[0]!.artworkId).toBe(result.items[0]!.artworkId);expect(database.listWorks()).toHaveLength(2);
+    database.importArtwork(managed.assets[0]!.path);expect(database.getWork(managed.id)!.ownership).toBe("managed");
+  });
+  it("rolls back a copied file when the album disappears during copying", async () => {
+    const {image,database,directory}=fixture(),path=image("original.png"),album=database.createCollection("删除相册");let calls=0;
+    const service=new LocalImportService(database,async file=>{const hash=await fingerprintImage(file);if(++calls===2)database.deleteCollection(album.id);return hash;},()=>join(directory,"managed"));
+    const result=await finish(service,service.start(1,service.choose(1,[path])!.id,{collectionId:album.id,duplicatePolicy:"reuse",storageMode:"copy"}));
+    expect(result.items[0]!.status).toBe("failed");expect(database.listWorks()).toHaveLength(0);expect(readFileSync(path)).toEqual(png);
+  });
   it("archives new images, reuses exact content, and leaves external files unchanged", async () => {
     const { image, database, service } = fixture();
     const first = image("first.png"); const second = image("second.png");

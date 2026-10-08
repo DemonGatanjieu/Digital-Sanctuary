@@ -49,7 +49,8 @@ export function AppSidebar({
   onOpenStorageDirectory?: () => void | Promise<unknown>;
 }) {
   const mainView = mainViewFor(activeView);
-  const protectionBypassed = exploreState.protectionStatus === "bypassed";
+  const web = exploreState.browserMode === "web";
+  const protectionBypassed = !web && exploreState.protectionStatus === "bypassed";
   const protectionReady = Boolean(status?.visionReady && status.modelBacked && !protectionBypassed);
   return (
     <aside className="sidebar">
@@ -98,7 +99,7 @@ export function AppSidebar({
         ))}
       </nav>
 
-      {activeView === "explore" && (
+      {activeView === "explore" && !web && (
         <section className="explore-sidebar-actions">
           <p className="sidebar-section-label">保存到本地</p>
           <button
@@ -173,8 +174,8 @@ export function AppSidebar({
       <button type="button" className="engine-card" onClick={() => protectionBypassed ? onViewChange("explore") : onOpenSettings("protection")} title={protectionBypassed ? "进入探索恢复保护" : "查看探索保护设置"}>
         <span className={`status-dot ${protectionReady ? "online" : ""}`} />
         <div>
-          <strong>{protectionBypassed ? "本次无保护浏览" : protectionReady ? "探索保护已就绪" : status?.visionState === "starting" || !status ? "探索保护准备中" : "探索保护需检查"}</strong>
-          <small>{protectionBypassed ? "点击进入探索恢复保护" : "管理过滤规则与个人偏好"}</small>
+          <strong>{web ? "Pixiv 浏览保护" : protectionBypassed ? "本次无保护浏览" : protectionReady ? "探索保护已就绪" : status?.visionState === "starting" || !status ? "探索保护准备中" : "探索保护需检查"}</strong>
+          <small>{web ? "当前网站尚未适配元素拦截" : protectionBypassed ? "点击进入探索恢复保护" : "管理过滤规则与个人偏好"}</small>
         </div>
       </button>
     </aside>

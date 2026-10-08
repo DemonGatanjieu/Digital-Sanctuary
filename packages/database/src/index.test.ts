@@ -970,6 +970,8 @@ describe("LibraryDatabase", () => {
       const art1 = database.importArtwork(`${oldDir}\\1001\\1001_p0.jpg`);
       const art2 = database.importArtwork(`${oldDir}\\1002\\1002_p0.png`);
       const artOther = database.importArtwork("D:\\Other\\2001_p0.jpg");
+      database.saveArtworkSource(art1.id, { platform: "pixiv", workId: "1001", pageIndex: 0, authorId: "1", authorName: "Artist", title: "First" });
+      database.saveArtworkSource(art2.id, { platform: "pixiv", workId: "1002", pageIndex: 0, authorId: "1", authorName: "Artist", title: "Second" });
 
       database.importArtist({
         id: "artist-1",

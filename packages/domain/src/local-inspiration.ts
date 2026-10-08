@@ -39,6 +39,7 @@ export interface InspirationMessage {
 }
 
 export interface InspirationReplyProvenance {
+  sources?: Array<{ workId: string; title: string; artistName: string | null; pageIndex: number }>;
   modelId: string;
   modelVersion: string;
   evaluatorVersion: string;
@@ -59,6 +60,7 @@ export interface InspirationExportResult {
 }
 
 export interface InspirationConversation {
+  sources?: InspirationSourceWork[];
   id: string;
   title: string;
   presetId: InspirationPresetId;
@@ -71,6 +73,7 @@ export interface InspirationConversation {
 }
 
 export interface InspirationSendRequest {
+  sources?: Array<{ workId: string; pageIndex: number }>;
   conversationId?: string;
   requestId: string;
   presetId: InspirationPresetId;
@@ -89,6 +92,7 @@ export interface InspirationRegenerateRequest {
 }
 
 export interface InspirationSourceUpdateRequest {
+  sources?: Array<{ workId: string; pageIndex: number }>;
   conversationId: string;
   sourceWorkId: string | null;
   sourcePageIndex?: number;

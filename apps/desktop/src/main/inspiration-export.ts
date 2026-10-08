@@ -70,8 +70,9 @@ export function inspirationMarkdown(conversation: InspirationConversation, messa
   if (generating) lines.push(
     "> 本轮仍在生成。本文件只包含已经保存的消息，不包含未完成回答；已保存的上一版回答会保留。", ""
   );
-  if (conversation.source) {
-    lines.push("## 当前参考图", "", ...sourceLines(conversation.source), "",
+  const sources = conversation.sources ?? (conversation.source ? [conversation.source] : []);
+  if (sources.length) {
+    lines.push("## 当前参考图", "", ...sources.flatMap((source,index) => [`### 图片 ${index + 1}`, ...sourceLines(source)]), "",
       "参考图身份仅用于追溯，本文件不嵌入原图或本地文件路径。", "");
   }
   lines.push("## 当前对话设置", "",
@@ -101,7 +102,7 @@ function provenanceLines(provenance: InspirationReplyProvenance | undefined): st
     `- 回答气质 / 篇幅：${CREATIVITY_LABELS[provenance.settings.creativity]} / ${LENGTH_LABELS[provenance.settings.responseLength]}`,
     `- 生成参数：temperature=${parameters.temperature}，top_p=${parameters.topP}，top_k=${parameters.topK}，max_tokens=${parameters.maxTokens}`,
     `- 本轮耗时：${(provenance.durationMs / 1000).toFixed(1)} 秒（含准备与等待）`,
-    ...(provenance.source ? sourceLines(provenance.source) : ["- 本轮参考图：无"])
+    ...(provenance.sources?.length ? provenance.sources.flatMap((source,index) => [`- 图片 ${index + 1}`, ...sourceLines(source)]) : provenance.source ? sourceLines(provenance.source) : ["- 本轮参考图：无"])
   ];
 }
 

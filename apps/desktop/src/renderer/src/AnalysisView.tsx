@@ -8,6 +8,7 @@ import type {
   TriageQueryResultItem,
   WorkDeletionPreview,
   ExploreTriageResult,
+  ImageTarget,
   LocalImportBatch
 } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
@@ -79,6 +80,7 @@ export function AnalysisView({
   initialJobId,
   onJobOpened,
   onImportPrepared,
+  onDiscuss,
   initialWorkbenchSource,
   onWorkbenchOpened
 }: {
@@ -93,7 +95,8 @@ export function AnalysisView({
   onRulesChanged?: () => Promise<void>;
   initialJobId?: string | null;
   onJobOpened?: () => void;
-  onImportPrepared: (batch: LocalImportBatch) => void;
+  onImportPrepared: (batch: LocalImportBatch, discuss?: boolean) => void;
+  onDiscuss?: (targets: ImageTarget[]) => Promise<void>;
   initialWorkbenchSource?: "library"|"folder"|null;
   onWorkbenchOpened?: ()=>void;
 }) {
@@ -401,7 +404,7 @@ export function AnalysisView({
     {source==="library"&&<SegmentedControl label="整理方式" value={tab} options={[
       {value: "triage", label: "按探索规则排查"}, {value: "features", label: "按特征查找"}, {value: "description", label: "按画面描述"}, {value: "suggestions", label: "推荐相册分类"}
     ]} onChange={(value) => { if (!busy && !deletingWorks) setTab(value as StudioTab); }} />}</div>
-    {source==="folder"||tab==="description"?<div>{source==="library"&&<div className="workbench-scope">{scopeControls}</div>}<ImageWorkbench key={source} source={source} scope={scope} collections={collections} onChanged={onApplied} onImportPrepared={onImportPrepared} onOpenProtection={onOpenProtection}/></div>:<>
+    {source==="folder"||tab==="description"?<div>{source==="library"&&<div className="workbench-scope">{scopeControls}</div>}<ImageWorkbench key={source} source={source} scope={scope} collections={collections} onChanged={onApplied} onImportPrepared={onImportPrepared} onDiscuss={onDiscuss} onOpenProtection={onOpenProtection}/></div>:<>
     <div className="studio-layout">
       <section className="analysis-scope-card studio-control-deck">
         {tab === "suggestions" && <h2>选择要整理的范围</h2>}

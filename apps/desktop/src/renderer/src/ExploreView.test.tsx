@@ -4,6 +4,10 @@ import { ExploreView, initialExploreState } from "./ExploreView.js";
 import { ExploreProtectionPanel } from "./ExploreProtectionPanel";
 
 describe("Explore protection states", () => {
+  it("keeps an address/search field available and describes generic sites as unprotected", () => {
+    const markup=renderToStaticMarkup(<ExploreView state={{...initialExploreState,browserMode:"web",protectionStatus:"bypassed",url:"https://example.org/",title:"图片网站"}} error="" onStateChange={()=>{}} onError={()=>{}} />);
+    expect(markup).toContain("网址或图片搜索");expect(markup).toContain("此站未适配元素拦截");expect(markup).toContain("图片上右键");expect(markup).not.toContain("恢复保护");expect(markup).not.toContain("邮箱登录");
+  });
   it("presents a single model failure gate instead of calling every image blocked", () => {
     const markup = renderToStaticMarkup(
       <ExploreView

@@ -135,3 +135,10 @@
   .inspiration-composer-actions { gap: 8px; }
   .inspiration-composer-actions small { font-size: 10px; }
 }
+
+.inspiration-reference-strip { display: flex; gap: 8px; max-height: 142px; overflow-x: auto; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 5px; }
+.inspiration-reference-strip:empty { display: none; }
+.inspiration-reference-strip .inspiration-source { min-width: 210px; flex: 1 0 210px; gap: 8px; padding: 8px; }
+.inspiration-reference-strip .inspiration-source img { width: 44px; height: 44px; }
+.inspiration-reference-strip .inspiration-source-actions { flex-direction: column; gap: 3px; }
+.inspiration-reference-strip .inspiration-source-actions button { padding: 4px 8px; }

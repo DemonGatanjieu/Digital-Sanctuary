@@ -91,6 +91,8 @@ export interface ExploreBounds {
 }
 
 export interface ExploreState {
+  browserMode?: "pixiv" | "web";
+  notice?: string;
   url: string;
   title: string;
   loading: boolean;
@@ -162,6 +164,9 @@ export interface SanctuaryApi {
   getWork(workId: string): Promise<WorkRecord | null>;
   getWorkInformation(workId: string, pageIndex: number): Promise<WorkInformation | null>;
   renameWork(workId: string, name: string): Promise<WorkRecord>;
+  relinkExternalImage(workId: string, assetId: string): Promise<WorkRecord | null>;
+  prepareInspirationTargets(targets: ImageTarget[]): Promise<Array<{workId:string;pageIndex:number}>>;
+  importInspirationSources(batchId: string): Promise<Array<{workId:string;pageIndex:number}>>;
   exportImages(targets: ImageTarget[]): Promise<ImageExportBatch | null>;
   getImageExport(id: string): Promise<ImageExportBatch>;
   currentImageExport(): Promise<ImageExportBatch | null>;
@@ -288,6 +293,9 @@ export interface SanctuaryApi {
   hideExplore(): Promise<void>;
   focusExplore(): Promise<void>;
   exploreCommand(command: ExploreCommand): Promise<ExploreState>;
+  navigateExplore(input: string): Promise<ExploreState>;
+  listExploreSites(): Promise<Array<{ url: string; title: string }>>;
+  saveExploreSite(remove?: string): Promise<Array<{ url: string; title: string }>>;
   openPixivArtist(artistId: string): Promise<ExploreState>;
   getExploreState(): Promise<ExploreState>;
   downloadCurrentArtwork(): Promise<ExploreDownloadResult>;
@@ -320,6 +328,9 @@ const api: SanctuaryApi = {
   getWorkInformation: (workId, pageIndex) =>
     ipcRenderer.invoke("library:work-information", workId, pageIndex) as Promise<WorkInformation | null>,
   renameWork: (workId, name) => ipcRenderer.invoke("library:rename-work", workId, name) as Promise<WorkRecord>,
+  relinkExternalImage: (workId, assetId) => ipcRenderer.invoke("library:relink-external", workId, assetId) as Promise<WorkRecord | null>,
+  prepareInspirationTargets: (targets) => ipcRenderer.invoke("inspiration:prepare-targets", targets) as Promise<Array<{workId:string;pageIndex:number}>>,
+  importInspirationSources: (id) => ipcRenderer.invoke("inspiration:import-sources", id) as Promise<Array<{workId:string;pageIndex:number}>>,
   exportImages: (targets) => ipcRenderer.invoke("images:export", targets),
   getImageExport: (id) => ipcRenderer.invoke("images:export-get", id),
   currentImageExport: () => ipcRenderer.invoke("images:export-current"),
@@ -563,6 +574,9 @@ const api: SanctuaryApi = {
   openPixivArtist: (artistId) =>
     ipcRenderer.invoke("explore:open-artist", artistId) as Promise<ExploreState>,
   getExploreState: () => ipcRenderer.invoke("explore:state") as Promise<ExploreState>,
+  navigateExplore: (input) => ipcRenderer.invoke("explore:navigate", input) as Promise<ExploreState>,
+  listExploreSites: () => ipcRenderer.invoke("explore:sites") as Promise<Array<{url:string;title:string}>>,
+  saveExploreSite: (remove) => ipcRenderer.invoke("explore:save-site", remove) as Promise<Array<{url:string;title:string}>>,
   downloadCurrentArtwork: () =>
     ipcRenderer.invoke("explore:download-current") as Promise<ExploreDownloadResult>,
   previewBookmarkDownload: () =>

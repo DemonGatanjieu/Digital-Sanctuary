@@ -83,6 +83,12 @@ export function ExploreView({
   focusRestoredRef.current = onFocusRestored;
   const [passwordSetupOpened, setPasswordSetupOpened] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [address, setAddress] = useState(state.url);
+  const [sites, setSites] = useState<Array<{url:string;title:string}>>([]);
+  const addressComposing = useRef(false);
+  const web = state.browserMode === "web";
+  useEffect(() => { setAddress(state.url); }, [state.url]);
+  useEffect(() => { void window.sanctuary.listExploreSites?.().then(setSites).catch(onError); }, [onError]);
   const protectedBrowsingReady = state.protectionStatus === "ready";
   const contentAvailable = protectedBrowsingReady || state.protectionStatus === "bypassed";
 
@@ -192,22 +198,28 @@ export function ExploreView({
     }
   }
 
+  async function navigate(value: string) {
+    try { onStateChange(await window.sanctuary.navigateExplore(value)); } catch (cause) { onError(cause); }
+  }
+  async function saveSite(remove?: string) {
+    try { setSites(await window.sanctuary.saveExploreSite(remove)); } catch (cause) { onError(cause); }
+  }
+
   return (
     <section className="explore-page">
       <div className="browser-toolbar">
         <button title="后退" disabled={!contentAvailable || !state.canGoBack} onClick={() => void runCommand("back")}>←</button>
         <button title="前进" disabled={!contentAvailable || !state.canGoForward} onClick={() => void runCommand("forward")}>→</button>
         <button title="刷新" disabled={!contentAvailable} onClick={() => void runCommand("reload")}>↻</button>
-        <button title="Pixiv 首页" disabled={!contentAvailable} onClick={() => void runCommand("home")}>⌂</button>
-        <div className="address-bar" title={state.url}>
-          <span>{state.loading ? "连接中" : "HTTPS"}</span>
-          <strong>{state.title || state.url}</strong>
-          <small>{state.url}</small>
-        </div>
-        <button className="explore-account-trigger" type="button" aria-expanded={accountOpen} onClick={() => setAccountOpen(!accountOpen)}>账号</button>
-        <div className={`shield-status protection-${state.protectionStatus}`} title="本地模型状态与探索保护模式">
+        <button title="Pixiv 首页" onClick={() => void navigate("https://www.pixiv.net/")}>⌂</button>
+        <form className="address-bar explore-address-form" onSubmit={event => { event.preventDefault(); if (!addressComposing.current) void navigate(address); }}>
+          <input aria-label="网址或图片搜索" value={address} placeholder="输入网址或关键词找图" onChange={event => setAddress(event.target.value)} onCompositionStart={() => { addressComposing.current = true; }} onCompositionEnd={() => { addressComposing.current = false; }} />
+          <button type="submit" aria-label="前往网址或搜索">前往</button>
+        </form>
+        {!web && <button className="explore-account-trigger" type="button" aria-expanded={accountOpen} onClick={() => setAccountOpen(!accountOpen)}>账号</button>}
+        <div className={`shield-status protection-${web ? "web" : state.protectionStatus}`} title="本地模型状态与探索保护模式">
           <span className={`status-dot ${protectedBrowsingReady ? "online" : ""}`} />
-          {state.protectionStatus === "bypassed" ? (
+          {web ? <span>此站未适配元素拦截</span> : state.protectionStatus === "bypassed" ? (
             <><strong>本次无保护浏览</strong><button onClick={() => void runCommand("resume-protection")}>恢复保护</button></>
           ) : state.protectionStatus === "starting" ? (
             <span>模型启动中</span>
@@ -219,13 +231,20 @@ export function ExploreView({
             </>
           )}
         </div>
-        <button className="explore-protection-trigger" type="button" aria-expanded={protectionOpen}
-          onClick={protectionOpen ? onProtectionClose : onProtectionOpen}>浏览保护</button>
+        {!web && <button className="explore-protection-trigger" type="button" aria-expanded={protectionOpen}
+          onClick={protectionOpen ? onProtectionClose : onProtectionOpen}>浏览保护</button>}
         <button className="maximize-button" title={state.maximized ? "还原窗口" : "最大化窗口"} onClick={() => void runCommand("maximize")}>
           {state.maximized ? "❐" : "□"}
         </button>
       </div>
-      {accountOpen && <div className="explore-account-actions" aria-label="登录与账号">
+      <nav className="explore-site-shortcuts" aria-label="网站快捷入口">
+        <button onClick={() => void navigate("https://www.pixiv.net/")}>Pixiv</button>
+        {sites.map(site => <span key={site.url}><button title={site.url} onClick={() => void navigate(site.url)}>{site.title}</button><button aria-label={`移除网站 ${site.title}`} onClick={() => void saveSite(site.url)}>×</button></span>)}
+        <button onClick={() => void saveSite()}>＋ 保存当前网站</button>
+        <small>{web ? "图片上右键 → 加入图库" : "支持输入其他图片网站的网址"}</small>
+      </nav>
+      {state.notice && <AppNotice tone="success">{state.notice}</AppNotice>}
+      {accountOpen && !web && <div className="explore-account-actions" aria-label="登录与账号">
         <button className="login-button" disabled={!contentAvailable} onClick={() => void runCommand("login")}>邮箱登录</button>
         <button className="account-setup-button" onClick={() => void openPasswordSetup()}>浏览器设置密码</button>
         <span>使用 Pixiv 邮箱登录；第三方账号可先在浏览器设置密码。</span>
@@ -260,8 +279,8 @@ export function ExploreView({
         ) : (
           <div className="explore-placeholder">
             <span>◇</span>
-            <strong>{state.protectionStatus === "bypassed" ? "正在建立 Pixiv 会话" : "正在建立受保护的 Pixiv 会话"}</strong>
-            <small>{state.protectionStatus === "bypassed" ? "当前会话不会隐藏图片。" : "只对确实命中个人规则的作品进行隐藏。"}</small>
+            <strong>{web ? "正在打开图片网站" : state.protectionStatus === "bypassed" ? "正在建立 Pixiv 会话" : "正在建立受保护的 Pixiv 会话"}</strong>
+            <small>{web ? "可在图片上右键，选择加入图库。" : state.protectionStatus === "bypassed" ? "当前会话不会隐藏图片。" : "只对确实命中个人规则的作品进行隐藏。"}</small>
           </div>
         )}
       </div>

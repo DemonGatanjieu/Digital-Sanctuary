@@ -24,6 +24,12 @@ const conversation: InspirationConversation = {
 };
 
 describe("inspiration Markdown export", () => {
+  it("exports all actual per-reply references even after the current references change",()=>{
+    const first=conversation.source!,second={...first,workId:"work-2",title:"第二张历史图",pageIndex:0};
+    const reply={...conversation.messages[1]!,provenance:{...conversation.messages[1]!.provenance!,sources:[first,second]}};
+    const markdown=inspirationMarkdown({...conversation,source:null,sources:[],messages:[reply]});
+    expect(markdown).toContain("第二张历史图");expect(markdown).toContain("作品 ID：work-2");expect(markdown).toContain("- 图片 2");expect(markdown).not.toContain("sanctuary-image://");expect(markdown).not.toContain("private");
+  });
   it("keeps answer provenance and usable Markdown without local image paths", () => {
     const markdown = inspirationMarkdown(conversation);
     expect(markdown).toContain("## 人物动机\n\n寻找故乡。");

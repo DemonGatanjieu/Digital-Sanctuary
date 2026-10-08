@@ -22,7 +22,7 @@ interface LocalArtCriticServiceOptions {
   startupTimeoutMs?: number;
   inferenceTimeoutMs?: number;
   idleTimeoutMs?: number;
-  buildCommand?: (runtime: ResolvedRuntimeModel, port: number, apiKey: string) => {
+  buildCommand?: (runtime: ResolvedRuntimeModel, port: number, apiKey: string, contextSize: number) => {
     executable: string;
     args: string[];
     cwd: string;
@@ -39,6 +39,7 @@ export interface LocalInspirationChatInput {
   systemPrompt: string;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   image?: PreparedVisionImage;
+  images?: PreparedVisionImage[];
   modelId?: string;
   temperature?: number;
   topP?: number;
@@ -60,6 +61,7 @@ export class LocalArtCriticService {
   #apiKey = "";
   #idleTimer: ReturnType<typeof setTimeout> | null = null;
   #queue: Promise<unknown> = Promise.resolve();
+  #contextSize = 4096;
 
   constructor(options: LocalArtCriticServiceOptions) {
     this.#resolveActiveModel = options.resolveActiveModel;
@@ -218,6 +220,8 @@ export class LocalArtCriticService {
     input: LocalInspirationChatInput,
     signal?: AbortSignal
   ): Promise<{ identity: LocalArtCriticIdentity; content: string }> {
+    const images = input.images ?? (input.image ? [input.image] : []);
+    if (images.length > 4) throw new Error("一次最多讨论 4 张参考图");
     const task: Promise<{ identity: LocalArtCriticIdentity; content: string }> = this.#queue.then(async () => {
       if (signal?.aborted) throw new Error("已停止生成");
       const runtime = input.modelId && this.#resolveModel
@@ -226,7 +230,7 @@ export class LocalArtCriticService {
       if (!runtime || runtime.entry.capability !== "art_critic") {
         throw new Error("请先在模型中心安装并启用一个本地视觉对话模型");
       }
-      await this.#ensureStarted(runtime);
+      await this.#ensureStarted(runtime, images.length > 1 ? 8192 : 4096);
       this.#clearIdleTimer();
       const timeoutSignal = AbortSignal.timeout(Math.max(this.#inferenceTimeoutMs, 150_000));
       const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
@@ -235,19 +239,19 @@ export class LocalArtCriticService {
         { role: "system", content: input.systemPrompt },
         ...input.messages.map((message) => ({ role: message.role, content: message.content }))
       ];
-      if (input.image) {
+      if (images.length) {
         const lastUserIndex = messages.findLastIndex((message) => message.role === "user");
         if (lastUserIndex >= 0) {
-          const imageContent = {
+          const imageContent = images.map(image => ({
             type: "image_url",
-            image_url: { url: `data:${input.image.mimeType};base64,${input.image.buffer.toString("base64")}` }
-          };
+            image_url: { url: `data:${image.mimeType};base64,${image.buffer.toString("base64")}` }
+          }));
           const textContent = { type: "text", text: String(messages[lastUserIndex]!.content) };
           messages[lastUserIndex] = {
             role: "user",
             content: requestProfile.imageFirst
-              ? [imageContent, textContent]
-              : [textContent, imageContent]
+              ? [...imageContent, textContent]
+              : [textContent, ...imageContent]
           };
         }
       }
@@ -300,15 +304,16 @@ export class LocalArtCriticService {
     this.#runtime = null;
     this.#endpoint = "";
     this.#apiKey = "";
+    this.#contextSize = 4096;
     if (child && !child.killed) child.kill();
   }
 
-  async #ensureStarted(runtime: ResolvedRuntimeModel): Promise<void> {
-    if (this.#process && !this.#process.killed && this.#runtime?.entry.id === runtime.entry.id) return;
+  async #ensureStarted(runtime: ResolvedRuntimeModel, contextSize = 4096): Promise<void> {
+    if (this.#process && !this.#process.killed && this.#runtime?.entry.id === runtime.entry.id && this.#contextSize >= contextSize) return;
     this.close();
     const port = await reserveLoopbackPort();
     const apiKey = randomUUID();
-    const command = this.#buildCommand(runtime, port, apiKey);
+    const command = this.#buildCommand(runtime, port, apiKey, contextSize);
     if (!existsSync(command.executable)) throw new Error("本地评论模型运行时文件缺失");
     const child = spawn(command.executable, command.args, {
       cwd: command.cwd,
@@ -317,6 +322,7 @@ export class LocalArtCriticService {
     });
     this.#process = child;
     this.#runtime = runtime;
+    this.#contextSize = contextSize;
     this.#endpoint = `http://127.0.0.1:${port}`;
     this.#apiKey = apiKey;
     let recentLog = "";
@@ -356,7 +362,7 @@ export class LocalArtCriticService {
   }
 }
 
-function defaultCommand(runtime: ResolvedRuntimeModel, port: number, apiKey: string) {
+function defaultCommand(runtime: ResolvedRuntimeModel, port: number, apiKey: string, contextSize = 4096) {
   const directory = runtime.modelDirectory;
   const modelFile = runtime.entry.files.find((file) => file.fileName.endsWith(".gguf") && !/^mmproj/i.test(file.fileName));
   const projectionFile = runtime.entry.files.find((file) => /^mmproj.*\.gguf$/i.test(file.fileName));
@@ -370,7 +376,7 @@ function defaultCommand(runtime: ResolvedRuntimeModel, port: number, apiKey: str
       "--host", "127.0.0.1",
       "--port", String(port),
       "--api-key", apiKey,
-      "--ctx-size", "4096",
+      "--ctx-size", String(contextSize),
       "--parallel", "1",
       "--n-gpu-layers", "99",
       "--jinja",

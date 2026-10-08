@@ -123,6 +123,8 @@ import { normalizeWindowState, type PersistedWindowState } from "./window-state.
 import { AnalysisJobScheduler } from "./analysis-job-runner.js";
 import { registerAnalysisIpc } from "./analysis-ipc.js";
 import { registerSavedCollectionViewIpc } from "./saved-collection-view-ipc.js";
+import { WebExplore } from "./web-explore.js";
+import { exploreInputUrl, publicWebUrl } from "./web-explore-policy.js";
 import { registerLocalImportIpc } from "./local-import-ipc.js";
 import { ImageWorkbenchService } from "./image-workbench-service.js";
 import { ImageOutputService } from "./image-output-service.js";
@@ -185,6 +187,8 @@ let exploreRemoteReviewCacheHits = 0;
 let exploreRemoteReviewCacheMisses = 0;
 let exploreError = "";
 let exploreStateTimer: ReturnType<typeof setTimeout> | undefined;
+let webExplore: WebExplore | null = null;
+let exploreBrowserMode: "pixiv" | "web" = "pixiv";
 let exploreDownloadState: ExploreDownloadState = { ...IDLE_EXPLORE_DOWNLOAD_STATE };
 let activeExploreDownload: Promise<ExploreDownloadResult> | undefined;
 let activeStorageMigration = false;
@@ -224,6 +228,8 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const pixivDownloadNetworkGate = new AsyncTaskGate(PIXIV_DOWNLOAD_CONCURRENCY);
 
 interface ExploreState {
+  browserMode?: "pixiv" | "web";
+  notice?: string;
   url: string;
   title: string;
   loading: boolean;
@@ -674,7 +680,7 @@ function registerIpc(): void {
     getWindow: () => mainWindow
   });
   registerSavedCollectionViewIpc(ipcMain, database);
-  const localImporter = registerLocalImportIpc(ipcMain, database, dialog);
+  const localImporter = registerLocalImportIpc(ipcMain, database, dialog, () => join(pixivGalleryDirectory(), "Imports"));
   const semantic = new SemanticClient(app.isPackaged ? process.resourcesPath : resolve(moduleDirectory, "../../../.."));
   semanticVectors = new SemanticVectorStore(join(app.getPath("userData"), "semantic-index.db"));
   imageWorkbench = new ImageWorkbenchService(database, {
@@ -692,7 +698,33 @@ function registerIpc(): void {
     const selected = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
     return selected.canceled ? null : selected.filePaths[0] ?? null;
   });
-  registerWorkInformationIpc(ipcMain, database);
+  registerWorkInformationIpc(ipcMain, database, dialog, () => mainWindow ?? null);
+  ipcMain.handle("inspiration:prepare-targets", async (event, targets: unknown) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error("请从找图结果选择参考图");
+    if (!Array.isArray(targets) || !targets.length || targets.length > 4) throw new Error("请选择 1 至 4 张图片进行讨论");
+    const images = await imageWorkbench!.resolveImages(event.sender.id, targets);
+    return images.map(image => {
+      if (!("workId" in image.target)) throw new Error("文件夹图片请先导入，再开始讨论");
+      const work = database!.getWork(image.target.workId);
+      const asset = work?.assets.find(item => item.path === image.path);
+      if (!asset) throw new Error("参考图已经不可用，请重新选择");
+      return { workId: work!.id, pageIndex: asset.pageIndex };
+    });
+  });
+  ipcMain.handle("inspiration:import-sources", (event, id: unknown) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error("请从导入结果开始讨论");
+    const batch = localImporter.get(event.sender.id, id);
+    if (batch.phase === "ready" || batch.phase === "running" || batch.items.length > 4) throw new Error("请先完成 1 至 4 张图片的导入");
+    const sources = batch.items.filter(item => item.artworkId && ["imported", "existing", "duplicate"].includes(item.status)).map(item => {
+      const workId = database!.workIdForArtwork(item.artworkId!);
+      const work = workId ? database!.getWork(workId) : null;
+      const asset = work?.assets.find(asset => asset.legacyArtworkId === item.artworkId);
+      if (!asset) throw new Error("导入图片已不可用，请重新选择");
+      return { workId: work!.id, pageIndex: asset.pageIndex };
+    });
+    if (!sources.length) throw new Error("没有成功导入的参考图");
+    return [...new Map(sources.map(source => [`${source.workId}:${source.pageIndex}`, source])).values()];
+  });
   registerSavedWorkFilterIpc(ipcMain, database);
   ipcMain.handle("tasks:analysis", () => database?.listAnalysisTaskSummaries() ?? []);
   registerThemeIpc({
@@ -1115,19 +1147,47 @@ function registerIpc(): void {
     const parsedBounds = parseExploreBounds(bounds);
     if (!parsedBounds) return false;
     exploreBounds = nativeExploreBounds(parsedBounds, event.sender.getZoomFactor());
-    if (exploreView && exploreVisible) exploreView.setBounds(exploreBounds);
+    if (exploreVisible) activeExploreView()?.setBounds(exploreBounds);
     return true;
   });
   ipcMain.handle("explore:hide", () => {
     exploreVisible = false;
-    exploreView?.setVisible(false);
+    exploreView?.setVisible(false); webExplore?.view.setVisible(false);
   });
   ipcMain.handle("explore:focus", () => {
-    if (exploreVisible && exploreView && !exploreView.webContents.isDestroyed() && (exploreProtectionBypassed || vision?.available)) {
-      exploreView.webContents.focus();
+    const active = activeExploreView();
+    if (exploreVisible && active && !active.webContents.isDestroyed() && (exploreBrowserMode === "web" || exploreProtectionBypassed || vision?.available)) {
+      active.webContents.focus();
     }
   });
+  function requireExploreOwner(event: Electron.IpcMainInvokeEvent) {
+    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error("请从探索页面操作");
+  }
+  ipcMain.handle("explore:navigate", (event, value: unknown) => {
+    requireExploreOwner(event); openExploreUrl(exploreInputUrl(value)); return currentExploreState();
+  });
+  const sites = () => (database!.getPreference<Array<{url:string;title:string}>>("explore.sites.v1") ?? []).filter(item => {
+    try { return typeof item.title === "string" && publicWebUrl(item.url) === item.url; } catch { return false; }
+  }).slice(0,12);
+  ipcMain.handle("explore:sites", event => { requireExploreOwner(event); return sites(); });
+  ipcMain.handle("explore:save-site", (event, remove: unknown) => {
+    requireExploreOwner(event); const current = sites();
+    if (remove !== undefined && typeof remove !== "string") throw new Error("网站记录无效");
+    const url = remove === undefined ? publicWebUrl(currentExploreState().url) : "";
+    const next = typeof remove === "string" ? current.filter(item => item.url !== remove) : [...current.filter(item => item.url !== url), { url, title: (currentExploreState().title || new URL(url).hostname).slice(0,60) }];
+    if (next.length > 12) throw new Error("最多保存 12 个网站，请先移除一个");
+    database!.setPreference("explore.sites.v1", next); return next;
+  });
   ipcMain.handle("explore:command", async (_event, command: unknown) => {
+    if (exploreBrowserMode === "web" && ["home", "login"].includes(String(command))) openExploreUrl(command === "home" ? PIXIV_HOME_URL : PIXIV_LOGIN_URL);
+    if (exploreBrowserMode === "web" && ["back", "forward", "reload"].includes(String(command))) {
+      const c = webExplore!.view.webContents, h = c.navigationHistory;
+      if (command === "back" && h.canGoBack()) h.goBack();
+      if (command === "forward" && h.canGoForward()) h.goForward();
+      if (command === "reload") c.reload();
+      return currentExploreState();
+    }
+
     if (command === "retry-vision") {
       exploreProtectionBypassed = false;
       exploreView?.setVisible(false);
@@ -1191,6 +1251,7 @@ function registerIpc(): void {
     if (!vision?.available && !exploreProtectionBypassed) {
       throw new Error("本地保护模型尚未就绪，暂不能打开远程画师主页");
     }
+    exploreBrowserMode = "pixiv"; webExplore?.view.setVisible(false); syncExploreProtectionVisibility();
     const view = ensureExploreView();
     await view.webContents.loadURL(targetUrl);
     scheduleExploreState();
@@ -1841,7 +1902,29 @@ function canShowExploreContent(): boolean {
   return exploreProtectionBypassed || Boolean(vision?.available);
 }
 
+function activeExploreView(): WebContentsView | null { return exploreBrowserMode === "web" ? webExplore?.view ?? null : exploreView ?? null; }
+function openExploreUrl(url: string): void {
+  if (isAllowedPixivNavigation(url)) {
+    exploreBrowserMode = "pixiv"; webExplore?.view.setVisible(false);
+    // A pending Pixiv target is retained behind the protection gate.
+    ensureExploreView();
+    pendingPixivUrl = url;
+  } else {
+    exploreBrowserMode = "web"; exploreView?.setVisible(false); resetExploreReviewQueue();
+    if (!webExplore) webExplore = new WebExplore(mainWindow!, database!, () => join(pixivGalleryDirectory(), "Web"), scheduleExploreState, openExploreUrl, () => exploreBrowserMode === "web" && exploreVisible);
+    void webExplore.open(url);
+  }
+  syncExploreProtectionVisibility(); scheduleExploreState();
+}
+let pendingPixivUrl: string | null = null;
 function syncExploreProtectionVisibility(): void {
+  if (exploreBrowserMode === "web") {
+    exploreView?.setVisible(false);
+    if (webExplore && exploreBounds) webExplore.view.setBounds(exploreBounds);
+    webExplore?.view.setVisible(exploreVisible && Boolean(exploreBounds));
+    return;
+  }
+  webExplore?.view.setVisible(false);
   if (!exploreVisible || !canShowExploreContent()) {
     exploreView?.setVisible(false);
     return;
@@ -1851,7 +1934,7 @@ function syncExploreProtectionVisibility(): void {
   view.setBounds(exploreBounds);
   view.setVisible(true);
   sendExploreProtectionMode();
-  if (!view.webContents.getURL()) void view.webContents.loadURL(PIXIV_HOME_URL);
+  if (pendingPixivUrl || !view.webContents.getURL()) { const url = pendingPixivUrl ?? PIXIV_HOME_URL; pendingPixivUrl = null; void view.webContents.loadURL(url).catch(() => undefined); }
 }
 
 function sendExploreProtectionMode(): void {
@@ -2108,6 +2191,10 @@ function ensureExploreView(): WebContentsView {
 }
 
 function currentExploreState(): ExploreState {
+  if (exploreBrowserMode === "web" && webExplore) {
+    const c = webExplore.view.webContents;
+    return { browserMode: "web", notice: webExplore.notice, url: c.getURL() || webExplore.requestedUrl, title: c.getTitle() || "网站浏览", loading: c.isLoading(), canGoBack: c.navigationHistory.canGoBack(), canGoForward: c.navigationHistory.canGoForward(), blockedResources: 0, blockedAds: 0, approvedResources: 0, pendingResources: 0, queuedResources: 0, remoteReviewCacheHits: 0, remoteReviewCacheMisses: 0, error: webExplore.error, protectionStatus: "bypassed", protectionError: "", maximized: mainWindow?.isMaximized() ?? false, pageKind: "other", artworkId: "", bookmarkUserId: "", download: { ...exploreDownloadState } };
+  }
   const contents = exploreView?.webContents;
   const pageContext = parsePixivPageContext(contents?.getURL() ?? PIXIV_HOME_URL);
   const protectionStatus = exploreProtectionBypassed ? "bypassed" : (vision?.state ?? "failed");

@@ -136,6 +136,19 @@ describe("LocalArtCriticService", () => {
     }
   });
 
+  it("sends every reference image to the model in order rather than only describing filenames", async () => {
+    let sent: any;
+    const service = new LocalArtCriticService({ resolveActiveModel: async () => runtime, startupTimeoutMs: 5000, buildCommand: buildFixtureCommand,
+      fetchImpl: async (url,options) => { if(String(url).endsWith("/v1/chat/completions")) sent=JSON.parse(String(options?.body)); return fetch(url,options); } });
+    const images=["first","second"].map(name=>({buffer:Buffer.from(name),mimeType:"image/png" as const,width:1,height:1,byteLength:5,fingerprint:name,cleanup:()=>{}}));
+    try {
+      await service.chat({systemPrompt:"比较图片",messages:[{role:"user",content:"有哪些不同？"}],images});
+      const content=sent.messages.at(-1).content;
+      expect(content.filter((item:any)=>item.type==="image_url").map((item:any)=>item.image_url.url)).toEqual(images.map(image=>`data:image/png;base64,${image.buffer.toString("base64")}`));
+      expect(content[0]).toEqual({type:"text",text:"有哪些不同？"});
+    } finally { service.close(); }
+  });
+
   it("stops the runtime and returns a timeout instead of hanging forever", async () => {
     const fetchImpl: typeof fetch = async (input, init) => {
       if (!String(input).endsWith("/v1/chat/completions")) return fetch(input, init);

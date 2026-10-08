@@ -138,7 +138,9 @@ export function App() {
   const [analysisWorkIds, setAnalysisWorkIds] = useState<string[]>([]);
   const [analysisTaskId, setAnalysisTaskId] = useState<string | null>(null);
   const [inspectorTarget, setInspectorTarget] = useState<ElementInspectorTarget | null>(null);
-  const [inspirationLaunch, setInspirationLaunch] = useState<{ workId: string; pageIndex: number } | null>(null);
+  const [discussionImportId, setDiscussionImportId] = useState<string | null>(null);
+  const [discussionBusy, setDiscussionBusy] = useState(false);
+  const [inspirationLaunch, setInspirationLaunch] = useState<{ workId: string; pageIndex: number; sources?: Array<{workId:string;pageIndex:number}> } | null>(null);
   const showError = useCallback((caught: unknown) => {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
   }, []);
@@ -697,7 +699,12 @@ export function App() {
           <AnalysisView
             initialWorkbenchSource={workbenchSource}
             onWorkbenchOpened={()=>setWorkbenchSource(null)}
-            onImportPrepared={localImport.adopt}
+            onImportPrepared={(batch,discuss) => { localImport.adopt(batch); setDiscussionImportId(discuss ? batch.id : null); }}
+            onDiscuss={async targets => {
+              const sources = await window.sanctuary.prepareInspirationTargets(targets);
+              if (!sources[0]) throw new Error("请选择参考图");
+              setInspirationLaunch({...sources[0], sources}); setActiveView("inspiration");
+            }}
             initialJobId={analysisTaskId}
             onJobOpened={() => setAnalysisTaskId(null)}
             collections={collections}
@@ -788,7 +795,14 @@ export function App() {
         onOpenStorage={() => window.sanctuary.openStorageDirectory()} onRetryThumbnails={() => setThumbnailRevision((value) => value + 1)}
         onClose={() => { setTasksOpen(false); if (navigationState.current.activeView === "explore") nativeFocusPending.current = true; }} />}
       {localImport.open && localImport.batch && <ImportImagesDialog key={localImport.batch.id} batch={localImport.batch} collections={collections}
-        busy={localImport.commandBusy} error={localImport.error} onCommand={localImport.command} onClose={localImport.close} />}
+        busy={localImport.commandBusy || discussionBusy} error={localImport.error} onCommand={localImport.command} onClose={localImport.close}
+        onDiscuss={discussionImportId === localImport.batch.id ? () => {
+          if(discussionBusy)return;setDiscussionBusy(true);
+          void window.sanctuary.importInspirationSources(localImport.batch!.id).then(sources => {
+            if(!sources[0])throw new Error("没有成功导入的图片");
+            setInspirationLaunch({...sources[0],sources});setDiscussionImportId(null);localImport.close();setActiveView("inspiration");
+          }).catch(showError).finally(()=>setDiscussionBusy(false));
+        } : undefined} />}
       {inspectorTarget && (
         <ElementInspectorDrawer
           target={inspectorTarget}

@@ -8,7 +8,7 @@ import { ExportImagesButton, SingleImageActions } from "./ImageOutputActions";
 const ELEMENTS=[ ["单人","solo"],["多位女孩","multiple_girls"],["蓝发","blue_hair"],["金发","blonde_hair"],["眼镜","glasses"],
   ["猫耳","cat_ears"],["海边","beach"],["天空","sky"],["夜晚","night"],["血迹","blood"],["单色","monochrome"],["线稿","lineart"] ] as const;
 type Filter="matches"|"all"|"failed";
-export function ImageWorkbench({source,scope,collections,onChanged,onImportPrepared,onOpenProtection}:{source:WorkbenchSource;scope:AnalysisScope;collections:CollectionRecord[];onChanged:()=>Promise<void>;onImportPrepared:(batch:LocalImportBatch)=>void;onOpenProtection:()=>void}) {
+export function ImageWorkbench({source,scope,collections,onChanged,onImportPrepared,onOpenProtection,onDiscuss}:{source:WorkbenchSource;scope:AnalysisScope;collections:CollectionRecord[];onChanged:()=>Promise<void>;onImportPrepared:(batch:LocalImportBatch,discuss?:boolean)=>void;onDiscuss?:((targets:ImageTarget[])=>Promise<void>)|undefined;onOpenProtection:()=>void}) {
   const [session,setSession]=useState<WorkbenchSnapshot|null>(null),[items,setItems]=useState<WorkbenchItem[]>([]);
   const [mode,setMode]=useState<WorkbenchMode>(source==="library"?"description":"rules"),[text,setText]=useState("");
   const [elements,setElements]=useState<Record<string,"include"|"exclude">>({}),[customInclude,setCustomInclude]=useState(""),[customExclude,setCustomExclude]=useState("");
@@ -35,6 +35,17 @@ export function ImageWorkbench({source,scope,collections,onChanged,onImportPrepa
     }catch(e){if(active&&request===generation.current)setError(message(e));}};
     timer=window.setTimeout(()=>void poll(),100);return()=>{active=false;clearTimeout(timer);};
   },[session?.id,session?.phase,running,filter,busy]);
+  async function discuss() {
+    if (pending.current || !selected.size || selected.size > 4) return;
+    pending.current=true;setBusy(true);setError("");const request=++generation.current;
+    try {
+      if(source==="folder") {
+        const batch=await window.sanctuary.prepareWorkbenchImport(session!.id,[...selected.keys()]);
+        if(alive.current&&request===generation.current&&batch)onImportPrepared(batch,true);
+      } else await onDiscuss?.([...selected.values()]);
+    } catch(e) { if(alive.current&&request===generation.current)setError(message(e)); }
+    finally {pending.current=false;if(alive.current&&request===generation.current)setBusy(false);}
+  }
   async function command(action:"choose"|"start"|"cancel"|"import"|"more"|"filter",nextFilter=filter) {
     if(pending.current)return;pending.current=true;setBusy(true);setError("");const request=++generation.current;
     try {
@@ -123,7 +134,8 @@ export function ImageWorkbench({source,scope,collections,onChanged,onImportPrepa
       {session&&<section className="workbench-result-actions" aria-label="取用筛选结果"><ExportImagesButton targets={[...selected.values()]} disabled={running||busy}/>
         {source==="folder"&&<Button variant="primary" disabled={running||busy||!selected.size} onClick={()=>void command("import")}>导入所选图片…</Button>}
         {source==="library"&&<><select aria-label="找图结果相册" value={album} disabled={running||busy} onChange={e=>setAlbum(e.target.value)}><option value="">选择相册…</option>{collections.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select><Button disabled={running||busy||!album||!selected.size} onClick={()=>void assign()}>加入相册</Button></>}
-        <p>复制保留原图，同名自动另存；文件夹导入会先确认相册与重复处理。</p></section>}
+        {onDiscuss&&<Button disabled={running||busy||!selected.size||selected.size>4} onClick={()=>void discuss()}>{source==="folder"?"导入后讨论所选图片…":"聊聊所选图片"}</Button>}
+        <p>复制保留原图，同名自动另存；讨论最多选择 4 张图，文件夹图片先确认导入。</p></section>}
     </div>
   </section>;
 }

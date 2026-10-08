@@ -405,19 +405,24 @@ export class LibraryDatabase {
     return artwork;
   }
 
-  findLocalImportMatch(path: string, contentHash?: string): { artworkId: string; path: string } | null {
+  findLocalImportMatch(path: string, contentHash?: string, ownership?: "managed" | "external"): { artworkId: string; path: string } | null {
     const row = this.#database.prepare(
       `SELECT a.legacy_artwork_id AS artworkId, a.path FROM assets a
        JOIN works w ON w.id = a.work_id
        WHERE a.legacy_artwork_id IS NOT NULL AND w.deleted_at IS NULL
+         AND (? IS NULL OR w.ownership = ?)
          AND (a.path = ? COLLATE NOCASE OR (? IS NOT NULL AND a.content_hash = ? AND a.file_state = 'available'))
        ORDER BY CASE WHEN a.path = ? COLLATE NOCASE THEN 0 ELSE 1 END LIMIT 1`
-    ).get(path, contentHash ?? null, contentHash ?? null, path) as { artworkId: string; path: string } | undefined;
+    ).get(ownership ?? null, ownership ?? null, path, contentHash ?? null, contentHash ?? null, path) as { artworkId: string; path: string } | undefined;
     return row ?? null;
   }
 
+  workIdForArtwork(id: string): string | null {
+    return (this.#database.prepare("SELECT work_id FROM assets WHERE legacy_artwork_id = ?").get(id) as { work_id: string } | undefined)?.work_id ?? null;
+  }
+
   /** One indexed image and its album membership commit together; existing analysis survives reuse. */
-  commitLocalImport(path: string, contentHash: string, collectionId: string | null, reuseId?: string): string {
+  commitLocalImport(path: string, contentHash: string, collectionId: string | null, reuseId?: string, ownership?: "managed" | "external", webSource?: {pageUrl:string;imageUrl:string;title:string;savedAt:string}): string {
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       if (collectionId && !this.#database.prepare("SELECT id FROM collections WHERE id = ?").get(collectionId)) {
@@ -438,12 +443,42 @@ export class LibraryDatabase {
         this.#database.prepare("UPDATE works SET deleted_at = NULL WHERE id = ?").run(asset.work_id);
       }
       if (collectionId) this.addArtworkToCollection(id, collectionId);
+      if (ownership === "managed") this.#database.prepare("UPDATE works SET ownership = 'managed' WHERE id = ?").run(asset.work_id);
+      if (webSource && !reuseId) {
+        this.setPreference(`web-source:${asset.work_id}`, webSource);
+        const title = webSource.title.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0,200);
+        if (title) this.renameWork(asset.work_id, title);
+      }
       this.#database.exec("COMMIT");
       return id;
     } catch (error) {
       this.#database.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  /** Relinking keeps the asset identity, names, albums and analysis. Caller verifies content first. */
+  relinkExternalAsset(workId: string, assetId: string, path: string, hash: string): WorkRecord {
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      const work = this.getWork(workId);
+      const asset = work?.assets.find((item) => item.id === assetId);
+      if (!work || work.ownership !== "external" || !asset?.legacyArtworkId) throw new Error("只能重新定位外部图片");
+      const conflict = this.findLocalImportMatch(path);
+      if (conflict && conflict.artworkId !== asset.legacyArtworkId) throw new Error("这个文件已属于图库中的另一张图片，请选择原图片");
+      if (asset.contentHash && asset.contentHash !== hash) throw new Error("所选文件与原图片内容不同，请选择原图片");
+      if (!asset.contentHash) {
+        this.#database.prepare("UPDATE assets SET thumbnail_path = NULL WHERE id = ?").run(assetId);
+        this.#database.prepare("UPDATE artworks SET assessment_json = NULL, decision_json = NULL WHERE id = ?").run(asset.legacyArtworkId);
+        this.#database.prepare("DELETE FROM analysis_asset_results WHERE asset_id = ?").run(assetId);
+        this.#database.prepare("DELETE FROM vision_evaluation_results WHERE asset_id = ?").run(assetId);
+      }
+      this.#database.prepare("UPDATE artworks SET path = ?, file_name = ? WHERE id = ?").run(path, basename(path), asset.legacyArtworkId);
+      this.#database.prepare("UPDATE assets SET path = ?, content_hash = ?, byte_length = ?, extension = ?, file_state = 'available', updated_at = ? WHERE id = ?")
+        .run(path, hash, statSync(path).size, extname(path).slice(1).toLowerCase(), new Date().toISOString(), assetId);
+      this.#database.exec("COMMIT");
+      return this.getWork(workId)!;
+    } catch (error) { this.#database.exec("ROLLBACK"); throw error; }
   }
 
   saveAssessment(
@@ -1154,8 +1189,9 @@ export class LibraryDatabase {
       [resolve(oldDirectory), resolve(newDirectory)],
       [resolve(oldDirectory, "..", "avatars"), resolve(newDirectory, "..", "avatars")]
     ];
-    const rows = this.#database.prepare(`SELECT path FROM artworks UNION SELECT path FROM assets
-      UNION SELECT thumbnail_path AS path FROM assets WHERE thumbnail_path IS NOT NULL
+    const rows = this.#database.prepare(`SELECT aw.path FROM artworks aw JOIN assets a ON a.legacy_artwork_id = aw.id JOIN works w ON w.id = a.work_id WHERE w.ownership = 'managed'
+      UNION SELECT a.path FROM assets a JOIN works w ON w.id = a.work_id WHERE w.ownership = 'managed'
+      UNION SELECT a.thumbnail_path AS path FROM assets a JOIN works w ON w.id = a.work_id WHERE w.ownership = 'managed' AND a.thumbnail_path IS NOT NULL
       UNION SELECT avatar_local_path AS path FROM artists WHERE avatar_local_path IS NOT NULL`).all() as { path: string }[];
     return rows.flatMap(({ path }) => {
       for (const [source, target] of roots) {
@@ -1185,7 +1221,7 @@ export class LibraryDatabase {
         throw new Error("迁移期间图库发生变化，请重新迁移；原文件和图库记录均已保留");
       }
       const artworks = this.#database
-        .prepare("SELECT id, path FROM artworks")
+        .prepare("SELECT aw.id, aw.path FROM artworks aw JOIN assets a ON a.legacy_artwork_id = aw.id JOIN works w ON w.id = a.work_id WHERE w.ownership = 'managed'")
         .all() as unknown as { id: string; path: string }[];
 
       const updateArtworkStmt = this.#database.prepare(
@@ -1201,7 +1237,7 @@ export class LibraryDatabase {
       }
 
       const assets = this.#database
-        .prepare("SELECT id, path, thumbnail_path FROM assets")
+        .prepare("SELECT a.id, a.path, a.thumbnail_path FROM assets a JOIN works w ON w.id = a.work_id WHERE w.ownership = 'managed'")
         .all() as unknown as { id: string; path: string; thumbnail_path: string | null }[];
 
       const updateAssetStmt = this.#database.prepare(

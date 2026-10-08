@@ -4,13 +4,15 @@ import { Button } from "./Button";
 import { DialogOverlay } from "./DialogOverlay";
 
 const labels = { pending: "等待导入", imported: "已新增", existing: "已在图库", duplicate: "已复用相同图片", failed: "失败", cancelled: "未导入" };
-export function ImportImagesDialog({ batch, collections, busy, error, onCommand, onClose }: {
+export function ImportImagesDialog({ batch, collections, busy, error, onCommand, onClose, onDiscuss }: {
   batch: LocalImportBatch; collections: CollectionRecord[]; busy: boolean; error: string;
   onCommand: (action: "start" | "cancel" | "retry", options?: LocalImportOptions) => Promise<void>; onClose: () => void;
+  onDiscuss?: (() => void) | undefined;
 }) {
   const [collectionId, setCollectionId] = useState(batch.collectionId ?? "");
   const [duplicatePolicy, setDuplicatePolicy] = useState<LocalImportOptions["duplicatePolicy"]>(batch.duplicatePolicy);
   const [showAll, setShowAll] = useState(false);
+  const [storageMode, setStorageMode] = useState<"copy" | "reference">(batch.storageMode ?? "copy");
   const ready = batch.phase === "ready";
   const running = batch.phase === "running";
   const count = (status: string) => batch.items.filter((item) => item.status === status).length;
@@ -20,6 +22,12 @@ export function ImportImagesDialog({ batch, collections, busy, error, onCommand,
       <h2 id="import-images-title">{ready ? "导入到图库" : running ? "正在导入图片" : batch.phase === "cancelled" ? "导入已停止" : "导入结果"}</h2>
       {ready ? <>
         <p>已选择 {batch.items.length} 张图片。原文件保留在原处。</p>
+        <fieldset><legend>图片保存方式</legend>
+          <label><input type="radio" name="storage-mode" checked={storageMode === "copy"} onChange={() => setStorageMode("copy")} />复制到图库保存位置（推荐）</label>
+          <p className="muted">图库保管一份副本，原文件移动后仍可使用。</p>
+          <label><input type="radio" name="storage-mode" checked={storageMode === "reference"} onChange={() => setStorageMode("reference")} />保留原位置，仅加入图库</label>
+          <p className="muted">不占用第二份空间。移动或删除原文件后，需要重新定位。</p>
+        </fieldset>
         <label>加入相册<select aria-label="导入相册" value={collectionId} onChange={(event) => setCollectionId(event.target.value)}>
           <option value="">暂不归档</option>{collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
         </select></label>
@@ -41,8 +49,9 @@ export function ImportImagesDialog({ batch, collections, busy, error, onCommand,
       </details>
       {error && <p role="alert" className="import-item-error">{error}</p>}
       <footer>
+        {onDiscuss && !ready && !running && <Button variant="primary" busy={busy} disabled={!batch.items.some(item => item.artworkId)} onClick={onDiscuss}>讨论已导入图片（{count("imported") + count("existing") + count("duplicate")} 张）</Button>}
         <Button disabled={busy} onClick={onClose}>{running ? "继续浏览" : ready ? "取消" : "完成"}</Button>
-        {ready && <Button variant="primary" busy={busy} data-import-action="start" onClick={() => void onCommand("start", { collectionId: collectionId || null, duplicatePolicy })}>开始导入</Button>}
+        {ready && <Button variant="primary" busy={busy} data-import-action="start" onClick={() => void onCommand("start", { collectionId: collectionId || null, duplicatePolicy, storageMode })}>开始导入</Button>}
         {running && <Button disabled={busy || batch.cancelRequested} onClick={() => void onCommand("cancel")}>{batch.cancelRequested ? "正在停止…" : "停止导入"}</Button>}
         {!ready && !running && count("failed") > 0 && <Button variant="primary" busy={busy} data-import-action="retry" onClick={() => void onCommand("retry")}>只重试失败项（{count("failed")}）</Button>}
       </footer>

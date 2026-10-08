@@ -2,6 +2,18 @@
    Explore Mode Browser View & Radar HUD
    ========================================================================== */
 
+.explore-address-form { display: flex; align-items: center; gap: 8px; }
+.explore-address-form input { flex: 1; min-width: 0; width: 100%; border: 0; background: transparent; color: var(--ds-text-body); outline-offset: 3px; }
+.explore-address-form button, .explore-site-shortcuts button { border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); background: var(--ds-bg-card); color: var(--ds-text-body); min-height: 32px; padding: 4px 9px; cursor: pointer; white-space: nowrap; }
+.explore-site-shortcuts { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 6px 14px; overflow-x: auto; background: var(--ds-bg-card); border-bottom: 1px solid var(--ds-border-light); }
+.explore-site-shortcuts > span { display: inline-flex; flex: 0 0 auto; max-width: 220px; }
+.explore-site-shortcuts > span > button:first-child { overflow: hidden; text-overflow: ellipsis; }
+.explore-site-shortcuts small { white-space: nowrap; color: var(--ds-text-muted); }
+.address-bar.explore-address-form { display: flex; gap: 8px; }
+.address-bar.explore-address-form button { flex: 0 0 auto; width: auto; min-height: 28px; padding: 2px 10px; }
+.shield-status.protection-web { color: var(--ds-text-secondary); background: var(--ds-bg-card-subtle); border-color: var(--ds-border-light); }
+.shield-status.protection-web .status-dot { background: var(--ds-text-muted); box-shadow: none; }
+
 .explore-workspace { display: flex; flex: 1; min-width: 0; min-height: 0; }
 .explore-workspace > .explore-surface { min-width: 0; }
 .browser-toolbar > .explore-protection-trigger,

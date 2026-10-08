@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
-import { basename, extname, resolve } from "node:path";
+import { createReadStream, constants } from "node:fs";
+import { stat, mkdir, copyFile, unlink, lstat, realpath, rmdir } from "node:fs/promises";
+import { basename, extname, resolve, join, dirname } from "node:path";
 import type { LibraryDatabase } from "@sanctuary/database";
 import type { LocalImportBatch, LocalImportOptions } from "@sanctuary/domain";
 
@@ -11,7 +11,7 @@ interface Session { owner: number; batch: LocalImportBatch; paths: string[]; tou
 /** Only native-picker paths enter this service. Renderer commands use an owner-bound opaque id. */
 export class LocalImportService {
   #sessions = new Map<string, Session>();
-  constructor(private database: ImportDatabase, private fingerprint = fingerprintImage) {}
+  constructor(private database: ImportDatabase, private fingerprint = fingerprintImage, private managedDirectory?: () => string) {}
 
   choose(owner: number, paths: string[]): LocalImportBatch | null {
     this.#prune();
@@ -22,7 +22,7 @@ export class LocalImportService {
     for (const [id, session] of this.#sessions) if (session.owner === owner && session.batch.phase === "ready") this.#sessions.delete(id);
     const unique = [...new Map(paths.map((path) => [resolve(path).toLowerCase(), resolve(path)])).values()];
     const batch: LocalImportBatch = { id: randomUUID(), phase: "ready", collectionId: null,
-      duplicatePolicy: "reuse", cancelRequested: false,
+      duplicatePolicy: "reuse", storageMode: "copy", cancelRequested: false,
       items: unique.map((path) => ({ id: randomUUID(), fileName: basename(path), status: "pending" })) };
     this.#sessions.set(batch.id, { owner, batch, paths: unique, touched: Date.now() });
     return structuredClone(batch);
@@ -41,6 +41,7 @@ export class LocalImportService {
       throw new Error("相册已不存在，请重新选择相册");
     }
     Object.assign(session.batch, options);
+    session.batch.storageMode = options.storageMode ?? "reference";
     this.#launch(session);
     return structuredClone(session.batch);
   }
@@ -81,12 +82,30 @@ export class LocalImportService {
         const path = paths[index]!;
         const hash = await this.fingerprint(path);
         if (batch.cancelRequested) { item.status = "cancelled"; continue; }
-        let match = this.database.findLocalImportMatch(path, batch.duplicatePolicy === "reuse" ? hash : undefined);
+        const copy = batch.storageMode === "copy";
+        let match = this.database.findLocalImportMatch(path, batch.duplicatePolicy === "reuse" ? hash : undefined, copy ? "managed" : "external");
         const samePath = match?.path.toLowerCase() === path.toLowerCase();
         // Cached hashes may describe a file that has since changed or disappeared.
         if (match && !samePath && await this.fingerprint(match.path).catch(() => null) !== hash) match = null;
         if (batch.cancelRequested) { item.status = "cancelled"; continue; }
-        item.artworkId = this.database.commitLocalImport(path, hash, batch.collectionId, match?.artworkId);
+        let copied: string | undefined;
+        try {
+          if (copy && !match) {
+            if (!this.managedDirectory) throw new Error("图库保存位置尚未就绪，请重新打开软件");
+            let root = resolve(this.managedDirectory());
+            await mkdir(root, { recursive: true });
+            if ((await lstat(root)).isSymbolicLink()) throw new Error("图库保存目录被重定向，请重新选择保存位置");
+            root = await realpath(root);
+            const folder = join(root, randomUUID());
+            await mkdir(folder);
+            copied = join(folder, basename(path));
+            await copyFile(path, copied, constants.COPYFILE_EXCL);
+            if (await this.fingerprint(copied) !== hash || await this.fingerprint(path) !== hash) throw new Error("图片在复制时发生变化，请重试");
+            if (batch.cancelRequested) { item.status = "cancelled"; continue; }
+          }
+          item.artworkId = this.database.commitLocalImport(copied ?? path, hash, batch.collectionId, match?.artworkId, copy ? "managed" : "external");
+          copied = undefined;
+        } finally { if (copied) { await unlink(copied).catch(() => undefined); await rmdir(dirname(copied)).catch(() => undefined); } }
         item.status = match ? samePath ? "existing" : "duplicate" : "imported";
       } catch (error) {
         item.status = "failed";
@@ -120,8 +139,9 @@ export function parseImportOptions(value: unknown): LocalImportOptions | null {
   if (!value || typeof value !== "object") return null;
   const options = value as Partial<LocalImportOptions>;
   if (options.duplicatePolicy !== "reuse" && options.duplicatePolicy !== "separate") return null;
+  if (options.storageMode !== undefined && options.storageMode !== "copy" && options.storageMode !== "reference") return null;
   if (options.collectionId !== null && (typeof options.collectionId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9:._-]{0,299}$/.test(options.collectionId))) return null;
-  return { collectionId: options.collectionId, duplicatePolicy: options.duplicatePolicy };
+  return { collectionId: options.collectionId, duplicatePolicy: options.duplicatePolicy, ...(options.storageMode ? { storageMode: options.storageMode } : {}) };
 }
 
 export async function fingerprintImage(path: string): Promise<string> {

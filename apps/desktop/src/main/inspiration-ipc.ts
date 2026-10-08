@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
 import type { BrowserWindow, IpcMain } from "electron";
 import type { LibraryDatabase } from "@sanctuary/database";
 import {
@@ -17,6 +18,7 @@ import {
 } from "@sanctuary/domain";
 import type { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 import { prepareVisionImage } from "./vision/vision-image-preprocessor.js";
+import { readClipboardImageSize } from "./clipboard-image-size.js";
 import { createInspirationOutputHost, inspirationMarkdown, inspirationMarkdownFileName, type InspirationOutputHost } from "./inspiration-export.js";
 
 const STORE_KEY = "local_inspiration_conversations_v1";
@@ -103,9 +105,8 @@ export function registerInspirationIpc(
     const conversation = conversations.find((item) => item.id === conversationId);
     if (!conversation) throw new Error("找不到这段对话");
     if (conversationIsGenerating(conversation.id)) throw new Error("本轮正在使用参考图，请先停止或等待完成");
-    conversation.source = raw.sourceWorkId === null
-      ? null
-      : resolveSource(database, requireId(raw.sourceWorkId, "作品 ID"), raw.sourcePageIndex);
+    conversation.sources = raw.sources !== undefined ? resolveSources(database, raw.sources) : raw.sourceWorkId === null ? [] : [resolveSource(database, requireId(raw.sourceWorkId, "作品 ID"), raw.sourcePageIndex)];
+    conversation.source = conversation.sources[0] ?? null;
     conversation.updatedAt = new Date().toISOString();
     persistConversations(database, conversations);
     return conversation;
@@ -142,19 +143,31 @@ async function generateReply(
   signal: AbortSignal
 ): Promise<InspirationConversation> {
   const startedAt = Date.now();
-  const source = conversation.source;
-  const work = source ? database.getWork(source.workId) : null;
-  const asset = source
-    ? work?.assets.find((item) => item.pageIndex === source.pageIndex && item.mediaType === "image" && item.fileState === "available")
-    : undefined;
-  if (source && !asset) throw new Error("这张参考页已经不可用，请重新选择参考图");
-  const prepared = asset ? await prepareVisionImage(asset.path, { maxLongEdge: 1344 }) : undefined;
+  const sources = conversation.sources ?? (conversation.source ? [conversation.source] : []);
+  if (sources.length > 4) throw new Error("一次最多讨论 4 张参考图");
+  if (sources.length && (conversation.messages.at(-1)?.content.length ?? 0) > 2000) throw new Error("带图讨论的单次输入请控制在 2000 字以内，可以分几次提问");
+  const prepared: Awaited<ReturnType<typeof prepareVisionImage>>[] = [];
   try {
+    for (const source of sources) {
+      if (signal.aborted) throw new Error("本轮生成已停止");
+      const work = database.getWork(source.workId);
+      const asset = work?.assets.find(item => item.pageIndex === source.pageIndex && item.mediaType === "image" && item.fileState === "available");
+      if (!asset) throw new Error(`参考图《${source.title}》已经不可用，请重新选择参考图`);
+      const info = await stat(asset.path).catch(() => { throw new Error(`无法读取参考图《${source.title}》，请检查原文件位置和读取权限`); });
+      if (info.size > 32 * 1024 * 1024) throw new Error(`参考图《${source.title}》超过 32 MB，请选择较小的图片进行讨论`);
+      const dimensions = await readClipboardImageSize(asset.path).catch(() => { throw new Error(`参考图《${source.title}》已变化或无法读取，请重新选择`); });
+      if (!dimensions) throw new Error(`参考图《${source.title}》暂不能读图，请转换成 PNG、JPG 或 WebP 后导入`);
+      if (dimensions.width * dimensions.height > 32_000_000) throw new Error(`参考图《${source.title}》尺寸过大，请缩小后再讨论`);
+      prepared.push(await prepareVisionImage(asset.path, { maxLongEdge: sources.length > 1 ? 560 : 1344 }));
+    }
+    if (prepared.reduce((sum, item) => sum + item.byteLength, 0) > 32 * 1024 * 1024) throw new Error("参考图总大小过大，请减少图片数量");
+    if (signal.aborted) throw new Error("本轮生成已停止");
+    const source = sources[0] ?? null;
     const profile = inspirationGenerationProfile(conversation.settings);
     const result = await localModel.chat({
-      systemPrompt: `${presetSystemPrompt(conversation.presetId, Boolean(prepared))}\n\n${profile.instruction}`,
-      messages: boundedContext(conversation.messages),
-      ...(prepared ? { image: prepared } : {}),
+      systemPrompt: `${presetSystemPrompt(conversation.presetId, prepared.length > 0)}\n\n${profile.instruction}\n${sources.map((item,index) => `图片 ${index + 1}：《${item.title.replace(/[\r\n]/g," ")}》第 ${item.pageIndex + 1} 页`).join("\n")}\n多图时请用图片编号区分内容，用户没有要求时不要臆测图片之间的关系。`,
+      messages: boundedContext(conversation.messages, sources.length ? 2200 : 3500),
+      ...(prepared.length === 1 ? { image: prepared[0]! } : prepared.length ? { images: prepared } : {}),
       ...(conversation.modelId ? { modelId: conversation.modelId } : {}),
       temperature: profile.temperature,
       topP: profile.topP,
@@ -168,6 +181,7 @@ async function generateReply(
       settings: { ...conversation.settings },
       parameters: { temperature: profile.temperature, topP: profile.topP, topK: profile.topK, maxTokens: profile.maxTokens },
       source: source ? { workId: source.workId, title: source.title, artistName: source.artistName, pageIndex: source.pageIndex } : null,
+      sources: sources.map(({workId,title,artistName,pageIndex}) => ({workId,title,artistName,pageIndex})),
       durationMs: Math.max(0, Date.now() - startedAt)
     };
     conversation.messages.push(assistantMessage);
@@ -183,17 +197,19 @@ async function generateReply(
     if (signal.aborted) throw new Error("本轮生成已停止，已保存内容已保留");
     throw error;
   } finally {
-    prepared?.cleanup();
+    for (const image of prepared) image.cleanup();
   }
 }
 
 function createConversation(database: LibraryDatabase, request: InspirationSendRequest): InspirationConversation {
   const now = new Date().toISOString();
+  const sources = request.sources !== undefined ? resolveSources(database, request.sources) : request.sourceWorkId ? [resolveSource(database, request.sourceWorkId, request.sourcePageIndex)] : [];
   return {
+    sources,
     id: randomUUID(),
     title: titleFromMessage(request.message),
     presetId: request.presetId,
-    source: request.sourceWorkId ? resolveSource(database, request.sourceWorkId, request.sourcePageIndex) : null,
+    source: sources[0] ?? null,
     modelId: request.modelId ?? null,
     settings: normalizeSettings(request.settings),
     messages: [],
@@ -222,6 +238,24 @@ function resolveSource(
   };
 }
 
+function resolveSources(database: LibraryDatabase, raw: unknown): InspirationSourceWork[] {
+  const sources = parseSources(raw);
+  return sources.map(item => {
+    const work = database.getWork(item.workId);
+    if (!work?.assets.some(asset => asset.pageIndex === item.pageIndex && asset.mediaType === "image" && asset.fileState === "available")) throw new Error("所选参考页已经不可用，请重新选择");
+    return resolveSource(database, item.workId, item.pageIndex);
+  });
+}
+function parseSources(raw: unknown): Array<{workId:string;pageIndex:number}> {
+  if (!Array.isArray(raw) || raw.length > 4) throw new Error("一次最多讨论 4 张参考图");
+  const result = raw.map(item => {
+    if (!item || typeof item !== "object" || !Number.isSafeInteger(item.pageIndex) || item.pageIndex < 0 || item.pageIndex > 100000) throw new Error("参考页格式不正确");
+    return { workId: requireId(item.workId,"作品 ID"), pageIndex: item.pageIndex as number };
+  });
+  if (new Set(result.map(item => `${item.workId}:${item.pageIndex}`)).size !== result.length) throw new Error("参考图重复，请保留一份");
+  return result;
+}
+
 function parseSendRequest(raw: InspirationSendRequest): InspirationSendRequest {
   if (!raw || typeof raw !== "object") throw new Error("灵感请求格式不正确");
   const message = typeof raw.message === "string" ? raw.message.trim() : "";
@@ -232,6 +266,7 @@ function parseSendRequest(raw: InspirationSendRequest): InspirationSendRequest {
     requestId: requireId(raw.requestId, "请求 ID"),
     presetId: raw.presetId,
     message,
+    ...(raw.sources !== undefined ? { sources: parseSources(raw.sources) } : {}),
     ...(raw.modelId ? { modelId: parseOptionalModelId(raw.modelId) } : {}),
     ...(raw.settings ? { settings: normalizeSettings(raw.settings) } : {}),
     ...(raw.conversationId ? { conversationId: requireId(raw.conversationId, "会话 ID") } : {}),
@@ -296,12 +331,12 @@ function resolveExport(database: LibraryDatabase, raw: unknown, requireMessage =
   return { conversation };
 }
 
-function boundedContext(messages: InspirationMessage[]): Array<{ role: "user" | "assistant"; content: string }> {
+function boundedContext(messages: InspirationMessage[], limit = MAX_CONTEXT_CHARACTERS): Array<{ role: "user" | "assistant"; content: string }> {
   const selected: InspirationMessage[] = [];
   let characters = 0;
   for (let index = messages.length - 1; index >= 0 && selected.length < MAX_CONTEXT_MESSAGES; index -= 1) {
     const message = messages[index]!;
-    if (characters + message.content.length > MAX_CONTEXT_CHARACTERS && selected.length > 0) break;
+    if (characters + message.content.length > limit && selected.length > 0) break;
     selected.unshift(message);
     characters += message.content.length;
   }

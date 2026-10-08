@@ -15,9 +15,14 @@ function fixture() {
   const db = new LibraryDatabase(join(root, "library.db"));
   cleanup.push(() => { db.close(); rmSync(root, { recursive: true, force: true }); });
   const art = db.importArtwork(path);
+  db.saveArtworkSource(art.id, { platform: "pixiv", workId: "1001", pageIndex: 0, authorId: "1", authorName: "Artist", title: "Legacy download" });
   return { root, source, target, backups, path, db, art, run: () => migrateStorageFiles(db, source, target, backups) };
 }
 describe("verified non-destructive legacy storage migration", () => {
+  it("leaves external references in place even when they sit inside the selected storage directory",async()=>{
+    const f=fixture(),externalPath=join(f.source,"independent.png");writeFileSync(externalPath,"external original");const external=f.db.importArtwork(externalPath);
+    await f.run();expect(f.db.listArtworks().find(item=>item.id===external.id)?.path).toBe(externalPath);expect(existsSync(join(f.target,"independent.png"))).toBe(false);expect(readFileSync(externalPath,"utf8")).toBe("external original");
+  });
   it("preserves old flat work folders, metadata, originals and unrelated files", async () => {
     const f = fixture();
     const collection = f.db.createCollection("旧相册", ""); f.db.addArtworkToCollection(f.art.id, collection.id);
@@ -50,7 +55,7 @@ describe("verified non-destructive legacy storage migration", () => {
     expect((await f.run()).migratedAssets).toBe(0);
   });
   it("keeps the index and originals when one indexed file is missing", async () => {
-    const f = fixture(); f.db.importArtwork(join(f.source, "missing.png"));
+    const f = fixture(); const missing=f.db.importArtwork(join(f.source, "missing.png")); f.db.saveArtworkSource(missing.id,{platform:"pixiv",workId:"1002",pageIndex:0,authorId:"1",authorName:"Artist",title:"Missing download"});
     await expect(f.run()).rejects.toThrow("找不到原文件");
     expect(f.db.listArtworks().find((a) => a.id === f.art.id)?.path).toBe(f.path);
     expect(readFileSync(f.path, "utf8")).toBe("original image");
@@ -72,7 +77,7 @@ describe("verified non-destructive legacy storage migration", () => {
   it("rolls back when another indexed source appears during the copy", async () => {
     const f = fixture(), commit = f.db.migrateArtworkStoragePaths.bind(f.db);
     vi.spyOn(f.db, "migrateArtworkStoragePaths").mockImplementation((source, target, verified) => {
-      const another = join(f.source, "new.png"); writeFileSync(another, "new"); f.db.importArtwork(another);
+      const another = join(f.source, "new.png"); writeFileSync(another, "new"); const art=f.db.importArtwork(another); f.db.saveArtworkSource(art.id,{platform:"pixiv",workId:"1002",pageIndex:0,authorId:"1",authorName:"Artist",title:"New download"});
       return commit(source, target, verified);
     });
     await expect(f.run()).rejects.toThrow("图库发生变化");

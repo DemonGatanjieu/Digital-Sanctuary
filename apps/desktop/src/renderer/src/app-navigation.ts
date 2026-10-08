@@ -6,7 +6,7 @@ export type SettingsSection = "library" | "appearance" | "protection" | "models"
 export const MAIN_NAVIGATION = [
   { id: "home", label: "开始", description: "今天想做什么" },
   { id: "gallery", label: "图库", description: "浏览、相册与整理" },
-  { id: "explore", label: "探索", description: "浏览 Pixiv，保存喜欢的作品" },
+  { id: "explore", label: "探索", description: "浏览图片网站，收进图库" },
   { id: "inspiration", label: "创作", description: "聊图、写作与提示词" },
   { id: "settings", label: "设置", description: "外观、存储与模型" }
 ] as const;
