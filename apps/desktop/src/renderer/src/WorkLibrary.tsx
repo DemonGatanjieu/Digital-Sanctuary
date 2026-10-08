@@ -108,10 +108,10 @@ export function WorkLibrary({
 
   const featuredWork = normalResult.items[0] ?? null;
   const lastSelectedWorkId = useRef<string | null>(null);
-  useEffect(()=>{setSelectedIds(new Set());setSelecting(false);lastSelectedWorkId.current=null;},[searchingPictures,pictureSearch?.snapshot?.progress.id,stalePictureScope]);
+  useEffect(()=>{setSelectedIds(new Set());setSelecting(false);lastSelectedWorkId.current=null;},[searchingPictures,pictureSearch?.snapshot?.progress.id,pictureSearch?.relevance,stalePictureScope]);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const openRequestRef = useRef(0);
-  useEffect(()=>{openRequestRef.current+=1;setOpeningWorkId("");},[searchingPictures,pictureSearch?.snapshot?.progress.id,stalePictureScope]);
+  useEffect(()=>{openRequestRef.current+=1;setOpeningWorkId("");},[searchingPictures,pictureSearch?.snapshot?.progress.id,pictureSearch?.relevance,stalePictureScope]);
   useEffect(() => () => { openRequestRef.current += 1; }, []);
 
   useEffect(() => {
@@ -368,15 +368,15 @@ export function WorkLibrary({
       )}
 
       <div className="work-result-note">
-        <span>{result.total} 个作品 · {searchingPictures?`${result.totalPages} 张已搜索图片 · 每件显示最匹配页`:`${result.totalPages} 页`}{query.ownership ? ` · ${query.ownership === "managed" ? "图库保存" : "外部引用"}` : ""}</span>
+        <span>{result.total} 个作品 · {searchingPictures?`${result.totalPages} 张${pictureSearch?.relevance==="all"?"候选":"匹配"}图片 · 每件显示最匹配页`:`${result.totalPages} 页`}{query.ownership ? ` · ${query.ownership === "managed" ? "图库保存" : "外部引用"}` : ""}</span>
         {loading && <span className="work-querying">正在更新…</span>}
       </div>
 
       {result.items.length === 0 && !loading ? (
         <section className="empty-state compact-empty">
           <p className="eyebrow">NO MATCHES</p>
-          <h2>{searchingPictures?stalePictureScope?"按当前范围重新找图":pictureSearch?.error||pictureSearch?.snapshot?.progress.error?"找图暂未完成":pictureSearch?.snapshot?.progress.phase==="cancelled"?"已停止找图":"当前范围没有可用的搜索结果":emptyMessage.title}</h2>
-          <p>{searchingPictures?"在上方输入中文画面描述后点“找图”。首次建立索引较慢，已完成的索引会保留。":emptyMessage.description}</p>
+          <h2>{searchingPictures?stalePictureScope?"按当前范围重新找图":pictureSearch?.error||pictureSearch?.snapshot?.progress.error?"找图暂未完成":pictureSearch?.snapshot?.progress.phase==="cancelled"?"已停止找图":pictureSearch?.snapshot?.relevance.hiddenWorks?"暂时没有较相关的图片":"当前范围没有可用的搜索结果":emptyMessage.title}</h2>
+          <p>{searchingPictures?!stalePictureScope&&pictureSearch?.snapshot?.relevance.hiddenWorks?"可以换一种画面描述，或点上方“显示更多”查看相关性较低的结果，无需重新分析。":"在上方输入中文画面描述后点“找图”。首次建立索引较慢，已完成的索引会保留。":emptyMessage.description}</p>
         </section>
       ) : (
         <section className="work-library-grid" aria-busy={loading}>

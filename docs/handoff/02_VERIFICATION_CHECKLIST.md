@@ -139,4 +139,4 @@ npm.cmd run build
 - `npm.cmd run smoke:installer` 完成隔离安装、启动、模型整理页检查、卸载和临时目录清理。
 - 在“设置 → 画廊与存储”创建 SQLite 备份；按 `docs/operations/BACKUP_AND_RECOVERY.md` 做一次离线恢复演练。
 
-- 图库直接中文搜索：`npm.cmd run smoke:gallery-search` 使用真实本地 EmbeddingGemma 与隔离合成图片，验证单次提交自动索引、中文排序、索引复用、停止、匹配页、筛选、名称模式、返航和 900×620 布局。
+- 图库直接中文搜索：`npm.cmd run smoke:gallery-search` 使用真实本地 EmbeddingGemma 与隔离合成图片，验证单次提交自动索引、中文排序、默认相关性筛选、无需重分析的展开/收起、零相关结果恢复、索引复用、停止、匹配页、筛选、名称模式、返航和 900×620 布局。

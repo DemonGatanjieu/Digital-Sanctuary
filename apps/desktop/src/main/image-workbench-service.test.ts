@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { LibraryDatabase } from "@sanctuary/database";
 import type { VisionAssessment, WorkbenchSnapshot } from "@sanctuary/domain";
-import { ImageWorkbenchService, parseWorkbenchQuery } from "./image-workbench-service";
+import { GALLERY_SEARCH_MIN_SIMILARITY, ImageWorkbenchService, parseWorkbenchQuery } from "./image-workbench-service";
 import { LocalImportService } from "./local-import-service";
 import { SemanticVectorStore, validVector } from "./semantic-client";
 import { ImageOutputService } from "./image-output-service";
@@ -129,7 +129,9 @@ describe("one-step gallery picture search",()=>{
     f.ready.mockReturnValue(false);
     const started=f.service.searchGallery(1,"夜晚的月亮",{}),result=await gallerySettled(f,started.progress.id);
     expect(result.progress).toMatchObject({phase:"completed",processed:2,total:2});
-    expect(result.result).toMatchObject({total:1,totalPages:2});
+    expect(result.result).toMatchObject({total:1,totalPages:1});
+    expect(result.relevance).toMatchObject({mode:"relevant",hiddenWorks:0,hiddenPages:1});
+    expect(f.service.galleryResults(1,started.progress.id,0,"all").result.totalPages).toBe(2);
     expect(result.result.items[0]).toMatchObject({id:"pixiv:123",matchedPage:1,coverAsset:{pageIndex:1,path:pages[1]!.path}});
     expect(f.classify).not.toHaveBeenCalled();expect(f.encode).toHaveBeenCalledTimes(3);
     expect(f.service.current(1,"library")).toBeNull();expect(f.service.tasks(1)[0]).toMatchObject({gallerySearch:true});
@@ -168,4 +170,28 @@ describe("one-step gallery picture search",()=>{
     const last=f.service.galleryResults(1,result.progress.id,960);expect(last.result.items).toHaveLength(41);expect(last.result.hasMore).toBe(false);
     expect(f.encode).toHaveBeenCalledTimes(2);expect(()=>f.service.galleryResults(1,result.progress.id,-1)).toThrow("分页");
   },20000);
+  it("hides scores below the inclusive model threshold before grouping and paging, without discarding the index",async()=>{
+    const f=fixture();
+    f.encode.mockImplementation(async(kind,value)=>{
+      if(kind==="query")return vector(1);
+      const score=value.includes("weak")?GALLERY_SEARCH_MIN_SIMILARITY-.001:GALLERY_SEARCH_MIN_SIMILARITY;
+      const v=vector(0);v[0]=Math.sqrt(1-score*score);v[1]=score;return v;
+    });
+    for(let i=0;i<62;i++)f.database.importArtwork(f.image(`boundary-${i}.png`));
+    const weak=f.database.importArtwork(f.image("weak.png"));
+    const result=await gallerySettled(f,f.service.searchGallery(1,"画面",{}).progress.id),calls=f.encode.mock.calls.length;
+    expect(result.result).toMatchObject({total:62,totalPages:62,hasMore:true});expect(result.result.items).toHaveLength(60);
+    expect(result.relevance).toEqual({mode:"relevant",minimumScore:GALLERY_SEARCH_MIN_SIMILARITY,hiddenWorks:1,hiddenPages:1});
+    const last=f.service.galleryResults(1,result.progress.id,60);expect(last.result.items).toHaveLength(2);expect(last.result.hasMore).toBe(false);
+    const all=f.service.galleryResults(1,result.progress.id,60,"all");expect(all.result).toMatchObject({total:63,totalPages:63,hasMore:false});
+    expect(all.result.items.at(-1)?.id).toBe(`local:${weak.id}`);expect(all.relevance.hiddenWorks).toBe(0);expect(f.encode).toHaveBeenCalledTimes(calls);
+    expect(()=>f.service.galleryResults(1,result.progress.id,0,.5)).toThrow("范围");expect(()=>f.service.galleryResults(2,result.progress.id,0,"all")).toThrow("过期");
+    f.database.updateWorkFavorite([`local:${weak.id}`],true);
+    // Counts still follow the live database filters, rather than counting removed/filtered works.
+    const filtered=await gallerySettled(f,f.service.searchGallery(1,"画面",{favorite:true}).progress.id);
+    expect(filtered.result).toMatchObject({items:[],total:0,totalPages:0,hasMore:false});expect(filtered.relevance.hiddenWorks).toBe(1);
+    const expanded=f.service.galleryResults(1,filtered.progress.id,0,"all");expect(expanded.result.items[0]?.id).toBe(`local:${weak.id}`);
+    f.database.updateWorkFavorite([`local:${weak.id}`],false);
+    expect(f.service.galleryResults(1,filtered.progress.id).relevance.hiddenWorks).toBe(0);
+  });
 });

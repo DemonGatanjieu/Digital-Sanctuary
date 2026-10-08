@@ -17,6 +17,6 @@ describe("gallery picture search IPC boundary",()=>{
   it("sanitizes filters and binds requests to the actual sender rather than a renderer-provided owner",()=>{
     const f=fixture();f.handlers.get("gallery:search-pictures")!(f.event,"海边女孩",{ownership:"external",favorite:true,limit:90000,offset:-1,owner:999,path:"private.png"});
     expect(f.workbench.searchGallery).toHaveBeenCalledWith(42,"海边女孩",{ownership:"external",favorite:true,limit:200,offset:0});
-    f.handlers.get("gallery:picture-results")!(f.event,"job",60);expect(f.workbench.galleryResults).toHaveBeenCalledWith(42,"job",60);
+    f.handlers.get("gallery:picture-results")!(f.event,"job",60,"all");expect(f.workbench.galleryResults).toHaveBeenCalledWith(42,"job",60,"all");
   });
 });

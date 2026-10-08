@@ -46,9 +46,9 @@ export function registerImageWorkbenchIpc(ipc: Pick<IpcMain,"handle">, workbench
     if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
     return workbench.searchGallery(e.sender.id,text,parseWorkQuery(query));
   });
-  ipc.handle("gallery:picture-results",(e,id: unknown,offset: unknown)=>{
+  ipc.handle("gallery:picture-results",(e,id: unknown,offset: unknown,relevance: unknown)=>{
     if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
-    return workbench.galleryResults(e.sender.id,id,offset);
+    return workbench.galleryResults(e.sender.id,id,offset,relevance);
   });
   ipc.handle("gallery:current-picture-search",e=>{
     if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");

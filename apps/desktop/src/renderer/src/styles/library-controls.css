@@ -204,5 +204,6 @@
 .gallery-search-form .ui-button { min-height: 42px; flex-shrink: 0; }
 .gallery-search-feedback { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; font-size: 12px; color: var(--ds-text-secondary); overflow-wrap: anywhere; }
 .gallery-search-feedback p { margin: 0; }
+.gallery-search-relevance { display: flex; flex: 1 0 100%; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .gallery-search-feedback [role="alert"] { color: var(--ds-error, var(--ds-text-heading)); }
 .work-library-controls.work-library-filters { display: flex; flex-wrap: wrap; }

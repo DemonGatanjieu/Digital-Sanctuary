@@ -742,4 +742,4 @@ export * from "./local-import.js";
 export * from "./work-information.js";
 export * from "./saved-work-filter.js";
 export * from "./task-summary.js";
-export type { GallerySearchSnapshot, ImageTarget, ImageExportItem, ImageExportBatch, WorkbenchSource, WorkbenchMode, WorkbenchQuery, WorkbenchItem, WorkbenchSnapshot, SemanticAvailability, ImageTaskSummary } from "./image-workbench.js";
+export type { GallerySearchSnapshot, GallerySearchRelevance, ImageTarget, ImageExportItem, ImageExportBatch, WorkbenchSource, WorkbenchMode, WorkbenchQuery, WorkbenchItem, WorkbenchSnapshot, SemanticAvailability, ImageTaskSummary } from "./image-workbench.js";

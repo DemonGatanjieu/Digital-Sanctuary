@@ -19,7 +19,11 @@ export interface WorkbenchSnapshot {
   items: WorkbenchItem[]; hasMore: boolean; engine?: string;
   galleryQuery?: WorkQuery;
 }
-export interface GallerySearchSnapshot { progress: WorkbenchSnapshot; result: WorkQueryResult }
+export type GallerySearchRelevance = "relevant" | "all";
+export interface GallerySearchSnapshot {
+  progress: WorkbenchSnapshot; result: WorkQueryResult;
+  relevance: { mode: GallerySearchRelevance; minimumScore: number; hiddenWorks: number; hiddenPages: number };
+}
 export interface SemanticAvailability { available: boolean; model: string; device: "cpu"; message: string }
 export interface ImageTaskSummary {
   id: string; kind: "workbench" | "copy"; source: WorkbenchSource; name: string;

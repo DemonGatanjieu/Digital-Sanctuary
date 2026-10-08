@@ -48,10 +48,18 @@ try {
   assert.equal(await cdp.evaluate("Boolean(document.querySelector('.gallery-search-form'))&&!document.querySelector('.image-workbench')"),true);
   const first=await finished(),coldMs=Date.now()-started;
   assert.equal(first.progress.total,5);assert.equal(first.progress.failed,1);assert.equal(first.result.items[0].id,'pixiv:456');assert.equal(first.result.items[0].matchedPage,1);
+  assert.equal(first.result.total,1);assert.equal(first.result.totalPages,1);assert.equal(first.relevance.hiddenWorks,2);assert.equal(first.relevance.hiddenPages,3);
   await waitFor("document.querySelector('.work-library-card .work-page-badge')?.textContent.includes('匹配第 2 页')");await shot('gallery-picture-results-1280');
   const indexPath=join(userData,'semantic-index.db'),cacheCount=()=>{const cache=new DatabaseSync(indexPath,{readOnly:true});try{return cache.prepare('SELECT COUNT(*) AS count FROM vectors').get().count;}finally{cache.close();}};
   const cached=cacheCount();assert.equal(cached,3);
   checks.push('one-submit-real-offline-model-builds-content-index-and-isolates-unreadable-original');
+  await click('[aria-label="显示更多搜索结果"]');await waitFor("document.querySelectorAll('.work-library-card').length===3");
+  const all=await cdp.evaluate(`window.sanctuary.galleryPictureResults(${JSON.stringify(first.progress.id)},0,'all')`);
+  assert.equal(all.result.totalPages,4);assert.equal(cacheCount(),cached);
+  assert.equal((await cdp.evaluate("window.sanctuary.currentGalleryPictureSearch()")).progress.id,first.progress.id);
+  await click('[data-nav=inspiration]');await click('[data-nav=gallery]');await waitFor("document.querySelectorAll('.work-library-card').length===3");
+  await click('[aria-label="只看较相关结果"]');await waitFor("document.querySelectorAll('.work-library-card').length===1");
+  checks.push('default-relevance-hides-unrelated-images-and-expansion-reuses-the-same-index-and-survives-navigation');
   await click('.work-library-card .work-cover-button');await waitFor("document.querySelector('.cinema-lightbox-theater')?.textContent.includes('第 2/2 页')");
   await click('[aria-label="关闭大图"]');
   checks.push('best-matching-page-becomes-card-cover-and-opens-the-same-original-page');
@@ -64,6 +72,12 @@ try {
   await fill('[aria-label="保存方式"]','external');await waitFor("document.querySelector('.gallery-search-feedback')?.textContent.includes('筛选范围已变化')&&document.querySelectorAll('.work-library-card').length===0");
   await clickText('.gallery-search-form button','找图');const external=await finished();assert.equal(external.progress.total,3);assert.ok(external.result.items.every(work=>work.ownership==='external'));
   checks.push('storage-filter-invalidates-old-results-and-restricts-the-next-content-search');
+  await fill('.gallery-search-form input','夜晚，月亮和星星');await clickText('.gallery-search-form button','找图');const noMatches=await finished();
+  assert.equal(noMatches.result.total,0);assert.equal(noMatches.relevance.hiddenWorks,2);
+  await waitFor("document.querySelector('.library-empty')?.textContent.includes('暂时没有较相关的图片')||document.querySelector('main')?.textContent.includes('暂时没有较相关的图片')");
+  assert.equal(await cdp.evaluate("document.querySelectorAll('.work-library-card').length"),0);
+  await click('[aria-label="显示更多搜索结果"]');await waitFor("document.querySelectorAll('.work-library-card').length===2");assert.equal(cacheCount(),cached);
+  checks.push('zero-relevant-matches-stays-empty-with-an-obvious-show-more-recovery');
   await fill('[aria-label="保存方式"]','');await fill('[aria-label="搜索方式"]','name');await fill('.gallery-search-form input','双页');
   await waitFor("document.querySelectorAll('.work-library-card').length===1&&document.querySelector('.work-card-title-row strong')?.textContent==='双页测试作品'");
   assert.equal(cacheCount(),cached);await clickText('.gallery-search-form button','清除');await waitFor("document.querySelectorAll('.work-library-card').length===4");
@@ -71,14 +85,14 @@ try {
   await fill('[aria-label="搜索方式"]','picture');await fill('.gallery-search-form input','夜晚，月亮和星星');await clickText('.gallery-search-form button','找图');await finished();
   await main.evaluate("(()=>{const e=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron');e.BrowserWindow.getAllWindows()[0].setBounds({x:40,y:40,width:900,height:620});return true;})()");
   await waitFor("innerWidth<=900");await cdp.evaluate("document.querySelector('main').scrollTop=0");
-  const fits=await cdp.evaluate("(()=>{const r=document.querySelector('.gallery-search-form').getBoundingClientRect();return {right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth};})()");assert.ok(fits.right<=fits.width&&fits.bottom<=fits.height&&!fits.overflow,JSON.stringify(fits));
+  const fits=await cdp.evaluate("(()=>{const r=document.querySelector('.gallery-search').getBoundingClientRect();return {right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth};})()");assert.ok(fits.right<=fits.width&&fits.bottom<=fits.height&&!fits.overflow,JSON.stringify(fits));
   await shot('gallery-picture-search-900');
   await cdp.evaluate("window.sanctuary.setActiveTheme('builtin.cyber-deck')");await waitFor("document.querySelector('#ds-dynamic-theme')?.textContent");await shot('gallery-picture-search-dark-900');
   checks.push('Chinese-search-and-progress-stay-visible-in-small-window-and-dark-theme');
   const report={status:'passed',checks,coldMs,warmMs,indexedUniqueContents:cached,screenshots:shots,limits:'Synthetic image fixtures with real offline EmbeddingGemma CPU inference; not a benchmark of arbitrary large personal libraries.'};await writeFile(join(shots,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
-} catch(error) {console.error(error.stack||error);if(cdp)await shot('failure').catch(()=>{});console.error(stderr.slice(-4000));process.exitCode=1;}
+} catch(error) {console.error(error.stack||error);if(cdp){console.error(await cdp.evaluate("(async()=>JSON.stringify({feedback:document.querySelector('.gallery-search-feedback')?.textContent,visibility:document.visibilityState,progress:(await window.sanctuary.currentGalleryPictureSearch())?.progress.phase}))()").catch(()=>''));await shot('failure').catch(()=>{});}console.error(stderr.slice(-4000));process.exitCode=1;}
 finally {cdp?.close();main?.close();child.kill();await new Promise(done=>{if(child.exitCode!==null)done();else{child.once('exit',done);setTimeout(done,2000);}});const absolute=resolve(root);if(!absolute.startsWith(`${resolve(tmpdir())}${sep}sanctuary-gallery-search-`))throw new Error('Unexpected temporary directory');await rm(absolute,{recursive:true,force:true,maxRetries:8,retryDelay:150});}
-async function finished(){await waitFor("(async()=>{const s=await window.sanctuary.currentGalleryPictureSearch();return s&&!['scanning','analyzing'].includes(s.progress.phase)})()",180000);const s=await cdp.evaluate("window.sanctuary.currentGalleryPictureSearch()");assert.equal(s.progress.phase,'completed',JSON.stringify(s.progress));await waitFor("!document.querySelector('.gallery-search-feedback')?.textContent.includes('正在建立')&&!document.querySelector('.gallery-search-feedback')?.textContent.includes('正在准备找图模型')");return s;}
+async function finished(){await waitFor("(async()=>{const s=await window.sanctuary.currentGalleryPictureSearch();return s&&!['scanning','analyzing'].includes(s.progress.phase)})()",180000);const s=await cdp.evaluate("window.sanctuary.currentGalleryPictureSearch()");assert.equal(s.progress.phase,'completed',JSON.stringify(s.progress));await waitFor("!document.querySelector('.gallery-search-feedback [role=status]')?.textContent.includes('正在建立')&&!document.querySelector('.gallery-search-feedback [role=status]')?.textContent.includes('正在准备找图模型')");return s;}
 
 async function waitFor(expression, timeout = 20000) { const start = Date.now(); while (Date.now() - start < timeout) { if (await cdp.evaluate(expression)) return; await new Promise(done => setTimeout(done, 100)); } throw new Error(`Timed out: ${expression}`); }
 async function waitForMain(expression) { const start = Date.now(); while (Date.now() - start < 10000) { if (await main.evaluate(expression)) return; await new Promise(done => setTimeout(done, 100)); } throw new Error(`Main timed out: ${expression}`); }

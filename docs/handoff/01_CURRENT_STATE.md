@@ -1,6 +1,6 @@
 # 交接一：当前状态
 
-2026-10-08：图库搜索框默认“搜画面”，输入后回车自动扫描/索引，无需进入整理页或手动载入。切换“搜名称 / 画师”可继续传统搜索；筛选范围、普通卡片、最匹配页大图、进度/停止、清除与页面返航已接通。当前源码新能力，旧 0.1.2 安装包未重打。详情见 `docs/reviews/2026-10-08-gallery-picture-search.md`。
+2026-10-08：图库搜索框默认“搜画面”，输入后回车自动扫描/索引，无需进入整理页或手动载入。切换“搜名称 / 画师”可继续传统搜索；默认收起较低相关性结果，搜索框下可“显示更多”，不用重新分析；空结果不混入弱匹配。筛选范围、普通卡片、最匹配页大图、进度/停止、清除与页面返航已接通。当前源码新能力，旧 0.1.2 安装包未重打。详情见 `docs/reviews/2026-10-08-gallery-picture-search.md` 和 `docs/reviews/2026-10-08-gallery-search-relevance.md`。
 
 - 最新工作流补充：2026-10-08（历史基础记录保留）
 - 最新图库补充：卡片直接改名、复制与原生拖出；横幅可自定义、恢复自动精选；普通图库按 managed/external 保存方式筛选，计数与保存筛选一致。见 `docs/reviews/2026-10-08-gallery-quick-use.md`。本轮新增复制/引用导入、外部重新定位、按归属迁移、普通网站收图与来源保存、找图结果 1–4 页带入创作（文件夹先确认导入）。见 `docs/reviews/2026-10-08-discovery-and-multiple-images.md`。
@@ -13,7 +13,7 @@
 
 ## 接手前必读
 
-本轮整合的入口和边界见 README“从哪里开始”及 `docs/reviews/2026-10-08-image-workbench.md`。最新门禁为 513 项 TS、9 项 Python、完整类型与构建；图库快用 10 组、导航 59 组、大图 20 组隔离真实窗口检查通过，见 `docs/reviews/2026-10-08-gallery-quick-use.md`。真实模型工作台证据保留在前批记录。图库命名与探索切换见 `docs/reviews/2026-10-08-gallery-names-and-explore-transitions.md`，按钮反馈见 `docs/reviews/2026-10-08-interaction-motion.md`。导入和查看信息不自动启动模型，外部原文件保留；任务页使用轻量摘要。导入/下载/补图/文件夹/找图/原图复制状态为会话级，原有批量识别沿用持久任务。
+本轮整合的入口和边界见 README“从哪里开始”及 `docs/reviews/2026-10-08-image-workbench.md`。最新门禁为 516 项 TS、9 项 Python、完整类型与构建，图库搜索默认相关性筛选及展开的真实模型窗口验收 10 条通过（见 `docs/reviews/2026-10-08-gallery-search-relevance.md`）；前批图库快用 10 组、导航 59 组、大图 20 组隔离真实窗口检查通过，见 `docs/reviews/2026-10-08-gallery-quick-use.md`。真实模型工作台证据保留在前批记录。图库命名与探索切换见 `docs/reviews/2026-10-08-gallery-names-and-explore-transitions.md`，按钮反馈见 `docs/reviews/2026-10-08-interaction-motion.md`。导入和查看信息不自动启动模型，外部原文件保留；任务页使用轻量摘要。导入/下载/补图/文件夹/找图/原图复制状态为会话级，原有批量识别沿用持久任务。
 
 0.1.2 安装包、哈希及验证记录见 `docs/releases/0.1.2.md`。旧版 C 盘原图可原位读取；存储迁移先备份、校验复制、事务改路径，保留原件，不再覆盖同名冲突或删除旧目录。给朋友及其智能体的步骤见 `docs/operations/UPGRADE_AND_STORAGE_MIGRATION.md`。源码已接通自然语言筛图和多站点探索，旧安装包尚不包含；EmbeddingGemma2 环境与权重也未纳入发布包。
 

@@ -9,6 +9,9 @@ import { parseImageTargets, type ResolvedImage } from "./image-output-service.js
 import type { SemanticClient, SemanticVectorStore } from "./semantic-client.js";
 
 const MAX_IMAGES=1000, MAX_GALLERY_IMAGES=10000, MAX_ENTRIES=20000;
+// EmbeddingGemma 2 cosine scores, not calibrated probabilities. Keep this model-specific
+// display heuristic reversible without encoding the images again.
+export const GALLERY_SEARCH_MIN_SIMILARITY=0.65;
 interface Entry { asset?: WorkAssetRecord; item: WorkbenchItem; path: string; hash?: string; assessment?: VisionAssessment; assessmentHash?: string; assessmentModel?: string }
 interface Session { owner: number; state: WorkbenchSnapshot; root?: string; entries: Entry[]; cancelled: boolean; touched: number }
 export interface WorkbenchVision {
@@ -61,16 +64,20 @@ export class ImageWorkbenchService {
     void this.#scanGallery(s,filters,description);
     return this.galleryResults(owner,s.state.id,0);
   }
-  galleryResults(owner: number, id: unknown, offset: unknown=0): GallerySearchSnapshot {
+  galleryResults(owner: number, id: unknown, offset: unknown=0, relevance: unknown="relevant"): GallerySearchSnapshot {
     if(typeof offset!=="number"||!Number.isSafeInteger(offset)||offset<0||offset>MAX_GALLERY_IMAGES)throw new Error("分页请求无效");
+    if(relevance!=="relevant"&&relevance!=="all")throw new Error("搜索结果范围无效");
     const s=this.#owned(owner,id);if(!s.state.galleryQuery)throw new Error("这不是图库画面搜索，请重新找图");
-    const ready=s.entries.filter(e=>e.item.status==="ready"&&e.item.score!==undefined&&e.asset);
+    const ready=s.entries.filter(e=>e.item.status==="ready"&&Number.isFinite(e.item.score)&&e.asset);
     ready.sort((a,b)=>b.item.score!-a.item.score!||a.item.id.localeCompare(b.item.id));
     const best=new Map<string,Entry>();
     for(const entry of ready)if(!best.has(entry.asset!.workId))best.set(entry.asset!.workId,entry);
     const eligible=this.database.matchingWorkIds([...best.keys()],s.state.galleryQuery);
-    const entries=[...best.values()].filter(entry=>eligible.has(entry.asset!.workId)),page=entries.slice(offset,offset+60);
-    const matchingPages=ready.filter(entry=>eligible.has(entry.asset!.workId)).length;
+    const available=[...best.values()].filter(entry=>eligible.has(entry.asset!.workId));
+    const accepts=(entry:Entry)=>relevance==="all"||entry.item.score!>=GALLERY_SEARCH_MIN_SIMILARITY;
+    const entries=available.filter(accepts),page=entries.slice(offset,offset+60);
+    const eligiblePages=ready.filter(entry=>eligible.has(entry.asset!.workId));
+    const matchingPages=eligiblePages.filter(accepts).length;
     const records=new Map(this.database.queryWorkIds(page.map(e=>e.asset!.workId)).map(work=>[work.id,work]));
     const items=page.flatMap(entry=>{
       const work=records.get(entry.asset!.workId);if(!work)return [];
@@ -78,7 +85,8 @@ export class ImageWorkbenchService {
       return asset?[{...work,coverAsset:asset,matchedPage:asset.pageIndex}]:[];
     });
     return {progress:structuredClone({...s.state,items:[],hasMore:false,matched:matchingPages,unanalysed:s.entries.filter(e=>e.item.status==="pending").length}),
-      result:{items,total:entries.length,totalPages:matchingPages,offset,limit:60,hasMore:offset+60<entries.length}};
+      result:{items,total:entries.length,totalPages:matchingPages,offset,limit:60,hasMore:offset+60<entries.length},
+      relevance:{mode:relevance,minimumScore:GALLERY_SEARCH_MIN_SIMILARITY,hiddenWorks:available.length-entries.length,hiddenPages:eligiblePages.length-matchingPages}};
   }
   currentGallery(owner: number): GallerySearchSnapshot | null {
     this.#prune();const s=[...this.#sessions.values()].reverse().find(s=>s.owner===owner&&s.state.galleryQuery);

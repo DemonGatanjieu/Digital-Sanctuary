@@ -25,11 +25,16 @@ export function GallerySearchBar({search,query,onQueryChange}:{search:GalleryPic
       {(description?Boolean(search.draft||p||search.error):Boolean(query.search))&&<Button variant="ghost" disabled={search.pending} onClick={clear}>清除</Button>}
     </form>
     {description&&<div className="gallery-search-feedback" aria-live="polite">
-      {!p&&!search.pending&&!search.error&&<p>直接用中文找图。首次自动建立本地索引，之后复用；图片不会移动或修改。</p>}
+      {!p&&!search.pending&&!search.error&&<p>直接用中文找图，默认只显示较相关的结果。首次自动建立本地索引，之后复用。</p>}
       {search.pending&&!p&&<p role="status">正在准备搜索…</p>}
       {p&&<>
         <p role="status">{p.phase==="scanning"?`正在读取图库图片 · 已找到 ${p.total} 张`:p.phase==="analyzing"?p.processed?`正在建立或复用索引 · ${p.processed} / ${p.total} 张`:`正在准备找图模型 · 首次加载较慢，请稍候`:p.phase==="cancelled"?`已停止 · 保留 ${p.processed} 张已处理图片的索引和结果`:p.phase==="failed"?"这次找图没有完成":p.total===0?"当前筛选范围没有可搜索的图片":`已搜索 ${p.processed} 张图片 · 按画面相似程度排列`}{p.failed?` · ${p.failed} 张读取失败`:""}</p>
         {search.running&&<Button size="small" variant="ghost" disabled={search.pending||p.cancelRequested} onClick={()=>void search.cancel()}>{p.cancelRequested?"正在停止…":"停止找图"}</Button>}
+        {!stale&&search.snapshot&&(search.snapshot.relevance.hiddenWorks>0||search.relevance==="all")&&<div className="gallery-search-relevance" aria-label="搜索结果范围">
+          <span>{search.relevance==="all"?"已显示全部结果，包含相关性较低的图片":`已收起 ${search.snapshot.relevance.hiddenWorks} 个相关性较低的作品`}</span>
+          <Button size="small" variant="ghost" disabled={search.pending} aria-label={search.relevance==="all"?"只看较相关结果":"显示更多搜索结果"}
+            onClick={()=>void search.setRelevance(search.relevance==="all"?"relevant":"all")}>{search.relevance==="all"?"只看较相关结果":"显示更多"}</Button>
+        </div>}
         {p.query&&search.draft.trim()!==p.query.text&&<p>当前结果来自“{p.query.text}”，输入新描述后点“找图”。</p>}
         {stale&&<p role="status">筛选范围已变化，旧结果已收起。{search.running?"请先停止，再按新范围找图。":"点“找图”搜索当前范围。"}</p>}
         {p.warnings.map((warning,index)=><p key={index}>{warning}</p>)}

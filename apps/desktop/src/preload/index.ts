@@ -38,7 +38,7 @@ import type {
   WorkQueryResult,
   WorkRecord,
   WorkInformation,
-  GallerySearchSnapshot, ImageTarget, ImageExportBatch, WorkbenchSnapshot, WorkbenchSource, WorkbenchQuery, SemanticAvailability, ImageTaskSummary,
+  GallerySearchSnapshot, GallerySearchRelevance, ImageTarget, ImageExportBatch, WorkbenchSnapshot, WorkbenchSource, WorkbenchQuery, SemanticAvailability, ImageTaskSummary,
   WorkReadingProgress,
   WorkDeletionPreview,
   WorkDeletionResult,
@@ -178,7 +178,7 @@ export interface SanctuaryApi {
   chooseGalleryBanner(): Promise<string | null>;
   resetGalleryBanner(): Promise<null>;
   searchGalleryPictures(text: string, query: WorkQuery): Promise<GallerySearchSnapshot>;
-  galleryPictureResults(id: string, offset?: number): Promise<GallerySearchSnapshot>;
+  galleryPictureResults(id: string, offset?: number, relevance?: GallerySearchRelevance): Promise<GallerySearchSnapshot>;
   currentGalleryPictureSearch(): Promise<GallerySearchSnapshot | null>;
   chooseWorkbenchFolder(recursive: boolean): Promise<WorkbenchSnapshot | null>;
   chooseWorkbenchLibrary(scope: AnalysisScope): Promise<WorkbenchSnapshot>;
@@ -345,7 +345,7 @@ const api: SanctuaryApi = {
   chooseGalleryBanner: () => ipcRenderer.invoke("gallery:banner-choose"),
   resetGalleryBanner: () => ipcRenderer.invoke("gallery:banner-reset"),
   searchGalleryPictures: (text, query) => ipcRenderer.invoke("gallery:search-pictures",text,query),
-  galleryPictureResults: (id, offset=0) => ipcRenderer.invoke("gallery:picture-results",id,offset),
+  galleryPictureResults: (id, offset=0, relevance="relevant") => ipcRenderer.invoke("gallery:picture-results",id,offset,relevance),
   currentGalleryPictureSearch: () => ipcRenderer.invoke("gallery:current-picture-search"),
   chooseWorkbenchFolder: (recursive) => ipcRenderer.invoke("workbench:folder", recursive),
   chooseWorkbenchLibrary: (scope) => ipcRenderer.invoke("workbench:library", scope),
