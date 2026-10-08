@@ -549,6 +549,39 @@ try {
       assert.equal(await mainInspector.evaluate(visibleNativeView), true, "an expired show response hid the current exploration view");
       assert.equal(await native.evaluate("document.hasFocus()"), true, "an expired show response interrupted restored native focus");
       checks.push({ name: "native-expired-show-response-preserves-newer-show" });
+      const timeOrigin = await native.evaluate("globalThis.__continuityMarker='same-explore-document';performance.timeOrigin");
+      await mainInspector.evaluate(`(() => {
+        const ipc=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').ipcMain;
+        const state=globalThis.__exploreTransitions={show:0,hide:0,bounds:0};
+        for(const [channel,key] of [['explore:show','show'],['explore:hide','hide'],['explore:set-bounds','bounds']]) {
+          const original=ipc._invokeHandlers.get(channel);ipc.removeHandler(channel);
+          ipc.handle(channel,(...args)=>{state[key]++;return original(...args)});
+        } return true;
+      })()`);
+      for (const destination of ['home','gallery','inspiration','settings']) {
+        await click('[data-nav="'+destination+'"]'); await waitFor(`!${visibleNativeView}`,mainInspector);
+        const before=await cdp.evaluate("document.querySelector('.sidebar').getBoundingClientRect().right");
+        await mainInspector.evaluate("Object.assign(__exploreTransitions,{show:0,hide:0,bounds:0});true");
+        const frames=await cdp.evaluate(`(async()=>{
+          document.querySelector('[data-nav="explore"]').click();
+          const frames=[];
+          for(let i=0;i<8;i++) {await new Promise(requestAnimationFrame);
+            const surface=document.querySelector('.explore-surface'),r=surface.getBoundingClientRect();
+            frames.push({x:r.x,y:r.y,transform:getComputedStyle(document.querySelector('.explore-page')).transform});
+          } return frames;
+        })()`);
+        assert.ok(frames.every(frame=>Math.abs(frame.x-before)<.1&&frame.transform==='none'),'exploration changed sidebar width or animated native geometry');
+        assert.ok(frames.every(frame=>Math.abs(frame.y-frames[0].y)<.1),'exploration surface drifted after its first frame');
+        await waitFor(visibleNativeView,mainInspector);
+        const calls=await mainInspector.evaluate('({...__exploreTransitions})');
+        assert.equal(calls.show,1);assert.equal(calls.hide,0);assert.ok(calls.bounds<=2,JSON.stringify(calls));
+        assert.equal(await native.evaluate("globalThis.__continuityMarker==='same-explore-document'&&performance.timeOrigin==="+timeOrigin),true,'returning recreated or reloaded exploration');
+      }
+      const scrollbar=await cdp.evaluate("(()=>{const s=getComputedStyle(document.querySelector('.sidebar'));return {width:s.scrollbarWidth,color:s.scrollbarColor}})()");
+      assert.equal(scrollbar.width,'thin');assert.match(scrollbar.color,/rgba\(0,\s*0,\s*0,\s*0\)/);
+      checks.push({name:'four-route-explore-return-keeps-sidebar-and-first-frame-geometry-document-and-bounded-ipc',scrollbar});
+      await cdp.evaluate("window.sanctuary.focusExplore()");
+      await waitFor("document.hasFocus()",native);
       await mainInspector.sendHostKey(nativeContents.id, "K", ["control"]);
       await fill('.quick-actions-search', '任务与进度');
       await key('Enter', 'Enter');
@@ -671,6 +704,7 @@ try {
         })()`);
         await waitFor(`Math.abs(innerWidth-${width/zoom})<3`);
         await cdp.evaluate("(async()=> {await Promise.allSettled(document.querySelector('.app-shell').getAnimations().map(animation=>animation.finished));await new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)));})()");
+        await mainInspector.evaluate("Object.assign(__exploreTransitions,{show:0,hide:0,bounds:0});true");
         await click('.explore-protection-trigger');
         await waitFor("Boolean(document.querySelector('.protection-rule-row input:not(:disabled)'))");
         const narrow=await cdp.evaluate("innerWidth<=1100");
@@ -686,6 +720,10 @@ try {
         await waitFor(visibleNativeView,mainInspector);
         const rect=await cdp.evaluate("(() => {const r=document.querySelector('.explore-surface').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()");
         await waitFor(`(() => {const w=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').BrowserWindow.getAllWindows()[0];const r=w.contentView.children.find(view=>view.webContents?.id===${nativeContents.id}).getBounds();return ['x','y','width','height'].every(field=>Math.abs(r[field]-${JSON.stringify(rect)}[field]*${zoom})<=2);})()`,mainInspector);
+        if(!narrow) {
+          const calls=await mainInspector.evaluate('({...__exploreTransitions})');
+          assert.equal(calls.show,0,'wide protection panel recreated the native show lifecycle');assert.equal(calls.hide,0,'wide protection panel flickered the native view');
+        }
       }
       checks.push({name:'real-window-and-100-125-150-percent-ui-zoom-keep-native-view-outside-controls'});
       await mainInspector.evaluate(`(() => {

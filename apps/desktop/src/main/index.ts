@@ -1845,6 +1845,7 @@ function ensureExploreView(): WebContentsView {
     }
   });
   exploreView = view;
+  view.setBackgroundColor("#ffffff");
   mainWindow.contentView.addChildView(view);
   view.setVisible(false);
   if (exploreBounds) view.setBounds(exploreBounds);

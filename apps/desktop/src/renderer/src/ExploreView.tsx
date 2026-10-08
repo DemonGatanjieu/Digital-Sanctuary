@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ExploreBounds, ExploreCommand, ExploreState } from "../../preload/index";
 import { AppNotice } from "./AppNotice";
 
@@ -76,6 +76,9 @@ export function ExploreView({
   const surfaceRef = useRef<HTMLDivElement>(null);
   const focusOnShowRef = useRef(focusOnShow);
   const focusRestoredRef = useRef(onFocusRestored);
+  const visibilityRef = useRef({ isDrawerOpen, isModalOpen, protectionOpen });
+  visibilityRef.current = { isDrawerOpen, isModalOpen, protectionOpen };
+  const syncBoundsRef = useRef<(() => void) | null>(null);
   focusOnShowRef.current = focusOnShow;
   focusRestoredRef.current = onFocusRestored;
   const [passwordSetupOpened, setPasswordSetupOpened] = useState(false);
@@ -83,11 +86,13 @@ export function ExploreView({
   const protectedBrowsingReady = state.protectionStatus === "ready";
   const contentAvailable = protectedBrowsingReady || state.protectionStatus === "bypassed";
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const surface = surfaceRef.current;
     if (!surface) return;
     let active = true;
     let shown = false;
+    let visibilityVersion = 0;
+    let lastBounds: ExploreBounds | null = null;
     const unsubscribe = window.sanctuary.onExploreState(onStateChange);
 
     const measure = (): ExploreBounds | null => {
@@ -97,9 +102,10 @@ export function ExploreView({
     };
 
     const syncBounds = () => {
-      if (isModalOpen || (isDrawerOpen && window.innerWidth <= 1100)) {
+      const policy = visibilityRef.current;
+      if (policy.isModalOpen || (policy.isDrawerOpen && window.innerWidth <= 1100)) {
         if (shown) {
-          shown = false;
+          shown = false; visibilityVersion += 1; lastBounds = null;
           void window.sanctuary.hideExplore();
         }
         return;
@@ -107,42 +113,55 @@ export function ExploreView({
       const bounds = measure();
       if (!bounds || bounds.width < 100) {
         if (shown) {
-          shown = false;
+          shown = false; visibilityVersion += 1; lastBounds = null;
           void window.sanctuary.hideExplore();
         }
         return;
       }
       if (!shown) {
         shown = true;
+        lastBounds = bounds;
+        const request = ++visibilityVersion;
         void window.sanctuary.showExplore(bounds)
           .then((nextState) => {
-            if (active) {
+            if (active && shown && request === visibilityVersion) {
               onStateChange(nextState);
-              if (!protectionOpen && focusOnShowRef.current) {
+              if (!visibilityRef.current.protectionOpen && focusOnShowRef.current) {
                 focusOnShowRef.current = false;
                 void window.sanctuary.focusExplore().then(() => focusRestoredRef.current?.()).catch(onError);
               }
             }
           })
-          .catch(onError);
+          .catch((cause) => { if (active && request === visibilityVersion) { shown = false; lastBounds = null; onError(cause); } });
       } else {
-        void window.sanctuary.setExploreBounds(bounds).catch(onError);
+        if (!lastBounds || ["x", "y", "width", "height"].some((key) => bounds[key as keyof ExploreBounds] !== lastBounds![key as keyof ExploreBounds])) {
+          lastBounds = bounds;
+          void window.sanctuary.setExploreBounds(bounds).catch(onError);
+        }
+        if (!policy.protectionOpen && focusOnShowRef.current) {
+          focusOnShowRef.current = false;
+          void window.sanctuary.focusExplore().then(() => focusRestoredRef.current?.()).catch(onError);
+        }
       }
     };
 
     const observer = new ResizeObserver(syncBounds);
+    syncBoundsRef.current = syncBounds;
     observer.observe(surface);
     window.addEventListener("resize", syncBounds);
     syncBounds();
 
     return () => {
       active = false;
+      syncBoundsRef.current = null;
       observer.disconnect();
       window.removeEventListener("resize", syncBounds);
       unsubscribe();
       void window.sanctuary.hideExplore();
     };
-  }, [isDrawerOpen, isModalOpen, protectionOpen, onError, onStateChange]);
+  }, [onError, onStateChange]);
+
+  useLayoutEffect(() => { syncBoundsRef.current?.(); }, [isDrawerOpen, isModalOpen, protectionOpen, focusOnShow]);
 
   useEffect(() => {
     if (!protectionOpen) return;
@@ -174,7 +193,7 @@ export function ExploreView({
   }
 
   return (
-    <section className="explore-page animate-fade-in">
+    <section className="explore-page">
       <div className="browser-toolbar">
         <button title="后退" disabled={!contentAvailable || !state.canGoBack} onClick={() => void runCommand("back")}>←</button>
         <button title="前进" disabled={!contentAvailable || !state.canGoForward} onClick={() => void runCommand("forward")}>→</button>

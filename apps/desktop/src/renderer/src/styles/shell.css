@@ -7,11 +7,6 @@
   grid-template-columns: 250px 1fr;
   height: 100vh;
   background: var(--ds-bg-app);
-  transition: grid-template-columns var(--ds-transition-normal);
-}
-
-.app-shell.exploring {
-  grid-template-columns: 210px 1fr;
 }
 
 .sidebar {
@@ -25,10 +20,8 @@
   user-select: none;
   min-height: 0;
   overflow-y: auto;
-}
-
-.app-shell.exploring .sidebar {
-  padding: 20px 14px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ds-border-light) transparent;
 }
 
 /* Brand Header & User Avatar */
