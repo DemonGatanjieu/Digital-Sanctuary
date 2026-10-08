@@ -143,6 +143,43 @@ try {
     }
 
     await waitFor("document.querySelectorAll('.home-task-card').length === 4");
+    // Production delegated feedback must work with nested labels and keyboard-style clicks,
+    // cancel repeats, preserve layout and respect preferences even for body portals.
+    for (const preference of [
+      { profile: 'balanced', reduced: false, system: false, duration: 150 },
+      { profile: 'quality', reduced: false, system: false, duration: 190 },
+      { profile: 'efficient', reduced: false, system: false, duration: 0 },
+      { profile: 'balanced', reduced: true, system: false, duration: 0 },
+      { profile: 'balanced', reduced: false, system: true, duration: 0 }
+    ]) {
+      await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: preference.system ? 'reduce' : 'no-preference' }] });
+      const result = await cdp.evaluate(`(() => {
+        const preference=${JSON.stringify(preference)}, shell=document.querySelector('.app-shell');
+        for(const element of [shell,document.body]) {
+          element.dataset.displayProfile=preference.profile; element.dataset.reducedMotion=String(preference.reduced);
+        }
+        const button=document.querySelector('.sidebar [data-nav="home"]'), other=document.querySelector('[data-home-task="gallery"]');
+        const before={width:button.offsetWidth,top:other.offsetTop};
+        button.querySelector('strong').click(); button.click();
+        const animations=button.getAnimations().filter(animation=>animation.effect.getKeyframes().some(frame=>'scale' in frame));
+        return { count:animations.length,durations:animations.map(animation=>animation.effect.getTiming().duration),
+          unchanged:button.offsetWidth===before.width&&other.offsetTop===before.top,
+          current:button.getAttribute('aria-current') };
+      })()`);
+      assert.equal(result.count, preference.duration ? 1 : 0, JSON.stringify(preference));
+      assert.deepEqual(result.durations, preference.duration ? [preference.duration] : []);
+      assert.equal(result.unchanged, true); assert.equal(result.current, 'page');
+      if (!preference.duration) {
+        await click('.sidebar-quick-actions');
+        await waitFor("Boolean(document.querySelector('.quick-actions-dialog'))");
+        assert.equal(await cdp.evaluate("document.querySelector('.dialog-overlay').getAnimations().length"), 0, 'portal overlay ignored motion preference');
+        assert.equal(await cdp.evaluate("parseFloat(getComputedStyle(document.querySelector('.quick-actions-dialog')).transitionDuration)"), 0);
+        await key('Escape','Escape'); await waitFor("!document.querySelector('.quick-actions-dialog')");
+      }
+    }
+    await cdp.send('Emulation.setEmulatedMedia', { features: [] });
+    await cdp.evaluate("for (const element of [document.querySelector('.app-shell'),document.body]) { element.dataset.displayProfile='balanced'; element.dataset.reducedMotion='false'; }");
+    checks.push({name:'finite-button-feedback-repeat-layout-and-portal-motion-preferences'});
     assert.deepEqual(await cdp.evaluate("Array.from(document.querySelectorAll('.sidebar nav button')).map(el => el.dataset.nav)"),
       ["home", "gallery", "explore", "inspiration", "settings"]);
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });

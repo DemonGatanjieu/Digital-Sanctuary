@@ -29,6 +29,7 @@ import { useLocalImport } from "./useLocalImport";
 import { useAnalysisTasks } from "./useAnalysisTasks";
 import { activeTaskCount, INITIAL_THUMBNAIL_ACTIVITY, type ThumbnailActivity } from "./task-center-model";
 import { AppNotice } from "./AppNotice";
+import { animateButtonClick } from "./button-feedback";
 import { applyWorkPreset, clearWorkCollectionFilters, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
 
 const SettingsView = lazy(() => import("./SettingsView").then((module) => ({ default: module.SettingsView })));
@@ -72,6 +73,11 @@ export function App() {
   const [collectionEditor, setCollectionEditor] = useState<CollectionRecord | "new" | null>(null);
   const [collectionSaving, setCollectionSaving] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreferences>(DEFAULT_APPEARANCE);
+  useLayoutEffect(() => {
+    document.body.dataset.displayProfile = appearance.displayProfile;
+    document.body.dataset.reducedMotion = String(appearance.reducedMotion);
+    return () => { delete document.body.dataset.displayProfile; delete document.body.dataset.reducedMotion; };
+  }, [appearance.displayProfile, appearance.reducedMotion]);
   const [libraryPreferences, setLibraryPreferences] = useState<LibraryPreferences>(DEFAULT_LIBRARY_PREFERENCES);
   const [storageLocation, setStorageLocation] = useState<StorageLocationInfo | null>(null);
   const [customElementGroups, setCustomElementGroups] = useState<CustomElementGroup[]>([]);
@@ -563,6 +569,7 @@ export function App() {
   return (
     <div
       className={`app-shell ${activeView === "explore" ? "exploring" : ""}`}
+      onClickCapture={(event) => animateButtonClick(event.target)}
       data-display-profile={appearance.displayProfile}
       data-reduced-motion={appearance.reducedMotion ? "true" : "false"}
       data-ambient-artwork={appearance.ambientArtwork ? "true" : "false"}

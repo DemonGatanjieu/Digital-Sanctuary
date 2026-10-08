@@ -741,15 +741,15 @@ export function PhotobookFlipSpread({
 
             {/* 2. Silky Dual-Spread Horizontal Slide Track (Zero Premature Left Image Exposure) */}
             {turnEffect === "slide" && (
-              <div
-                className={`photobook-slide-overlay slide-${spreadState.direction}`}
-                onAnimationEnd={(e) => {
-                  if (e.target === e.currentTarget) {
-                    finishFlip(spreadState.toSpread);
-                  }
-                }}
-              >
-                <div className="photobook-slide-track">
+              <div className={`photobook-slide-overlay slide-${spreadState.direction}`}>
+                <div
+                  className="photobook-slide-track"
+                  onAnimationEnd={(e) => {
+                    if (e.target === e.currentTarget) {
+                      finishFlip(spreadState.toSpread);
+                    }
+                  }}
+                >
                   {spreadState.direction === "forward" ? (
                     <>
                       {/* Outgoing Spread (fromSpread) */}
@@ -909,15 +909,15 @@ export function PhotobookFlipSpread({
 
             {/* 3. Serene Crossfade Dissolve */}
             {turnEffect === "fade" && (
-              <div
-                className="photobook-fade-overlay"
-                onAnimationEnd={(e) => {
-                  if (e.target === e.currentTarget) {
-                    finishFlip(spreadState.toSpread);
-                  }
-                }}
-              >
-                <div className="fade-deck-spread">
+              <div className="photobook-fade-overlay">
+                <div
+                  className="fade-deck-spread"
+                  onAnimationEnd={(e) => {
+                    if (e.target === e.currentTarget) {
+                      finishFlip(spreadState.toSpread);
+                    }
+                  }}
+                >
                   <section className="photobook-page page-verso">
                     <PhotobookSpreadPageContent
                       side="left"
@@ -957,15 +957,15 @@ export function PhotobookFlipSpread({
 
             {/* 4. Tactile Deck Stack Slide & Tuck */}
             {turnEffect === "deck-stack" && (
-              <div
-                className={`photobook-deck-stack-overlay deck-${spreadState.direction}`}
-                onAnimationEnd={(e) => {
-                  if (e.target === e.currentTarget) {
-                    finishFlip(spreadState.toSpread);
-                  }
-                }}
-              >
-                <div className="deck-stack-outgoing-spread">
+              <div className={`photobook-deck-stack-overlay deck-${spreadState.direction}`}>
+                <div
+                  className="deck-stack-outgoing-spread"
+                  onAnimationEnd={(e) => {
+                    if (e.target === e.currentTarget) {
+                      finishFlip(spreadState.toSpread);
+                    }
+                  }}
+                >
                   <section className="photobook-page page-verso">
                     <PhotobookSpreadPageContent
                       side="left"

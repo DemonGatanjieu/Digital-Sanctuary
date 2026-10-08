@@ -28,6 +28,8 @@ export async function showElectronTestWindow(inspector, timeoutMs = 20_000) {
   while (Date.now() - started < timeoutMs) {
     const shown = await inspector.evaluate(`(() => {
       const electron=process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron');
+      // The Node inspector can answer before Electron has initialized its exports.
+      if (!electron.BrowserWindow) return false;
       const window=electron.BrowserWindow.getAllWindows()[0];
       if (!window || window.isDestroyed()) return false;
       window.show(); window.focus();

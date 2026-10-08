@@ -142,6 +142,39 @@ try {
         await assertBook(settled);
       });
     }
+    if (width === 1280) for (const preference of [
+      { profile: 'balanced', reduced: true, system: false },
+      { profile: 'efficient', reduced: false, system: false },
+      { profile: 'balanced', reduced: false, system: true }
+    ]) {
+      await check(`photobook-motion-policy-${preference.profile}-${preference.reduced}-${preference.system}`, async () => {
+        await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: preference.system ? 'reduce' : 'no-preference' }] });
+        await cdp.evaluate(`for(const element of [document.querySelector('.app-shell'),document.body]) {
+          element.dataset.displayProfile=${JSON.stringify(preference.profile)}; element.dataset.reducedMotion=${JSON.stringify(String(preference.reduced))};
+        }`);
+        for (const label of ['3D 翻页', '平移动画', '柔光渐隐', '层叠抽拉']) {
+          await mode('collection', 'flip'); await clickText('.photobook-effect-switcher button', label);
+          await goToBookPage(1);
+          const before = await bookState();
+          const result = await cdp.evaluate(`(async()=>{
+            const started=performance.now(); document.querySelector('.photobook-double-spread > .page-recto').click();
+            return new Promise(resolve => {
+              const timeout=setTimeout(()=>resolve({settled:false}),350);
+              const frame=()=>{
+                if(Number(document.querySelector('.photobook-stage-deck').dataset.settledSpread)===${before.spread + 1}
+                    && !document.querySelector('.photobook-double-spread.is-animating')) {
+                  clearTimeout(timeout); resolve({settled:true,elapsed:performance.now()-started});
+                } else requestAnimationFrame(frame);
+              }; requestAnimationFrame(frame);
+            });
+          })()`);
+          assert.equal(result.settled, true, `${label} relied on its 450–650 ms fallback timer under reduced motion`);
+          assert.equal((await bookState()).spread, before.spread + 1);
+        }
+      });
+    }
+    await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+    await cdp.evaluate("for(const element of [document.querySelector('.app-shell'),document.body]) { element.dataset.displayProfile='balanced'; element.dataset.reducedMotion='false'; }");
     await check("collection-lightbox-and-picker-remain-closed-on-return", async () => {
       await mode("collection", "grid");
       await click(".collection-detail-grid .art-preview-button");

@@ -1,0 +1,45 @@
+/* Finite control feedback. Artwork surfaces and the native web view keep their geometry. */
+.ui-button {
+  transition: color var(--ds-transition-fast), background-color var(--ds-transition-fast),
+    border-color var(--ds-transition-fast), box-shadow var(--ds-transition-fast),
+    opacity var(--ds-transition-fast), transform var(--ds-transition-fast), scale 120ms ease-out;
+}
+
+:is(.ui-button, .home-task-card, .nav-item, .sidebar-quick-actions, .sidebar-task-entry,
+  .settings-disclosure-toggle, .workspace-navigation button, .settings-navigation button):active:not(:disabled) {
+  scale: .975;
+}
+
+.home-task-card { transition: border-color var(--ds-transition-fast), box-shadow var(--ds-transition-fast), scale 120ms ease-out; }
+.home-task-arrow { transition: translate 150ms ease-out; }
+.home-task-card:is(:hover, :focus-visible) .home-task-arrow { translate: 3px 0; }
+.home-task-card:is(:hover, :focus-visible) .home-task-symbol { background: var(--ds-primary-border); }
+.home-task-symbol { transition: background-color var(--ds-transition-fast); }
+.settings-disclosure-content:not([hidden]) { animation: ds-reveal 160ms ease-out; }
+.dialog-overlay { animation: ds-reveal 140ms ease-out; }
+@keyframes ds-reveal { from { opacity: .5; } to { opacity: 1; } }
+
+/* Body preferences also reach portal dialogs. Keep feedback visible through color and focus. */
+body:is([data-reduced-motion="true"], [data-display-profile="efficient"]) *,
+body:is([data-reduced-motion="true"], [data-display-profile="efficient"]) *::before,
+body:is([data-reduced-motion="true"], [data-display-profile="efficient"]) *::after {
+  /* Keep animationend for the existing photobook state machine. */
+  animation-duration: .01ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+body:is([data-reduced-motion="true"], [data-display-profile="efficient"]) :is(.ui-button, .home-task-card, .nav-item, .sidebar-quick-actions, .sidebar-task-entry, .settings-disclosure-toggle, .workspace-navigation button, .settings-navigation button) {
+  scale: none !important;
+  transform: none !important;
+}
+body:is([data-reduced-motion="true"], [data-display-profile="efficient"]) .home-task-arrow { translate: none; }
+body:is([data-reduced-motion="true"], [data-display-profile="efficient"]) :is(.dialog-overlay, .dialog-surface, .settings-disclosure-content) { animation: none !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; animation-iteration-count: 1 !important; transition: none !important; scroll-behavior: auto !important; }
+  :is(.ui-button, .home-task-card, .nav-item, .sidebar-quick-actions, .sidebar-task-entry, .settings-disclosure-toggle, .workspace-navigation button, .settings-navigation button) { scale: none !important; transform: none !important; }
+  .home-task-arrow { translate: none; }
+  :is(.dialog-overlay, .dialog-surface, .settings-disclosure-content) { animation: none !important; }
+}
