@@ -1,6 +1,8 @@
 import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
 import { WorkInformationDrawer } from "./WorkInformationDrawer";
-import { ExportImagesButton } from "./ImageOutputActions";
+import { DragImageButton, ExportImagesButton } from "./ImageOutputActions";
+import { RenameWorkDialog } from "./RenameWorkDialog";
+import { GalleryBanner } from "./GalleryBanner";
 import { SavedWorkFilters } from "./SavedWorkFilters";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -57,6 +59,7 @@ export function WorkLibrary({
   onError: (error: unknown) => void;
 }) {
   const [selectedWork, setSelectedWork] = useState<WorkRecord | null>(null);
+  const [renamingWork, setRenamingWork] = useState<{ id: string; title: string } | null>(null);
   const [openingWorkId, setOpeningWorkId] = useState("");
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -216,21 +219,16 @@ export function WorkLibrary({
     });
   });
   const handleMutationError = useStableWorkCallback((error: unknown) => onError(error));
+  const handleRenameWork = useStableWorkCallback((work: WorkListItem) => setRenamingWork({ id: work.id, title: work.title }));
+  const handleCopyWork = useStableWorkCallback(async (work: WorkListItem) => {
+    if (!work.coverAsset) return;
+    await window.sanctuary.useImage({ workId: work.id, assetId: work.coverAsset.id }, "copy");
+    setNotice({ message: work.pageCount > 1 ? "封面图片已复制，可以粘贴使用。全部页面可在选择作品后复制原图。" : "图片已复制，可以粘贴使用。" });
+  });
 
   return (
     <>
-      {featuredWork?.coverAsset && !query.search && appearance.ambientArtwork && appearance.displayProfile !== "efficient" && (
-        <section className="work-ambient-hero">
-          <img className="work-ambient-backdrop" src={workImageUrl(featuredWork.coverAsset.thumbnailPath ?? featuredWork.coverAsset.path)} alt="" aria-hidden="true" />
-          <div className="work-ambient-copy">
-            <span>{activeCollection ? "相册精选" : preset === "recent" ? "最近浏览" : preset === "favorites" ? "喜欢的作品" : "作品精选"}</span>
-            <strong>{featuredWork.title}</strong>
-            <small>{featuredWork.artistName ?? "本地作品"} · {featuredWork.pageCount} 页</small>
-            <button type="button" onClick={() => void openWork(featuredWork)}>继续欣赏</button>
-          </div>
-          <img className="work-ambient-cover" src={workImageUrl(featuredWork.coverAsset.thumbnailPath ?? featuredWork.coverAsset.path)} alt="" />
-        </section>
-      )}
+      <GalleryBanner featured={featuredWork} appearance={appearance} searching={Boolean(query.search)} heading={activeCollection ? "相册精选" : preset === "recent" ? "最近浏览" : preset === "favorites" ? "喜欢的作品" : "作品精选"} onOpen={work => void openWork(work)} />
       <div className="work-preset-row">
         <SegmentedControl
           label="常用筛选"
@@ -257,6 +255,12 @@ export function WorkLibrary({
             onChange={(event) => onQueryChange({ ...query, search: event.target.value, offset: 0 })}
           />
         </label>
+        <select aria-label="保存方式" value={query.ownership ?? ""} onChange={event => {
+          const { ownership: _ownership, ...rest } = query;
+          onQueryChange({ ...rest, ...(event.target.value ? { ownership: event.target.value as NonNullable<WorkQuery["ownership"]> } : {}), offset: 0 });
+        }}>
+          <option value="">全部保存方式</option><option value="managed">图库保存</option><option value="external">外部引用</option>
+        </select>
         <select
           aria-label="作品类型"
           value={query.workType ?? ""}
@@ -343,7 +347,7 @@ export function WorkLibrary({
       )}
 
       <div className="work-result-note">
-        <span>{result.total} 个作品 · {result.totalPages} 页</span>
+        <span>{result.total} 个作品 · {result.totalPages} 页{query.ownership ? ` · ${query.ownership === "managed" ? "图库保存" : "外部引用"}` : ""}</span>
         {loading && <span className="work-querying">正在更新…</span>}
       </div>
 
@@ -369,10 +373,17 @@ export function WorkLibrary({
               onFavorite={handleFavoriteWork}
               onRemoveFromCollection={activeCollection ? handleRemoveFromCollection : null}
               onMutationError={handleMutationError}
+              onRename={handleRenameWork}
+              onCopy={handleCopyWork}
             />
           ))}
         </section>
       )}
+
+      {renamingWork && <RenameWorkDialog key={renamingWork.id} work={renamingWork} onClose={() => setRenamingWork(null)} onSaved={async title => {
+        setNotice({ message: `图库名称已改为《${title}》。` });
+        try { await onLibraryChanged(); } catch { throw new Error("名称已保存，列表刷新失败。请稍后重新进入图库查看。"); }
+      }} />}
 
       {result.hasMore && (
         <div className="work-load-more" ref={loadMoreRef}>
@@ -510,6 +521,8 @@ const WorkCard = memo(function WorkCard({
   onFavorite,
   onRemoveFromCollection,
   onAssign,
+  onRename,
+  onCopy,
   onMutationError
 }: {
   work: WorkListItem;
@@ -522,12 +535,14 @@ const WorkCard = memo(function WorkCard({
   onFavorite: (work: WorkListItem) => Promise<void>;
   onRemoveFromCollection: ((work: WorkListItem) => Promise<void>) | null;
   onAssign: (work: WorkListItem, collectionId: string) => Promise<void>;
+  onRename: (work: WorkListItem) => void;
+  onCopy: (work: WorkListItem) => Promise<void>;
   onMutationError: (error: unknown) => void;
 }) {
-  const [mutating, setMutating] = useState<"assign" | "favorite" | "remove" | null>(null);
+  const [mutating, setMutating] = useState<"assign" | "favorite" | "remove" | "copy" | null>(null);
   const mutationRef = useRef(false);
   const assigning = mutating === "assign";
-  async function mutate(action: "assign" | "favorite" | "remove", operation: () => Promise<void>) {
+  async function mutate(action: "assign" | "favorite" | "remove" | "copy", operation: () => Promise<void>) {
     if (mutationRef.current) return;
     mutationRef.current = true;
     setMutating(action);
@@ -558,8 +573,13 @@ const WorkCard = memo(function WorkCard({
         </button>
       )}
       <div className="work-card-copy">
-        <strong title={work.title}>{work.title}</strong>
-        <span title={work.artistName ?? "本地作品"}>{work.artistName ?? "本地作品"}</span>
+        <div className="work-card-title-row"><strong title={work.title}>{work.title}</strong>{!selecting && <Button size="small" variant="ghost" aria-label={`改名 ${work.title}`} onClick={() => onRename(work)}>改名</Button>}</div>
+        <div className="work-card-meta"><span title={work.artistName ?? "本地作品"}>{work.artistName ?? "本地作品"}</span>
+          <small className="work-ownership-label" title={work.ownership === "managed" ? "由图库保存和管理原图" : "引用原位置；移动或删除原文件会影响使用"}>{work.ownership === "managed" ? "图库保存" : "外部引用"}</small></div>
+        {!selecting && work.coverAsset?.mediaType === "image" && <div className="work-card-use-actions">
+          <Button size="small" variant="ghost" busy={mutating === "copy"} disabled={mutating !== null} onClick={() => void mutate("copy", () => onCopy(work))}>{work.pageCount > 1 ? "复制封面" : "复制图片"}</Button>
+          <DragImageButton target={{ workId: work.id, assetId: work.coverAsset.id }} label={work.pageCount > 1 ? "拖出封面" : "拖出图片"} disabled={mutating !== null} onError={onMutationError} />
+        </div>}
         <div className="work-card-foot">
           <time dateTime={work.savedAt}>{formatDate(work.savedAt)}</time>
           <select

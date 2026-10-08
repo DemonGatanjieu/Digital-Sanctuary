@@ -275,6 +275,7 @@ export interface SavedCollectionViewDraft {
 
 export interface WorkQuery {
   search?: string;
+  ownership?: WorkOwnership;
   workType?: WorkType;
   artistId?: string;
   collectionId?: string;

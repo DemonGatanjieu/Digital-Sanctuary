@@ -34,12 +34,12 @@ export function clearWorkCollectionFilters(query: WorkQuery): WorkQuery {
 }
 
 export function hasWorkFilters(query: WorkQuery): boolean {
-  return Boolean(query.search || query.workType || query.artistId || query.unattributed || query.collectionId || query.collectionIds?.length ||
+  return Boolean(query.ownership || query.search || query.workType || query.artistId || query.unattributed || query.collectionId || query.collectionIds?.length ||
     query.excludedCollectionIds?.length || query.favorite !== undefined || query.uncollected || query.viewedOnly);
 }
 
 export function workEmptyMessage(query: WorkQuery): { title: string; description: string } {
-  const scoped = Boolean(query.search || query.workType || query.artistId || query.unattributed || query.collectionId ||
+  const scoped = Boolean(query.ownership || query.search || query.workType || query.artistId || query.unattributed || query.collectionId ||
     query.collectionIds?.length || query.excludedCollectionIds?.length);
   const preset = getWorkPreset(query);
   if (scoped) return {

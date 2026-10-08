@@ -37,6 +37,18 @@ export function SingleImageActions({target,disabled=false}:{target:ImageTarget;d
     if(busy)return;setBusy(true);setNotice("");try{await window.sanctuary.useImage(target,action);if(alive.current)setNotice(action==="copy"?"图片已复制，可以粘贴使用":"已在文件夹中定位原图");}
     catch(e){if(alive.current)setNotice(message(e));}finally{if(alive.current)setBusy(false);}
   }
-  return <div className="image-output-actions"><Button size="small" disabled={disabled||busy} onClick={()=>void use("copy")}>复制图片</Button><Button size="small" disabled={disabled||busy} onClick={()=>void use("reveal")}>打开所在位置</Button>{notice&&<p role="status">{notice}</p>}</div>;
+  return <div className="image-output-actions"><Button size="small" disabled={disabled||busy} onClick={()=>void use("copy")}>复制图片</Button><DragImageButton target={target} disabled={disabled||busy} onError={cause=>setNotice(message(cause))}/><Button size="small" disabled={disabled||busy} onClick={()=>void use("reveal")}>打开所在位置</Button>{notice&&<p role="status">{notice}</p>}</div>;
+}
+export function DragImageButton({ target, disabled = false, label = "拖出图片", onError }: { target: ImageTarget; disabled?: boolean; label?: string; onError: (cause: unknown) => void }) {
+  const [copied, setCopied] = useState(false), alive = useRef(true), copying = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  useEffect(() => { if (copied) { const timer = setTimeout(() => setCopied(false), 2000); return () => clearTimeout(timer); } }, [copied]);
+  return <Button size="small" variant="ghost" className="image-drag-handle" disabled={disabled} draggable={!disabled}
+    aria-label={label}
+    title="按住拖到文件夹或支持接收文件的软件；原图保留在原位置。也可点击复制图片。"
+    onDragStart={event => { event.preventDefault(); if (!disabled) void window.sanctuary.dragImage(target).catch(onError); }}
+    onClick={() => { if (disabled || copying.current) return; copying.current = true; void window.sanctuary.useImage(target, "copy").then(() => { if (alive.current) setCopied(true); }).catch(onError).finally(() => { copying.current = false; }); }}>
+    <span aria-hidden="true">⠿ </span><span role={copied ? "status" : undefined}>{copied ? "已复制" : label}</span>
+  </Button>;
 }
 function message(e:unknown){return e instanceof Error?e.message:"图片操作失败，请重试";}

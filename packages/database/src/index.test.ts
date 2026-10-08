@@ -7,6 +7,26 @@ import { DatabaseSync } from "node:sqlite";
 import { LibraryDatabase } from "./index.js";
 
 describe("LibraryDatabase", () => {
+  it("filters ownership before counts and pagination and composes it with album/search/favorite", () => {
+    const database = new LibraryDatabase(":memory:");
+    try {
+      const external = database.importArtwork("E:/fixtures/external.png");
+      const album = database.createCollection("参考");
+      for (let pageIndex = 0; pageIndex < 2; pageIndex++) {
+        const page = database.importArtwork(`E:/fixtures/42_p${pageIndex}.png`);
+        database.saveArtworkSource(page.id, { platform: "pixiv", workId: "42", pageIndex, authorId: "7", authorName: "画师", title: "双页参考" });
+      }
+      database.addWorkToCollection("pixiv:42", album.id);
+      database.updateWorkFavorite(["pixiv:42"], true);
+      const managed = database.queryWorks({ ownership: "managed", collectionId: album.id, search: "参考", favorite: true, limit: 1 });
+      expect(managed.total).toBe(1); expect(managed.totalPages).toBe(2); expect(managed.items[0]!.id).toBe("pixiv:42");
+      const next = database.queryWorks({ ownership: "managed", limit: 1, offset: 1 });
+      expect(next.items).toEqual([]); expect(next.total).toBe(1); expect(next.totalPages).toBe(2);
+      expect(database.queryWorks({ ownership: "external" }).items.map(w => w.id)).toEqual([`local:${external.id}`]);
+      expect(database.queryWorks({ ownership: "external", collectionId: album.id }).total).toBe(0);
+      expect(database.queryWorks({}).total).toBe(2);
+    } finally { database.close(); }
+  });
   it("records schema version 7 and creates a portable SQLite backup", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-backup-"));
     const databasePath = join(directory, "library.db");

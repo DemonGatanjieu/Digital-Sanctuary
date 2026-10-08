@@ -127,6 +127,8 @@ import { registerLocalImportIpc } from "./local-import-ipc.js";
 import { ImageWorkbenchService } from "./image-workbench-service.js";
 import { ImageOutputService } from "./image-output-service.js";
 import { createImageOutputHost, registerImageWorkbenchIpc } from "./image-workbench-ipc.js";
+import { registerImageDragIpc } from "./image-drag-ipc.js";
+import { registerGalleryBannerIpc } from "./gallery-banner-ipc.js";
 import { SemanticClient, SemanticVectorStore } from "./semantic-client.js";
 import { registerWorkInformationIpc } from "./work-information-ipc.js";
 import { registerSavedWorkFilterIpc } from "./saved-work-filter-ipc.js";
@@ -682,6 +684,9 @@ function registerIpc(): void {
     rules: () => buildElementFilterRules(database!.listElementFilterSettings(), customElementGroups(), adaptiveThresholdOverrides())
   }, semantic, semanticVectors, localImporter);
   const output = new ImageOutputService((owner, targets) => imageWorkbench!.resolveImages(owner, targets), createImageOutputHost(() => mainWindow ?? null));
+  const dragIcon = nativeImage.createFromBitmap(Buffer.from([199, 132, 2, 255]), { width: 1, height: 1 }).resize({ width: 32, height: 32 });
+  registerImageDragIpc(ipcMain, output, () => mainWindow ?? null, dragIcon);
+  registerGalleryBannerIpc(ipcMain, database, () => mainWindow ?? null);
   registerImageWorkbenchIpc(ipcMain, imageWorkbench, output, semantic, async () => {
     const options = { title: "选择要找图的本地文件夹", properties: ["openDirectory"] as Array<"openDirectory"> };
     const selected = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);

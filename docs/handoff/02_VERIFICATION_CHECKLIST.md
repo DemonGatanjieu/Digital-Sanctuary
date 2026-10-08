@@ -12,6 +12,8 @@ npm.cmd run build
 
 ## 启动与窗口
 
+- 图库快用：运行 `npm.cmd run smoke:gallery-actions` 验证常驻改名、复制、拖放 IPC、横幅持久偏好、保存方式筛选、900px/1280px 布局与暗色文字对比度。该隔离烟测替换原生 `startDrag` 的系统接收边界；另手工把单页/封面拖到资源管理器和常用软件，确认原件保留，并检查不支持接收时的行为。
+
 - 发布安装包须运行 `npm.cmd run dist:win` 与 `npm.cmd run smoke:installer`；测试使用隔离库，覆盖早期双页作品/相册升级、同名冲突、复制迁移、备份、原件保留、收藏与重启。实际用户升级步骤见 `docs/operations/UPGRADE_AND_STORAGE_MIGRATION.md`。
 
 - 双击 `E:\PIxiv\启动纯净领域.cmd` 能启动构建版；失败时保留终端输出，不应无提示闪退。

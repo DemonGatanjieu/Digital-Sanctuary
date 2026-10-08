@@ -73,6 +73,21 @@ export class ImageOutputService {
     if (action === "copy") { await fingerprintImage(file.path); await this.host.copyImage(file.path); }
     else await this.host.reveal(file.path);
   }
+  async drag(owner: number, value: unknown, start: (path: string) => void): Promise<void> {
+    const targets = parseImageTargets([value]);
+    if (!("assetId" in targets[0]! || "itemId" in targets[0]!)) throw new Error("请先选择具体的一页图片");
+    const files = await this.resolveImages(owner, targets);
+    if (files.length !== 1) throw new Error("请先选择具体的一页图片");
+    try {
+      const info = await lstat(files[0]!.path);
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error("图片位置已变化，请重新选择");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new Error("找不到原图，请恢复原位置后重试");
+      if (error instanceof Error && /[\u4e00-\u9fff]/.test(error.message)) throw error;
+      throw new Error("无法读取原图，请检查文件访问权限");
+    }
+    start(files[0]!.path);
+  }
   async #run(s: Session) {
     for (let index = 0; index < s.files.length; index++) {
       const item = s.batch.items[index]!, file = s.files[index]!;

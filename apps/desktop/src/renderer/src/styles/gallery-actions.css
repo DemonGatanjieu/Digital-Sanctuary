@@ -1,0 +1,39 @@
+.work-card-title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.work-card-title-row > strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ds-text-heading); font-size: 14px; }
+.work-card-title-row > .ui-button { flex-shrink: 0; min-height: 36px; padding-inline: 8px; }
+.work-card-use-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.work-card-use-actions .ui-button { min-height: 36px; padding-inline: 8px; }
+.work-card-meta { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--ds-text-secondary); font-size: 11px; }
+.work-card-meta > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-ownership-label { flex-shrink: 0; color: var(--ds-text-secondary); font-size: 11px; }
+.image-drag-handle, .image-drag-handle:not(:disabled):hover { cursor: grab; }
+.image-drag-handle:active { cursor: grabbing; }
+.rename-work-dialog { width: min(440px, calc(100vw - 32px)); }
+.rename-work-dialog label { display: grid; gap: 8px; color: var(--ds-text-heading); }
+.rename-work-dialog input { width: 100%; min-height: 42px; padding: 8px 12px; color: var(--ds-text-heading); background: var(--ds-bg-card); border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); }
+.rename-work-dialog p { color: var(--ds-text-secondary); line-height: 1.7; }
+.rename-work-dialog [role="alert"] { color: var(--ds-danger-text); }
+.rename-work-dialog footer { display: flex; justify-content: end; gap: 8px; margin-top: 20px; }
+.gallery-banner-buttons, .gallery-banner-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gallery-banner-buttons { margin-top: 6px; }
+.gallery-banner-collapsed { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.gallery-banner-error { color: var(--ds-danger-text); }
+.work-ambient-hero::after { background: linear-gradient(90deg, color-mix(in srgb, var(--ds-bg-card) 94%, transparent), color-mix(in srgb, var(--ds-bg-card) 75%, transparent) 55%, transparent); }
+.gallery-banner-custom { grid-template-columns: minmax(0, 1fr); }
+.app-shell .gallery-banner-custom .work-ambient-backdrop { inset: 0; width: 100%; height: 100%; opacity: 1; filter: none; transform: none; }
+.gallery-banner-custom::after { background: linear-gradient(90deg, rgba(8, 15, 28, .90), rgba(8, 15, 28, .65) 55%, rgba(8, 15, 28, .15)); }
+.gallery-banner-custom .work-ambient-copy > strong, .gallery-banner-custom .work-ambient-copy > small { color: #fff; }
+.gallery-banner-custom .gallery-banner-actions .ui-button { color: #fff; background: rgba(8, 15, 28, .75); border-color: rgba(255, 255, 255, .5); }
+.work-library-controls { display: flex; flex-wrap: wrap; }
+.work-library-controls, .work-library-card { background: var(--ds-bg-card); }
+.work-library-controls select, .work-library-controls input, .work-sort-direction, .work-select-toggle { background: var(--ds-bg-card); color: var(--ds-text-heading); }
+.work-library-controls input::placeholder { color: var(--ds-text-secondary); opacity: 1; }
+.work-preset-row .ui-segmented, .gallery-heading .ui-segmented { background: var(--ds-bg-card-subtle); }
+.work-preset-row .ui-segmented button.active, .work-preset-row .ui-segmented button:hover, .gallery-heading .ui-segmented button.active, .gallery-heading .ui-segmented button:hover { background: var(--ds-bg-card); }
+.work-card-foot time { color: var(--ds-text-secondary); }
+.work-library-controls .work-search { flex: 1 1 250px; }
+.work-library-controls select { min-width: 0; max-width: 100%; }
+@media (max-width: 1150px) {
+  .work-library-controls .work-search { flex-basis: 100%; }
+  .work-library-controls select { flex: 1 1 100px; }
+}

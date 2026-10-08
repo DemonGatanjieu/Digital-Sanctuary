@@ -13,6 +13,18 @@ function fixture() {
 }
 
 describe("library query concurrency", () => {
+  it("invalidates old pages when only ownership changes", async () => {
+    const { controller, pending } = fixture();
+    expect(controller.changeQuery({ ownership: "managed", limit: 1 })).toBe(true);
+    const original = controller.refresh(); pending[0]!.resolve(page(["managed"], 2, 0, 1)); await original;
+    const oldPage = controller.loadMore();
+    expect(controller.changeQuery({ ownership: "external", limit: 1 })).toBe(true);
+    const current = controller.refresh(); pending[2]!.resolve(page(["external"], 1, 0, 1)); await current;
+    pending[1]!.resolve(page(["late-managed"], 2, 1, 1)); await oldPage;
+    expect(pending[2]!.query.ownership).toBe("external");
+    expect(controller.state.result.items.map(item => item.id)).toEqual(["external"]);
+    expect(controller.changeQuery({ ownership: "external", limit: 1 })).toBe(false);
+  });
   it("keeps the newest search when an older reply arrives last", async () => {
     const { controller, pending } = fixture();
     controller.changeQuery({ search: "旧搜索" });

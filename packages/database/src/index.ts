@@ -610,6 +610,10 @@ export class LibraryDatabase {
     const resultSort = `page.sort_value${sortBy === "title" || sortBy === "artist" ? " COLLATE NOCASE" : ""} ${direction}, w.id ASC`;
     const clauses = ["w.deleted_at IS NULL"];
     const parameters: Array<string | number> = [];
+    if (query.ownership === "managed" || query.ownership === "external") {
+      clauses.push("w.ownership = ?");
+      parameters.push(query.ownership);
+    }
     if (typeof query.favorite === "boolean") {
       clauses.push("w.favorite = ?");
       parameters.push(query.favorite ? 1 : 0);

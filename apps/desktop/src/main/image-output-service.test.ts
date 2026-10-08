@@ -22,6 +22,18 @@ async function finished(service:ImageOutputService,b:ImageExportBatch){
   for(let i=0;i<200;i++){const next=service.get(1,b.id);if(next.phase!=="running")return next;await new Promise(done=>setTimeout(done,5));}throw new Error("copy never finished");
 }
 describe("explicit original image output",()=>{
+  it("drags only a reauthorized concrete file and leaves original bytes intact",async()=>{
+    const f=fixture(),target=f.image("drag"),start=vi.fn();
+    await f.service.drag(1,target,start);
+    expect(start).toHaveBeenCalledWith(f.paths.get("local:drag"));
+    expect(readFileSync(f.paths.get("local:drag")!)).toEqual(PNG);
+    await expect(f.service.drag(1,{workId:target.workId},start)).rejects.toThrow("具体");
+    await expect(f.service.drag(1,{path:f.paths.get("local:drag")},start)).rejects.toThrow("无效");
+    await expect(f.service.drag(2,target,start)).rejects.toThrow("owner");
+    rmSync(f.paths.get("local:drag")!);
+    await expect(f.service.drag(1,target,start)).rejects.toThrow("找不到原图");
+    expect(start).toHaveBeenCalledTimes(1);
+  });
   it("preserves original bytes, existing files and colliding names",async()=>{
     const f=fixture(),a=f.image("a"),b=f.image("b",Buffer.concat([PNG,Buffer.from("second")]));
     writeFileSync(join(f.destination,"same.png"),"existing");

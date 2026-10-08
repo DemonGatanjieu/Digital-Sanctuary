@@ -168,6 +168,10 @@ export interface SanctuaryApi {
   cancelImageExport(id: string): Promise<ImageExportBatch>;
   retryImageExport(id: string): Promise<ImageExportBatch>;
   useImage(target: ImageTarget, action: "copy" | "reveal"): Promise<void>;
+  dragImage(target: ImageTarget): Promise<void>;
+  getGalleryBanner(): Promise<string | null>;
+  chooseGalleryBanner(): Promise<string | null>;
+  resetGalleryBanner(): Promise<null>;
   chooseWorkbenchFolder(recursive: boolean): Promise<WorkbenchSnapshot | null>;
   chooseWorkbenchLibrary(scope: AnalysisScope): Promise<WorkbenchSnapshot>;
   currentWorkbench(source: WorkbenchSource): Promise<WorkbenchSnapshot | null>;
@@ -322,6 +326,10 @@ const api: SanctuaryApi = {
   cancelImageExport: (id) => ipcRenderer.invoke("images:export-cancel", id),
   retryImageExport: (id) => ipcRenderer.invoke("images:export-retry", id),
   useImage: (target, action) => ipcRenderer.invoke("images:use", target, action),
+  dragImage: (target) => ipcRenderer.invoke("images:drag", target),
+  getGalleryBanner: () => ipcRenderer.invoke("gallery:banner-get"),
+  chooseGalleryBanner: () => ipcRenderer.invoke("gallery:banner-choose"),
+  resetGalleryBanner: () => ipcRenderer.invoke("gallery:banner-reset"),
   chooseWorkbenchFolder: (recursive) => ipcRenderer.invoke("workbench:folder", recursive),
   chooseWorkbenchLibrary: (scope) => ipcRenderer.invoke("workbench:library", scope),
   currentWorkbench: (source) => ipcRenderer.invoke("workbench:current", source),

@@ -27,6 +27,9 @@ describe("parseWorkQuery", () => {
   });
 
   it("drops unsupported renderer input", () => {
+    expect(parseWorkQuery({ ownership: "managed" })).toEqual({ ownership: "managed", limit: 60, offset: 0 });
+    expect(parseWorkQuery({ ownership: "external" })).toEqual({ ownership: "external", limit: 60, offset: 0 });
+    expect(parseWorkQuery({ ownership: "any OR 1=1" })).toEqual({ limit: 60, offset: 0 });
     expect(parseWorkQuery({ workType: "anything", sortBy: "sql", direction: "sideways" }))
       .toEqual({ limit: 60, offset: 0 });
     expect(parseWorkQuery({

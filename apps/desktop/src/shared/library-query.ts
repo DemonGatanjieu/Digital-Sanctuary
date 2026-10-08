@@ -30,6 +30,7 @@ export function parseWorkQuery(value: unknown): WorkQuery {
   if (typeof value.search === "string" && value.search.trim()) {
     query.search = value.search.trim().slice(0, 200);
   }
+  if (value.ownership === "managed" || value.ownership === "external") query.ownership = value.ownership;
   if (typeof value.workType === "string" && WORK_TYPES.has(value.workType as WorkType)) {
     query.workType = value.workType as WorkType;
   }

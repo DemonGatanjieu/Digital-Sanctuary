@@ -91,7 +91,7 @@ export class LibraryQueryController {
 }
 
 function queryKey(query: WorkQuery): string {
-  return JSON.stringify([query.search ?? "", query.workType, query.artistId, query.collectionId,
+  return JSON.stringify([query.search ?? "", query.ownership, query.workType, query.artistId, query.collectionId,
     query.collectionIds, query.collectionMatchMode, query.excludedCollectionIds,
     query.favorite, query.uncollected, query.viewedOnly, query.sortBy, query.direction, query.limit ?? 60]);
 }

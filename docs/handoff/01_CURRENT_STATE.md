@@ -1,6 +1,7 @@
 # 交接一：当前状态
 
 - 最新工作流补充：2026-10-08（历史基础记录保留）
+- 最新图库补充：卡片直接改名、复制与原生拖出；横幅可自定义、恢复自动精选；普通图库按 managed/external 保存方式筛选，计数与保存筛选一致。见 `docs/reviews/2026-10-08-gallery-quick-use.md`。本地导入仍引用原位置，复制导入/重新定位、通用网站收图和检索结果自动带入对话尚未接通。
 - 工作区：`E:\PIxiv`
 - 当前基线：本文件所在提交；另已接通统一找图工作台、文件夹先筛选后导入、中文画面描述排序、原图复制与任务中心返航。现有 0.1.2 Windows x64 安装包来自上一批，不含这些源码更新。
 - 平台：Windows
@@ -10,7 +11,7 @@
 
 ## 接手前必读
 
-本轮整合的入口和边界见 README“从哪里开始”及 `docs/reviews/2026-10-08-image-workbench.md`。最新门禁为 466 项 TS、9 项 Python、完整类型与构建；真实模型工作台与导航、大图回归结果在本批记录。图库命名与探索切换见 `docs/reviews/2026-10-08-gallery-names-and-explore-transitions.md`，按钮反馈见 `docs/reviews/2026-10-08-interaction-motion.md`。导入和查看信息不自动启动模型，外部原文件保留；任务页使用轻量摘要。导入/下载/补图/文件夹/找图/原图复制状态为会话级，原有批量识别沿用持久任务。
+本轮整合的入口和边界见 README“从哪里开始”及 `docs/reviews/2026-10-08-image-workbench.md`。最新门禁为 474 项 TS、9 项 Python、完整类型与构建；图库快用 10 组、导航 59 组、大图 20 组隔离真实窗口检查通过，见 `docs/reviews/2026-10-08-gallery-quick-use.md`。真实模型工作台证据保留在前批记录。图库命名与探索切换见 `docs/reviews/2026-10-08-gallery-names-and-explore-transitions.md`，按钮反馈见 `docs/reviews/2026-10-08-interaction-motion.md`。导入和查看信息不自动启动模型，外部原文件保留；任务页使用轻量摘要。导入/下载/补图/文件夹/找图/原图复制状态为会话级，原有批量识别沿用持久任务。
 
 0.1.2 安装包、哈希及验证记录见 `docs/releases/0.1.2.md`。旧版 C 盘原图可原位读取；存储迁移先备份、校验复制、事务改路径，保留原件，不再覆盖同名冲突或删除旧目录。给朋友及其智能体的步骤见 `docs/operations/UPGRADE_AND_STORAGE_MIGRATION.md`。未打包自然语言筛图、EmbeddingGemma2、多站点探索等讨论中的能力。
 

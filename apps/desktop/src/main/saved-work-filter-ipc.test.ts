@@ -4,6 +4,17 @@ import { SavedWorkFilterStore } from "./saved-work-filter-ipc";
 import { savedFilterQuery } from "../shared/saved-work-filter";
 
 describe("saved work filter conditions", () => {
+  it("restores ownership conditions without converting external references to managed files", () => {
+    const database = new LibraryDatabase(":memory:");
+    try {
+      const artwork = database.importArtwork("E:/fixtures/reference.png");
+      const store = new SavedWorkFilterStore(database);
+      const saved = store.create({ name: "外部素材", query: { ownership: "external" } });
+      expect(new SavedWorkFilterStore(database).list()[0]!.query).toMatchObject({ ownership: "external" });
+      expect(database.queryWorks(saved.query).items[0]!.id).toBe(`local:${artwork.id}`);
+      expect(database.queryWorks({ ownership: "managed" }).total).toBe(0);
+    } finally { database.close(); }
+  });
   it("preserves real query conditions and order while excluding pagination and arbitrary fields", () => {
     expect(savedFilterQuery({ search: "  背景 ", favorite: true, viewedOnly: true, artistId: "artist", workType: "manga",
       collectionIds: ["a", "b", "a"], excludedCollectionIds: ["c"], collectionMatchMode: "all", sortBy: "title", direction: "asc",

@@ -6,6 +6,11 @@ const normalSort = { sortBy: "title", direction: "asc" } as const;
 const query: WorkQuery = { search: "月", workType: "manga", collectionIds: ["night"], collectionMatchMode: "all", excludedCollectionIds: ["draft"], sortBy: "title", direction: "asc", offset: 100, limit: 50 };
 
 describe("work presets", () => {
+  it("preserves ownership across presets and reports empty scoped results honestly", () => {
+    expect(applyWorkPreset({ ownership: "external" }, "favorites", normalSort)).toMatchObject({ ownership: "external", favorite: true });
+    expect(hasWorkFilters({ ownership: "managed" })).toBe(true);
+    expect(workEmptyMessage({ ownership: "external" }).title).toBe("没有匹配的作品");
+  });
   it("composes each shortcut with the user's search, type and album scope", () => {
     for (const preset of ["favorites", "uncollected", "recent"] as const) {
       const next = applyWorkPreset(query, preset, normalSort);

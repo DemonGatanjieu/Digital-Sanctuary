@@ -61,6 +61,7 @@ export function describeWorkFilter(query: SavedWorkFilterQuery, collections: Pic
   const parts: string[] = [];
   const album = (id: string) => collections.find((item) => item.id === id)?.name ?? "已移除的相册（保留原条件）";
   if (query.search) parts.push(`搜索“${query.search}”`);
+  if (query.ownership) parts.push(query.ownership === "managed" ? "图库保存" : "外部引用");
   if (query.workType) parts.push(({ illustration: "插画", manga: "漫画", ugoira: "动图", local: "本地导入", unknown: "待补充类型" })[query.workType]);
   if (query.favorite !== undefined) parts.push(query.favorite ? "喜欢的作品" : "未标喜欢");
   if (query.uncollected) parts.push("未分相册");
