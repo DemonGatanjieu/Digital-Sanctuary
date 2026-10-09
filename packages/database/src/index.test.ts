@@ -27,13 +27,13 @@ describe("LibraryDatabase", () => {
       expect(database.queryWorks({}).total).toBe(2);
     } finally { database.close(); }
   });
-  it("records schema version 7 and creates a portable SQLite backup", () => {
+  it("records schema version 8 and creates a portable SQLite backup", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-backup-"));
     const databasePath = join(directory, "library.db");
     const backupPath = join(directory, "library-backup.db");
     const database = new LibraryDatabase(databasePath);
     try {
-      expect(database.schemaVersion()).toBe(7);
+      expect(database.schemaVersion()).toBe(8);
       database.createCollection("Backup fixture");
       expect(database.backupTo(backupPath)).toBe(backupPath);
       const backup = new DatabaseSync(backupPath, { readOnly: true });

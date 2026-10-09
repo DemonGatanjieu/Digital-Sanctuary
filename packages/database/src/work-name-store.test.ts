@@ -71,7 +71,7 @@ describe("gallery display names", () => {
       const legacy = new DatabaseSync(path);
       legacy.exec("ALTER TABLE works DROP COLUMN custom_title; DELETE FROM schema_migrations WHERE version = 7"); legacy.close();
       database = new LibraryDatabase(path);
-      expect(database.schemaVersion()).toBe(7);
+      expect(database.schemaVersion()).toBe(8);
       expect(database.getWork(`local:${image.id}`)!.title).toBe("old.png");
       expect(database.listArtworks()[0]!.displayName).toBeUndefined();
     } finally { database.close(); rmSync(root, { recursive: true, force: true }); }

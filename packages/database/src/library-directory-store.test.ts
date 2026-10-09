@@ -133,7 +133,7 @@ describe("gallery directory and scoped pages", () => {
       expect(test.database.addArtworksToCollection([pages[0]!.id, pages[0]!.id, pages[1]!.id], album.id)).toBe(2);
       expect(test.database.addArtworksToCollection(pages.map((page) => page.id), album.id)).toBe(0);
       expect(test.database.listCollectionSummaries()[0]).toMatchObject({ workCount: 1, pageCount: 2, bookPageCount: 2 });
-      expect(test.database.schemaVersion()).toBe(7);
+      expect(test.database.schemaVersion()).toBe(8);
     } finally { test.close(); }
   });
 

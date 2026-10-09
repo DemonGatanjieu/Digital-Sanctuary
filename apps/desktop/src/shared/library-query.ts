@@ -1,6 +1,7 @@
 import type {
   CollectionMatchMode,
   SortDirection,
+  WorkElementFilter,
   WorkQuery,
   WorkViewRequest,
   WorkSortField,
@@ -60,7 +61,24 @@ export function parseWorkQuery(value: unknown): WorkQuery {
   if (typeof value.unattributed === "boolean") query.unattributed = value.unattributed;
   if (typeof value.uncollected === "boolean") query.uncollected = value.uncollected;
   if (typeof value.viewedOnly === "boolean") query.viewedOnly = value.viewedOnly;
+  const elements = parseElementFilter(value.elements);
+  if (elements) query.elements = elements;
+  // `elementMatch` is resolved in the main process and never read from here.
   return query;
+}
+
+/** Tagger tag names: short, printable, no separators that could confuse storage. */
+export function parseElementFilter(value: unknown): WorkElementFilter | null {
+  if (!isRecord(value)) return null;
+  const tags = (list: unknown) => Array.isArray(list)
+    ? [...new Set(list.filter((tag): tag is string => typeof tag === "string" && /^[^\u0000-\u001f,]{1,80}$/.test(tag.trim())).map((tag) => tag.trim()))].slice(0, 20)
+    : [];
+  const filter: WorkElementFilter = {};
+  const include = tags(value.include), exclude = tags(value.exclude).filter((tag) => !include.includes(tag));
+  if (include.length) filter.include = include;
+  if (exclude.length) filter.exclude = exclude;
+  if (value.blocked === true) filter.blocked = true;
+  return filter.include || filter.exclude || filter.blocked ? filter : null;
 }
 
 export function parseWorkViewRequest(value: unknown): WorkViewRequest | null {

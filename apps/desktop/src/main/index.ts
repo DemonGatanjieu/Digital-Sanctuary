@@ -34,7 +34,7 @@ import {
   type ArtistRecord,
   type ArtworkRecord,
   type CustomElementGroup,
-  type LibraryPreferences,
+  type LibraryPreferences, type WorkQuery,
   type RuleSandboxResult,
   type StorageLocationInfo,
   type StorageMigrationResult,
@@ -138,6 +138,7 @@ import { ComfyUiService } from "./comfyui/service.js";
 import { registerComfyUiIpc } from "./comfyui/ipc.js";
 import { ModelCenterService, localModelsRoot, type ResolvedRuntimeModel } from "./model-center/model-center-service.js";
 import { SEMANTIC_MODEL_ID } from "./model-center/catalog.js";
+import { withElementMatch } from "./element-query.js";
 import { registerModelCenterIpc } from "./model-center/model-center-ipc.js";
 import { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 import { registerInspirationIpc } from "./inspiration-ipc.js";
@@ -611,8 +612,8 @@ function localImageUrl(imagePath: string): string {
 
 function registerIpc(): void {
   if (!database || !vision || !comfyUiService || !modelCenter) throw new Error("Application services are unavailable");
-  registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService, localArtCriticService,
-    () => buildElementFilterRules(database!.listElementFilterSettings(), customElementGroups(), adaptiveThresholdOverrides()));
+  const elementRules = () => buildElementFilterRules(database!.listElementFilterSettings(), customElementGroups(), adaptiveThresholdOverrides());
+  registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService, localArtCriticService, elementRules);
   registerInspirationIpc(ipcMain, database, localArtCriticService, () => mainWindow);
   const semantic = new SemanticClient([installedSemanticRuntime(join(localModelsRoot(app.getPath("userData")), SEMANTIC_MODEL_ID)),
     ...(app.isPackaged ? [] : [developmentSemanticRuntime(resolve(moduleDirectory, "../../../.."))])]);
@@ -669,11 +670,12 @@ function registerIpc(): void {
   registerSavedCollectionViewIpc(ipcMain, database);
   const localImporter = registerLocalImportIpc(ipcMain, database, dialog, () => join(pixivGalleryDirectory(), "Imports"));
   semanticVectors = new SemanticVectorStore(join(app.getPath("userData"), "semantic-index.db"));
+  const resolveWorkQuery = (query: WorkQuery) => withElementMatch(query, vision?.engine ?? null, elementRules);
   imageWorkbench = new ImageWorkbenchService(database, {
     ready: () => Boolean(vision?.available && vision.engine === "wd-swinv2-tagger-v3"),
     identity: () => `${vision!.engine}:${vision!.engineVersion}`,
     classify: (path) => enqueueRemoteVisionTask(() => vision!.classify(path, 30_000)),
-    rules: () => buildElementFilterRules(database!.listElementFilterSettings(), customElementGroups(), adaptiveThresholdOverrides())
+    rules: elementRules
   }, semantic, semanticVectors, localImporter);
   const output = new ImageOutputService((owner, targets) => imageWorkbench!.resolveImages(owner, targets), createImageOutputHost(() => mainWindow ?? null));
   const dragIcon = nativeImage.createFromBitmap(Buffer.from([199, 132, 2, 255]), { width: 1, height: 1 }).resize({ width: 32, height: 32 });
@@ -683,7 +685,7 @@ function registerIpc(): void {
     const options = { title: "选择要找图的本地文件夹", properties: ["openDirectory"] as Array<"openDirectory"> };
     const selected = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
     return selected.canceled ? null : selected.filePaths[0] ?? null;
-  });
+  }, resolveWorkQuery);
   registerWorkInformationIpc(ipcMain, database, dialog, () => mainWindow ?? null);
   ipcMain.handle("inspiration:prepare-targets", async (event, targets: unknown) => {
     if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error("请从找图结果选择参考图");
@@ -713,7 +715,7 @@ function registerIpc(): void {
   });
   registerSavedWorkFilterIpc(ipcMain, database);
   ipcMain.handle("tasks:analysis", () => database?.listAnalysisTaskSummaries() ?? []);
-  registerLibraryReadIpc(ipcMain, database, join(app.getPath("userData"), "thumbnails"), encodeLocalThumbnail);
+  registerLibraryReadIpc(ipcMain, database, join(app.getPath("userData"), "thumbnails"), encodeLocalThumbnail, resolveWorkQuery, () => vision?.engine ?? null);
   registerGalleryDirectoryIpc(ipcMain, database);
   ipcMain.handle("library:create-backup", async (): Promise<string | null> => {
     if (!database || !mainWindow) throw new Error("Application is not ready");
@@ -2972,11 +2974,7 @@ async function performRemoteArtworkReview(
       ) {
         throw new Error("Vision engine version changed during review");
       }
-      const rules = buildElementFilterRules(
-        settings,
-        customElementGroups(),
-        adaptiveThresholdOverrides()
-      );
+      const rules = buildElementFilterRules(settings, customElementGroups(), adaptiveThresholdOverrides());
       const hardDecision = decideFilter(assessment, rules);
       const decision = hardDecision.action === "allow"
         ? decidePersonalPreference(assessment, preferences)
@@ -3025,10 +3023,7 @@ function safeRemoteImageExtension(imageUrl: string): string {
 
 function recalculateStoredDecisions(target: LibraryDatabase): void {
   const groups = target.getPreference<unknown>("filters.custom-groups");
-  const rules = buildElementFilterRules(
-    target.listElementFilterSettings(),
-    Array.isArray(groups) ? groups.filter(isCustomElementGroup) : []
-  );
+  const rules = buildElementFilterRules(target.listElementFilterSettings(), Array.isArray(groups) ? groups.filter(isCustomElementGroup) : []);
   for (const artwork of target.listArtworks()) {
     if (!artwork.assessment) continue;
     target.saveAssessment(

@@ -1,5 +1,6 @@
 import { parseWorkQuery } from "../shared/library-query.js";
 import type { BrowserWindow, IpcMain } from "electron";
+import type { WorkQuery } from "@sanctuary/domain";
 import type { ImageWorkbenchService } from "./image-workbench-service.js";
 import { ImageOutputService, type ImageOutputHost } from "./image-output-service.js";
 import type { SemanticClient } from "./semantic-client.js";
@@ -29,7 +30,8 @@ export function createImageOutputHost(getWindow: () => BrowserWindow | null): Im
   };
 }
 export function registerImageWorkbenchIpc(ipc: Pick<IpcMain,"handle">, workbench: ImageWorkbenchService,
-  output: ImageOutputService, semantic: SemanticClient, chooseFolder: () => Promise<string|null>) {
+  output: ImageOutputService, semantic: SemanticClient, chooseFolder: () => Promise<string|null>,
+  resolveQuery: (query: WorkQuery) => WorkQuery = (query) => query) {
   ipc.handle("images:export",(e,value: unknown)=>output.start(e.sender.id,value));
   ipc.handle("images:export-get",(e,id: unknown)=>output.get(e.sender.id,id));
   ipc.handle("images:export-current",e=>output.current(e.sender.id));
@@ -44,7 +46,7 @@ export function registerImageWorkbenchIpc(ipc: Pick<IpcMain,"handle">, workbench
   });
   ipc.handle("gallery:search-pictures",(e,text: unknown,query: unknown)=>{
     if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
-    return workbench.searchGallery(e.sender.id,text,parseWorkQuery(query));
+    return workbench.searchGallery(e.sender.id,text,resolveQuery(parseWorkQuery(query)));
   });
   ipc.handle("gallery:picture-results",(e,id: unknown,offset: unknown,relevance: unknown)=>{
     if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");

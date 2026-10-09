@@ -28,6 +28,9 @@ describe("large library query boundary", () => {
       ) VALUES (?, ?, 0, ?, 'image', '.jpg', 1048576, ?, 'available', ?, ?)`
     );
     const updateCover = fixture.prepare("UPDATE works SET cover_asset_id = ? WHERE id = ?");
+    // Element tags as the tagger leaves them: ~30 per page from a large vocabulary; 1% carry "rare".
+    const insertTag = fixture.prepare("INSERT INTO asset_tags (engine, tag, asset_id, asset_version, confidence) VALUES ('wd', ?, ?, ?, 0.8)");
+    const insertCoverage = fixture.prepare("INSERT INTO asset_tag_coverage (asset_id, engine, asset_version) VALUES (?, 'wd', ?)");
     for (let index = 0; index < 10_000; index += 1) {
       const workId = `fixture-work-${index.toString().padStart(5, "0")}`;
       const assetId = `fixture-asset-${index.toString().padStart(5, "0")}`;
@@ -42,6 +45,9 @@ describe("large library query boundary", () => {
         timestamp
       );
       updateCover.run(assetId, workId);
+      for (let tag = 0; tag < 30; tag += 1) insertTag.run(`tag_${(index * 7 + tag * 131) % 2_000}`, assetId, timestamp);
+      if (index % 100 === 0) insertTag.run("rare", assetId, timestamp);
+      insertCoverage.run(assetId, timestamp);
     }
     fixture.exec("COMMIT;");
     fixture.close();
@@ -59,6 +65,16 @@ describe("large library query boundary", () => {
       expect(lastPage.items).toHaveLength(60);
       expect(lastPage.hasMore).toBe(false);
       expect(elapsedMs).toBeLessThan(2_000);
+
+      const elementsStartedAt = performance.now();
+      const rare = database.queryWorks({ limit: 60, elementMatch: { engine: "wd", include: [{ tag: "rare", minimum: 0.4 }], exclude: [], anyOf: [] } });
+      const withoutRare = database.queryWorks({ limit: 60, elementMatch: { engine: "wd", include: [], exclude: [{ tag: "rare", minimum: 0.4 }], anyOf: [] } });
+      const blocked = database.queryWorks({ limit: 60, elementMatch: { engine: "wd", include: [], exclude: [], anyOf: [{ tag: "rare", minimum: 0.35 }, { tag: "tag_7", minimum: 0.35 }] } });
+      const elementsMs = performance.now() - elementsStartedAt;
+      expect(rare.total).toBe(100);
+      expect(withoutRare.total).toBe(9_900);
+      expect(blocked.total).toBeGreaterThanOrEqual(100);
+      expect(elementsMs).toBeLessThan(2_000);
     } finally {
       database.close();
       rmSync(directory, { recursive: true, force: true });

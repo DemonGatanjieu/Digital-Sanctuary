@@ -234,10 +234,44 @@ export interface WorkQuery {
   viewedOnly?: boolean;
   /** True selects works without an assigned artist. */
   unattributed?: boolean;
+  /** Element conditions on stored tagger results, set from the gallery filter. */
+  elements?: WorkElementFilter;
+  /** Resolved by the main process from `elements`; never accepted from the renderer. */
+  elementMatch?: ResolvedElementMatch;
   sortBy?: WorkSortField;
   direction?: SortDirection;
   offset?: number;
   limit?: number;
+}
+
+/**
+ * Element tags come from the active tagger (WD). A work "has" a tag when any page has it;
+ * "exclude" keeps only works whose every page has been tagged and none has the tag.
+ */
+export interface WorkElementFilter {
+  include?: string[];
+  exclude?: string[];
+  /** Works with any page matching an enabled explore blocking rule. */
+  blocked?: boolean;
+}
+
+export interface TagThreshold {
+  tag: string;
+  minimum: number;
+}
+
+export interface ResolvedElementMatch {
+  engine: string;
+  include: TagThreshold[];
+  exclude: TagThreshold[];
+  anyOf: TagThreshold[];
+}
+
+/** How much of the library the active tagger has covered. */
+export interface ElementIndexStatus {
+  engine: string;
+  totalAssets: number;
+  taggedAssets: number;
 }
 
 export interface WorkListItem {

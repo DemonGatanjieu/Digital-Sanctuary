@@ -49,6 +49,8 @@ import type {
 import { SavedCollectionViewStore } from "./saved-collection-view-store.js";
 import { LibraryDirectoryStore } from "./library-directory-store.js";
 import { WorkNameStore } from "./work-name-store.js";
+import { AssetTagIndex } from "./asset-tags.js";
+import { workQueryPredicate } from "./work-query.js";
 import {
   DEFAULT_ELEMENT_FILTER_SETTINGS,
   getVisionSuite,
@@ -297,6 +299,7 @@ export class LibraryDatabase {
   readonly #savedCollectionViews: SavedCollectionViewStore;
   readonly #directory: LibraryDirectoryStore;
   readonly #workNames: WorkNameStore;
+  readonly #tags: AssetTagIndex;
 
   constructor(databasePath: string) {
     this.#databasePath = databasePath;
@@ -304,6 +307,7 @@ export class LibraryDatabase {
     this.#savedCollectionViews = new SavedCollectionViewStore(this.#database);
     this.#directory = new LibraryDirectoryStore(this.#database, (query) => this.#queryWorkPage(query));
     this.#workNames = new WorkNameStore(this.#database);
+    this.#tags = new AssetTagIndex(this.#database);
     this.#database.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     this.#backupBeforeWorkMigration();
     this.#migrate();
@@ -311,6 +315,10 @@ export class LibraryDatabase {
 
   close(): void {
     this.#database.close();
+  }
+
+  elementCoverage(engine: string): { totalAssets: number; taggedAssets: number } {
+    return this.#tags.coverage(engine);
   }
 
   schemaVersion(): number {
@@ -471,6 +479,7 @@ export class LibraryDatabase {
         this.#database.prepare("UPDATE assets SET thumbnail_path = NULL WHERE id = ?").run(assetId);
         this.#database.prepare("UPDATE artworks SET assessment_json = NULL, decision_json = NULL WHERE id = ?").run(asset.legacyArtworkId);
         this.#database.prepare("DELETE FROM analysis_asset_results WHERE asset_id = ?").run(assetId);
+        this.#tags.forget(assetId);
         this.#database.prepare("DELETE FROM vision_evaluation_results WHERE asset_id = ?").run(assetId);
       }
       this.#database.prepare("UPDATE artworks SET path = ?, file_name = ? WHERE id = ?").run(path, basename(path), asset.legacyArtworkId);
@@ -491,6 +500,8 @@ export class LibraryDatabase {
         "UPDATE artworks SET assessment_json = ?, decision_json = ? WHERE id = ?"
       )
       .run(JSON.stringify(assessment), JSON.stringify(decision), artworkId);
+    const asset = this.#database.prepare("SELECT id, updated_at FROM assets WHERE legacy_artwork_id = ?").get(artworkId) as { id: string; updated_at: string } | undefined;
+    if (asset) this.#tags.record(asset.id, asset.updated_at, assessment);
   }
 
   trustArtwork(artworkId: string): void {
@@ -1843,6 +1854,7 @@ export class LibraryDatabase {
              assessment_json = excluded.assessment_json,
              analyzed_at = excluded.analyzed_at`
         ).run(item.assetId, item.assetUpdatedAt, assessment.engine, assessment.engineVersion, JSON.stringify(assessment), now);
+        this.#tags.record(item.assetId, item.assetUpdatedAt, assessment);
       }
       this.#database.prepare(
         "UPDATE analysis_jobs SET processed_items = processed_items + 1, cache_hits = cache_hits + ? WHERE id = ?"
@@ -2297,6 +2309,7 @@ export class LibraryDatabase {
     `);
     this.#ensureWorkSchema();
     this.#workNames.ensureSchema();
+    this.#tags.ensureSchema();
     this.#migrateLegacyArtworksToWorks();
     this.#savedCollectionViews.ensureSchema();
     this.#database.prepare("INSERT OR IGNORE INTO schema_migrations (version, applied_at) VALUES (2, ?)").run(new Date().toISOString());
@@ -2940,10 +2953,6 @@ function asAssetFileState(value: string): AssetFileState {
     : "available";
 }
 
-function isWorkType(value: unknown): value is WorkType {
-  return value === "illustration" || value === "manga" || value === "ugoira" ||
-    value === "local" || value === "unknown";
-}
 
 function clampInteger(value: number | undefined, fallback: number, minimum: number, maximum: number): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) return fallback;
@@ -2960,74 +2969,3 @@ function canonicalVisionDimensionLabel(
   return suite?.dimensions.find((dimension) => dimension.key === dimensionKey)?.label ?? fallback;
 }
 
-function workQueryPredicate(query: WorkQuery): { sql: string; params: Array<string | number> } {
-    const search = typeof query.search === "string" ? query.search.trim().slice(0, 200) : "";
-    const clauses = ["w.deleted_at IS NULL"];
-    const parameters: Array<string | number> = [];
-    if (query.ownership === "managed" || query.ownership === "external") {
-      clauses.push("w.ownership = ?");
-      parameters.push(query.ownership);
-    }
-    if (typeof query.favorite === "boolean") {
-      clauses.push("w.favorite = ?");
-      parameters.push(query.favorite ? 1 : 0);
-    }
-    if (query.uncollected === true) {
-      clauses.push("NOT EXISTS (SELECT 1 FROM collection_works uncollected_cw WHERE uncollected_cw.work_id = w.id)");
-    }
-    if (query.viewedOnly === true) clauses.push("w.last_viewed_at IS NOT NULL");
-    if (query.unattributed === true) clauses.push("w.artist_id IS NULL");
-    if (search) {
-      clauses.push(
-        `(instr(lower(w.title), lower(?)) > 0
-          OR instr(lower(COALESCE(ar.name, '')), lower(?)) > 0
-          OR instr(lower(COALESCE(w.source_work_id, '')), lower(?)) > 0)`
-      );
-      parameters.push(search, search, search);
-    }
-    if (isWorkType(query.workType)) {
-      clauses.push("w.work_type = ?");
-      parameters.push(query.workType);
-    }
-    if (typeof query.artistId === "string" && query.artistId) {
-      clauses.push("w.artist_id = ?");
-      parameters.push(query.artistId);
-    }
-    const includedCollections = Array.isArray(query.collectionIds)
-      ? [...new Set(query.collectionIds.filter((id): id is string => typeof id === "string" && Boolean(id)))]
-      : (typeof query.collectionId === "string" && query.collectionId ? [query.collectionId] : []);
-    const excludedCollections = Array.isArray(query.excludedCollectionIds)
-      ? [...new Set(query.excludedCollectionIds.filter((id): id is string => typeof id === "string" && Boolean(id)))]
-      : [];
-
-    if (includedCollections.length === 1 && includedCollections[0]) {
-      clauses.push(
-        "EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id = ?)"
-      );
-      parameters.push(includedCollections[0]);
-    } else if (includedCollections.length > 1) {
-      if (query.collectionMatchMode === "all") {
-        for (const colId of includedCollections) {
-          clauses.push(
-            "EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id = ?)"
-          );
-          parameters.push(colId);
-        }
-      } else {
-        const placeholders = includedCollections.map(() => "?").join(", ");
-        clauses.push(
-          `EXISTS (SELECT 1 FROM collection_works filter_cw WHERE filter_cw.work_id = w.id AND filter_cw.collection_id IN (${placeholders}))`
-        );
-        parameters.push(...includedCollections);
-      }
-    }
-
-    if (excludedCollections.length > 0) {
-      const placeholders = excludedCollections.map(() => "?").join(", ");
-      clauses.push(
-        `NOT EXISTS (SELECT 1 FROM collection_works filter_ex WHERE filter_ex.work_id = w.id AND filter_ex.collection_id IN (${placeholders}))`
-      );
-      parameters.push(...excludedCollections);
-    }
-    return { sql: clauses.join(" AND "), params: parameters };
-}

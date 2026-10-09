@@ -29,6 +29,7 @@ import type {
   SavedWorkFilterDraft,
   StorageLocationInfo,
   StorageMigrationResult,
+  ElementIndexStatus,
   WorkQuery,
   WorkQueryResult,
   WorkRecord,
@@ -154,6 +155,7 @@ export interface SanctuaryApi {
   queryArtworkPages(query?: ArtworkPageQuery): Promise<ArtworkPageQueryResult>;
   addArtworksToCollection(artworkIds: string[], collectionId: string): Promise<number>;
   queryWorks(query?: WorkQuery): Promise<WorkQueryResult>;
+  elementCoverage(): Promise<ElementIndexStatus>;
   getWork(workId: string): Promise<WorkRecord | null>;
   getWorkInformation(workId: string, pageIndex: number): Promise<WorkInformation | null>;
   renameWork(workId: string, name: string): Promise<WorkRecord>;
@@ -307,6 +309,7 @@ const api: SanctuaryApi = {
   addArtworksToCollection: (artworkIds, collectionId) => ipcRenderer.invoke("collections:add-artworks", artworkIds, collectionId) as Promise<number>,
   queryWorks: (query = {}) =>
     ipcRenderer.invoke("library:query-works", query) as Promise<WorkQueryResult>,
+  elementCoverage: () => ipcRenderer.invoke("library:element-coverage") as Promise<ElementIndexStatus>,
   getWork: (workId) =>
     ipcRenderer.invoke("library:get-work", workId) as Promise<WorkRecord | null>,
   getWorkInformation: (workId, pageIndex) =>
