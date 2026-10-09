@@ -12,13 +12,19 @@ export function useGalleryPictureSearch(query: WorkQuery, visible: boolean) {
   },setState);
   const controller=controllerRef.current;
   const running=pictureSearchRunning(state.snapshot);
-  // Installs without the offline picture model search by name only, so typing never ends in a setup error.
+  // Without the picture model the box searches names only, so typing never ends in a setup error.
+  // Rechecked whenever the gallery comes back into view, so a model installed in Settings shows up at once.
   const [available,setAvailable]=useState(true);
   useEffect(()=>{
+    if(!visible)return;
     let live=true;
-    void window.sanctuary.semanticAvailability().then(status=>{if(live&&!status.available){setAvailable(false);controller.mode("name");}}).catch(()=>{});
+    void window.sanctuary.semanticAvailability().then(status=>{
+      if(!live)return;
+      setAvailable(status.available);
+      if(!status.available)controller.mode("name");
+    }).catch(()=>{});
     return()=>{live=false;};
-  },[controller]);
+  },[controller,visible]);
   useEffect(()=>{
     if(!visible||!state.snapshot)return;
     void controller.refresh();

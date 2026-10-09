@@ -38,6 +38,13 @@ export interface ResolvedRuntimeModel {
 
 const INSTALL_MARKER = "sanctuary-model.json";
 
+/** Downloaded models live in the per-user local profile, outside the roaming library data. */
+export function localModelsRoot(userDataPath: string): string {
+  const localAppData = process.env.LOCALAPPDATA;
+  return localAppData ? join(localAppData, "digital-sanctuary", "models") : join(userDataPath, "models");
+}
+const SNAPSHOT_MANIFEST = "sanctuary.manifest.json";
+
 export class ModelCenterService {
   readonly #modelsRoot: string;
   readonly #bundledModels: Partial<Record<string, string>>;
@@ -118,7 +125,9 @@ export class ModelCenterService {
           downloadedBytes: totalBytes,
           message: `正在展开 ${entry.name} 的本地运行时…`
         });
-        await extractTrustedZip(join(stagingDirectory, file.fileName), stagingDirectory);
+        const archive = join(stagingDirectory, ...modelFileSegments(file.fileName));
+        await extractTrustedZip(archive, stagingDirectory);
+        await rm(archive, { force: true });
       }
       this.#update(state, {
         phase: "installing",
@@ -126,6 +135,10 @@ export class ModelCenterService {
         downloadedBytes: totalBytes,
         message: "校验通过，正在完成安装…"
       });
+      if (entry.snapshot) {
+        const files = entry.files.filter((file) => !file.extract).map(({ fileName, size, sha256 }) => ({ path: fileName, size, sha256 }));
+        await writeFile(join(stagingDirectory, SNAPSHOT_MANIFEST), JSON.stringify({ ...entry.snapshot, files }, null, 2), "utf8");
+      }
       await writeFile(
         join(stagingDirectory, INSTALL_MARKER),
         JSON.stringify({ id: entry.id, version: entry.version, installedAt: new Date().toISOString() }, null, 2),
@@ -167,7 +180,8 @@ export class ModelCenterService {
     if (this.#resolveActiveId(entry.capability) === modelId) {
       throw new Error("请先切换到同类的其他模型，再删除当前模型。");
     }
-    await rm(this.#safePath(join(this.#modelsRoot, modelId)), { recursive: true, force: true });
+    // A worker that was just stopped can hold its executable for a moment on Windows.
+    await rm(this.#safePath(join(this.#modelsRoot, modelId)), { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     await rm(this.#safePath(join(this.#modelsRoot, ".downloads", modelId)), { recursive: true, force: true });
     return this.snapshot();
   }
@@ -246,12 +260,15 @@ export class ModelCenterService {
     completedBytes: number,
     state: DownloadState
   ): Promise<void> {
-    if (!/^[A-Za-z0-9._-]{1,120}$/.test(file.fileName)) throw new Error("模型清单包含不安全的文件名。");
+    const segments = modelFileSegments(file.fileName);
     if (!/^https:\/\//.test(file.url)) throw new Error("模型下载地址必须使用 HTTPS。");
     if (!/^[a-f0-9]{64}$/.test(file.sha256)) throw new Error("模型文件缺少有效 SHA256。");
 
-    const partPath = join(stagingDirectory, `${file.fileName}.part`);
-    const finalPath = join(stagingDirectory, file.fileName);
+    const finalPath = join(stagingDirectory, ...segments);
+    const partPath = `${finalPath}.part`;
+    await mkdir(dirname(finalPath), { recursive: true });
+    // A retried install keeps files that already finished and verified.
+    if (await fileSize(finalPath) === file.size && await sha256Of(finalPath) === file.sha256) return;
     let existingBytes = await fileSize(partPath);
     if (existingBytes > file.size) {
       await rm(partPath, { force: true });
@@ -267,6 +284,7 @@ export class ModelCenterService {
       ...(headers ? { headers } : {}),
       signal: state.controller.signal
     });
+    if (response.status === 404 && file.extract) throw new Error(`${entry.name} 的运行包还没有发布，暂时无法下载。`);
     if (!response.ok || !response.body) throw new Error(`下载失败：HTTP ${response.status}`);
     if (existingBytes > 0 && response.status !== 206) {
       existingBytes = 0;
@@ -341,10 +359,25 @@ export class ModelCenterService {
 async function hasRequiredFiles(directory: string, entry: ModelCatalogEntry): Promise<boolean> {
   if (!directory || entry.files.length === 0) return false;
   const required = [
-    ...entry.files.map((file) => file.fileName),
+    ...entry.files.filter((file) => !file.extract).map((file) => file.fileName),
     ...(entry.requiredRuntimeFiles ?? [])
   ];
-  return (await Promise.all(required.map((fileName) => isFile(join(directory, fileName))))).every(Boolean);
+  return (await Promise.all(required.map((fileName) => isFile(join(directory, ...fileName.split("/")))))).every(Boolean);
+}
+
+/** Catalog file names are relative paths of plain segments ("1_Pooling/config.json"); nothing may climb out. */
+export function modelFileSegments(fileName: string): string[] {
+  const segments = fileName.split("/");
+  if (segments.length > 4 || segments.some((segment) => !/^[A-Za-z0-9._-]{1,120}$/.test(segment) || /^\.+$/.test(segment))) {
+    throw new Error("模型清单包含不安全的文件名。");
+  }
+  return segments;
+}
+
+async function sha256Of(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+  return hash.digest("hex");
 }
 
 async function isFile(path: string): Promise<boolean> {

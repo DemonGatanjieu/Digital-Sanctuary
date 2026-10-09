@@ -14,4 +14,4 @@
 
 ## 语义检索实验模型（2026-10-08）
 
-用户明确要求联网准备的官方 `google/embeddinggemma-2` 已完整下载到 `models/embeddinggemma-2/`，固定 revision 为 `914f7f89142e33e77833254d9c9b90c3cef7303b`，约 1.53 GB。下载校验与离线 CPU/GPU 环境说明见 [`services/semantic/README.md`](../services/semantic/README.md)。它尚未进入应用模型目录或搜索 UI，不替代 WD，也不随 0.1.2 安装包分发。
+官方 `google/embeddinggemma-2` 固定 revision `914f7f89142e33e77833254d9c9b90c3cef7303b`，约 1.53 GB，用于按画面找图。开发环境放在 `models/embeddinggemma-2/`；用户在“设置 → 模型管理”下载。说明见 [`services/semantic/README.md`](../services/semantic/README.md)。

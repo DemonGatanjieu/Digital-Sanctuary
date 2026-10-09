@@ -74,5 +74,6 @@ try:
             message = str(error) if isinstance(error, ValueError) else "图片无法分析或模型执行失败，请检查文件后重试"
             emit({"id": request_id, "error": message})
 except Exception:
+    traceback.print_exc(file=sys.stderr)
     emit({"error": "本地找图模型启动失败，请检查独立 Python 环境、模型快照和文件校验"})
     sys.exit(1)

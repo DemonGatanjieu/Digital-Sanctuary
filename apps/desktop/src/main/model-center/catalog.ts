@@ -25,6 +25,25 @@ const LLAMA_CPP_VLM_RUNTIME_FILES = [
   "mtmd.dll"
 ] as const;
 
+export const SEMANTIC_MODEL_ID = "embeddinggemma-2";
+const EMBEDDING_GEMMA_REVISION = "914f7f89142e33e77833254d9c9b90c3cef7303b";
+
+function gemmaFile(fileName: string, size: number, sha256: string) {
+  return { fileName, url: `https://huggingface.co/google/embeddinggemma-2/resolve/${EMBEDDING_GEMMA_REVISION}/${fileName}`, size, sha256 };
+}
+
+/**
+ * The frozen picture-search worker (services/semantic, built by `npm run build:semantic-bundle`).
+ * Published as a release asset of this repository under tag `semantic-runtime-1`; never replace it in place.
+ */
+const SEMANTIC_RUNTIME = {
+  fileName: "sanctuary-semantic-runtime-1.zip",
+  url: "https://github.com/DemonGatanjieu/Digital-Sanctuary/releases/download/semantic-runtime-1/sanctuary-semantic-runtime-1.zip",
+  size: 250_683_998,
+  sha256: "7d589553b4bdf2c15377213e86422b587caf5619ccbf6e6c1ef3bae0eeaaa1f6",
+  extract: "zip" as const
+};
+
 function wdFiles(repository: string, size: number, sha256: string) {
   const root = `https://huggingface.co/${repository}/resolve/main`;
   return [
@@ -125,6 +144,45 @@ export const MODEL_CATALOG: readonly ModelCatalogEntry[] = [
       1_260_435_999,
       "9e768793060c7939b277ccb382783e8670e8a042d29d77aa736be0c8cc898bfc"
     )
+  },
+  {
+    id: SEMANTIC_MODEL_ID,
+    name: "EmbeddingGemma 2",
+    version: EMBEDDING_GEMMA_REVISION.slice(0, 12),
+    author: "Google DeepMind",
+    description: "用一句话描述画面，在图库里按内容找图。只在找图时用 CPU 加载，闲置后自动释放。",
+    capability: "semantic_embedding",
+    runtime: "semantic_runtime",
+    tier: "balanced",
+    availability: "ready",
+    license: "Apache-2.0",
+    homepage: "https://huggingface.co/google/embeddinggemma-2",
+    downloadSize: 1_525_810_123 + SEMANTIC_RUNTIME.size,
+    diskSize: 3_600_000_000,
+    recommendedRamGb: 8,
+    recommendedVramGb: 0,
+    badges: ["按画面找图", "本地运行", "版本锁定"],
+    // The runtime pack goes first: if it is not published yet, the install stops before 1.5 GB of weights.
+    files: [
+      SEMANTIC_RUNTIME,
+      gemmaFile("1_Pooling/config.json", 90, "8759bdf7c77efc7df7723f64856a593c8943b71ee38baf2a88771fbaf78438f9"),
+      gemmaFile("2_Normalize/config.json", 97, "cdb09dfca347a56aa2d691744e38d5ad3c7cbc2834e7181272b9a15328b82524"),
+      gemmaFile("modules.json", 413, "3d02572a0455b832de67fb8e63a54981bc7e8b46e337c95e917bd8122a533bfd"),
+      gemmaFile("preprocessor_config.json", 511, "ea2ae257e901064abdd98dceb19f2b0da06af600bed15e0f99f5c85c37ee9d78"),
+      gemmaFile("sentence_bert_config.json", 747, "b1bcd9f2dce3ae863b359e87d0710b5dbc3314a59ecb4e2f97c7778fc8e4b228"),
+      gemmaFile("chat_template.jinja", 1_016, "4b852efc0b9960283e735363331e6f325b33bc74bdbaa076f595bc4e9b94d85e"),
+      gemmaFile(".gitattributes", 1_301, "bcdccfaa66bc1240c7192dbd374cfb39b695bb1d8ff6b7ce0113aa5e9ac21a44"),
+      gemmaFile("config_sentence_transformers.json", 1_565, "031e56a498d33c349ab489a21885bcfe25b4fcba841149dc99e1e90d4a7c28f5"),
+      gemmaFile("tokenizer_config.json", 1_599, "17bd5d6e9364ca49a534e1502076593317c298d4a663623091ed45388f004874"),
+      gemmaFile("processor_config.json", 1_788, "168f6a08522f3ce5dea596d94d003af2fd691742d4f41fe1f9d8cce76bfbf69c"),
+      gemmaFile("config.json", 4_455, "b8f1e9931b57fbc054acdb445c41765d55b0074c58d145fa82839941ad1b5bb3"),
+      gemmaFile("README.md", 21_730, "b677a0ee2818c36f091b65fd3d9b4baea9f04d53b02b49cae916c74bf9682037"),
+      gemmaFile("tokenizer.model", 4_689_013, "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03"),
+      gemmaFile("tokenizer.json", 32_170_510, "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4"),
+      gemmaFile("model.safetensors", 1_488_915_288, "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79")
+    ],
+    requiredRuntimeFiles: ["sanctuary-semantic/sanctuary-semantic.exe"],
+    snapshot: { repository: "google/embeddinggemma-2", revision: EMBEDDING_GEMMA_REVISION }
   },
   {
     id: "danbooru-aesthetic-classifier",

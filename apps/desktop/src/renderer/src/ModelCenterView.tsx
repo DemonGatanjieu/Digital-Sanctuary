@@ -9,7 +9,8 @@ import { Button } from "./Button";
 
 const CAPABILITIES: { id: ModelCapability; label: string; description: string }[] = [
   { id: "element_tagging", label: "探索识别", description: "用于探索保护和图片标签识别" },
-  { id: "art_critic", label: "画评与创作", description: "用于作品解读，以及创作页的聊图和写作" }
+  { id: "art_critic", label: "画评与创作", description: "用于作品解读，以及创作页的聊图和写作" },
+  { id: "semantic_embedding", label: "按画面找图", description: "下载后，图库搜索框可以用一句话描述画面来找图" }
 ];
 
 export function ModelCenterView({ onError, embedded = false, capability, onChanged, onBusyChange, disabled = false }: {
@@ -42,7 +43,7 @@ export function ModelCenterView({ onError, embedded = false, capability, onChang
     return window.sanctuary.onModelDownloadProgress((progress) => {
       setSnapshot((current) => current ? applyProgress(current, progress) : current);
       if (progress.phase === "complete") {
-        setNotice("模型安装完成，可以切换使用了。");
+        setNotice(installedNotice(progress.modelId));
         void refresh().catch(onError);
       }
       if (progress.phase === "failed" || progress.phase === "cancelled") setNotice(progress.message);
@@ -62,7 +63,7 @@ export function ModelCenterView({ onError, embedded = false, capability, onChang
     setNotice("");
     try {
       setSnapshot(await window.sanctuary.installModel(modelId));
-      setNotice("模型安装完成，可以切换使用了。");
+      setNotice(installedNotice(modelId));
       onChanged?.();
     } catch (error) {
       if (!(error instanceof Error && /取消/.test(error.message))) onError(error);
@@ -232,7 +233,7 @@ function ModelCard({
       <dl className="model-specs">
         <div><dt>下载</dt><dd>{formatBytes(model.downloadSize)}</dd></div>
         <div><dt>建议内存</dt><dd>{model.recommendedRamGb} GB</dd></div>
-        <div><dt>建议显存</dt><dd>{model.recommendedVramGb} GB</dd></div>
+        <div><dt>建议显存</dt><dd>{model.recommendedVramGb > 0 ? `${model.recommendedVramGb} GB` : "不需要"}</dd></div>
         <div><dt>许可</dt><dd>{model.license}</dd></div>
       </dl>
       <Button variant="ghost" size="small" onClick={onHomepage}>模型主页 ↗</Button>
@@ -251,6 +252,11 @@ function ModelCard({
             <Button variant="danger-soft" size="small" onClick={onCancel}>暂停下载</Button>
           ) : !model.installed ? (
             <Button variant="primary" size="small" disabled={disabled} busy={busy} busyLabel="准备下载…" onClick={onInstall}>下载到本机</Button>
+          ) : model.capability === "semantic_embedding" ? (
+            <>
+              <Button variant="ghost" size="small" disabled={disabled} onClick={onRemove}>删除</Button>
+              <span className="model-ready-label">已安装，可以使用</span>
+            </>
           ) : !model.active ? (
             <>
               {!model.bundled && <Button variant="ghost" size="small" disabled={disabled} onClick={onRemove}>删除</Button>}
@@ -288,4 +294,10 @@ function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return "—";
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   return `${Math.round(bytes / 1024 ** 2)} MB`;
+}
+
+function installedNotice(modelId: string): string {
+  return modelId === "embeddinggemma-2"
+    ? "找图模型已安装。回到图库，在搜索框选“按画面”即可使用。"
+    : "模型安装完成，可以切换使用了。";
 }

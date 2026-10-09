@@ -128,7 +128,7 @@ import { ImageOutputService } from "./image-output-service.js";
 import { createImageOutputHost, registerImageWorkbenchIpc } from "./image-workbench-ipc.js";
 import { registerImageDragIpc } from "./image-drag-ipc.js";
 import { registerGalleryBannerIpc } from "./gallery-banner-ipc.js";
-import { SemanticClient, SemanticVectorStore } from "./semantic-client.js";
+import { SemanticClient, SemanticVectorStore, developmentSemanticRuntime, installedSemanticRuntime } from "./semantic-client.js";
 import { registerWorkInformationIpc } from "./work-information-ipc.js";
 import { registerSavedWorkFilterIpc } from "./saved-work-filter-ipc.js";
 import { ThemeManagerService } from "./theme/theme-manager.js";
@@ -142,7 +142,8 @@ import { registerTypographyIpc } from "./typography/typography-ipc.js";
 import { registerPromptBridgeIpc } from "./prompt-bridge-ipc.js";
 import { ComfyUiService } from "./comfyui/service.js";
 import { registerComfyUiIpc } from "./comfyui/ipc.js";
-import { ModelCenterService, type ResolvedRuntimeModel } from "./model-center/model-center-service.js";
+import { ModelCenterService, localModelsRoot, type ResolvedRuntimeModel } from "./model-center/model-center-service.js";
+import { SEMANTIC_MODEL_ID } from "./model-center/catalog.js";
 import { registerModelCenterIpc } from "./model-center/model-center-ipc.js";
 import { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 import { registerInspirationIpc } from "./inspiration-ipc.js";
@@ -289,14 +290,15 @@ if (!hasSingleInstanceLock) {
       console.error("[vision] unable to prepare startup self-test image", error);
     }
     modelCenter = new ModelCenterService({
-      modelsRoot: resolveLocalModelsRoot(userDataPath),
+      modelsRoot: localModelsRoot(userDataPath),
       bundledModels: {
         "wd-swinv2-tagger-v3": app.isPackaged
           ? join(process.resourcesPath, "models", "wd-swinv2-tagger-v3")
           : resolve(moduleDirectory, "../../../../models/wd-swinv2-tagger-v3")
       },
       readActiveModelId: (capability) => database?.getPreference<string>(`models.active.${capability}`) ?? null,
-      writeActiveModelId: (capability, modelId) => database?.setPreference(`models.active.${capability}`, modelId)
+      writeActiveModelId: (capability, modelId) => database?.setPreference(`models.active.${capability}`, modelId),
+      fetchImpl: ((input, init) => net.fetch(input as string, init)) as typeof fetch // Chromium's stack honours the system proxy.
     });
     const activeTagger = await modelCenter.resolveActiveRuntimeModel("element_tagging");
     localArtCriticService = new LocalArtCriticService({
@@ -641,10 +643,13 @@ function registerIpc(): void {
   registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService, localArtCriticService,
     () => buildElementFilterRules(database!.listElementFilterSettings(), customElementGroups(), adaptiveThresholdOverrides()));
   registerInspirationIpc(ipcMain, database, localArtCriticService, () => mainWindow);
+  const semantic = new SemanticClient([installedSemanticRuntime(join(localModelsRoot(app.getPath("userData")), SEMANTIC_MODEL_ID)),
+    ...(app.isPackaged ? [] : [developmentSemanticRuntime(resolve(moduleDirectory, "../../../.."))])]);
   registerModelCenterIpc({
     ipc: ipcMain,
     service: modelCenter,
     getWindow: () => mainWindow,
+    onRemove: (modelId) => { if (modelId === SEMANTIC_MODEL_ID) semantic.close(); },
     onActivate: async (modelId) => {
       if (!vision || !modelCenter || !database) return false;
       const runtime = await modelCenter.resolveRuntimeModel(modelId);
@@ -692,7 +697,6 @@ function registerIpc(): void {
   });
   registerSavedCollectionViewIpc(ipcMain, database);
   const localImporter = registerLocalImportIpc(ipcMain, database, dialog, () => join(pixivGalleryDirectory(), "Imports"));
-  const semantic = new SemanticClient(app.isPackaged ? process.resourcesPath : resolve(moduleDirectory, "../../../.."));
   semanticVectors = new SemanticVectorStore(join(app.getPath("userData"), "semantic-index.db"));
   imageWorkbench = new ImageWorkbenchService(database, {
     ready: () => Boolean(vision?.available && vision.engine === "wd-swinv2-tagger-v3"),
@@ -3169,11 +3173,4 @@ function resolveVisionProcess(runtimeModel?: ResolvedRuntimeModel | null): Visio
     engineVersion: "0.1.0",
     env: { ELECTRON_RUN_AS_NODE: "1" }
   };
-}
-
-function resolveLocalModelsRoot(userDataPath: string): string {
-  const localAppData = process.env.LOCALAPPDATA;
-  return localAppData
-    ? join(localAppData, "digital-sanctuary", "models")
-    : join(userDataPath, "models");
 }

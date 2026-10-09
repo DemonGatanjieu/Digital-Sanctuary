@@ -27,6 +27,28 @@ describe("extractTrustedZip", () => {
     await expect(readFile(join(output, "runtime", "ggml.dll"), "utf8")).resolves.toBe("library");
   });
 
+  it("handles frozen runtimes with thousands of files, including empty ones", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sanctuary-zip-many-"));
+    roots.push(root);
+    const archive = join(root, "runtime.zip");
+    const files = Array.from({ length: 1200 }, (_, index) => ({ name: `rt/_internal/m${index}.py`, content: Buffer.from(`# ${index}`), method: 8 as const }));
+    await writeFile(archive, makeZip([...files, { name: "rt/_internal/__init__.py", content: Buffer.alloc(0), method: 8 }]));
+    const extracted = await extractTrustedZip(archive, join(root, "output"));
+    expect(extracted).toHaveLength(1201);
+    await expect(readFile(join(root, "output", "rt", "_internal", "m1199.py"), "utf8")).resolves.toBe("# 1199");
+    await expect(readFile(join(root, "output", "rt", "_internal", "__init__.py"), "utf8")).resolves.toBe("");
+  });
+
+  it("rejects entries that point past the end of the archive", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sanctuary-zip-truncated-"));
+    roots.push(root);
+    const archive = join(root, "runtime.zip");
+    const zip = makeZip([{ name: "a.dll", content: Buffer.from("library"), method: 0 }]);
+    zip.writeUInt32LE(4096, zip.length - 22 - 46 - 5 + 20);
+    await writeFile(archive, zip);
+    await expect(extractTrustedZip(archive, join(root, "output"))).rejects.toThrow("越界");
+  });
+
   it("rejects archive traversal paths", async () => {
     const root = await mkdtemp(join(tmpdir(), "sanctuary-zip-traversal-"));
     roots.push(root);

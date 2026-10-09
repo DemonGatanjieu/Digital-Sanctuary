@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -115,6 +115,60 @@ describe("ModelCenterService", () => {
     expect((await service.snapshot()).models[0]?.installed).toBe(false);
   });
 
+  it("installs a pinned snapshot with subfolders and a runtime pack, and resumes without refetching verified files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sanctuary-model-center-snapshot-"));
+    roots.push(root);
+    const weights = Buffer.from("weights"), pooling = Buffer.from("{\"pooling\":true}");
+    const runtimeZip = storedZip("worker/worker.exe", Buffer.from("exe"));
+    const model: ModelCatalogEntry = {
+      ...entry("picture", [
+        file("model.safetensors", "https://example.test/model.safetensors", weights),
+        file("1_Pooling/config.json", "https://example.test/1_Pooling/config.json", pooling),
+        { ...file("runtime.zip", "https://example.test/runtime.zip", runtimeZip), extract: "zip" }
+      ], "balanced"),
+      capability: "semantic_embedding",
+      requiredRuntimeFiles: ["worker/worker.exe"],
+      snapshot: { repository: "test/picture", revision: "a".repeat(40) }
+    };
+    let runtimeAvailable = false;
+    const fetched: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const target = String(url);
+      fetched.push(target);
+      if (target.endsWith("runtime.zip")) return runtimeAvailable ? new Response(new Uint8Array(runtimeZip), { status: 200 }) : new Response(null, { status: 503 });
+      return new Response(target.endsWith("config.json") ? pooling : weights, { status: 200 });
+    }) as typeof fetch;
+    const service = new ModelCenterService({
+      modelsRoot: join(root, "models"), bundledModels: {}, readActiveModelId: () => null, writeActiveModelId: () => {}, catalog: [model], fetchImpl
+    });
+
+    await expect(service.install("picture")).rejects.toThrow("HTTP 503");
+    expect(fetched).toHaveLength(3);
+    runtimeAvailable = true;
+    const snapshot = await service.install("picture");
+    expect(fetched.slice(3)).toEqual(["https://example.test/runtime.zip"]);
+    expect(snapshot.models[0]?.installed).toBe(true);
+
+    const directory = join(root, "models", "picture");
+    await expect(readFile(join(directory, "1_Pooling", "config.json"), "utf8")).resolves.toBe(pooling.toString());
+    await expect(readFile(join(directory, "worker", "worker.exe"), "utf8")).resolves.toBe("exe");
+    await expect(access(join(directory, "runtime.zip"))).rejects.toThrow();
+    const manifest = JSON.parse(await readFile(join(directory, "sanctuary.manifest.json"), "utf8"));
+    expect(manifest).toMatchObject({ repository: "test/picture", revision: "a".repeat(40) });
+    expect(manifest.files.map((item: { path: string }) => item.path)).toEqual(["model.safetensors", "1_Pooling/config.json"]);
+  });
+
+  it("says plainly when a runtime pack is not published yet", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sanctuary-model-center-unpublished-"));
+    roots.push(root);
+    const model = entry("unpublished", [{ ...file("runtime.zip", "https://example.test/runtime.zip", Buffer.from("zip")), extract: "zip" }], "light");
+    const service = new ModelCenterService({
+      modelsRoot: join(root, "models"), bundledModels: {}, readActiveModelId: () => null, writeActiveModelId: () => {}, catalog: [model],
+      fetchImpl: vi.fn(async () => new Response("Not Found", { status: 404 })) as typeof fetch
+    });
+    await expect(service.install("unpublished")).rejects.toThrow("运行包还没有发布");
+  });
+
   it("falls back to the bundled model when a saved selection is no longer installed", async () => {
     const root = await mkdtemp(join(tmpdir(), "sanctuary-model-center-fallback-"));
     roots.push(root);
@@ -181,4 +235,27 @@ function file(fileName: string, url: string, content: Buffer): ModelCatalogEntry
     size: content.length,
     sha256: createHash("sha256").update(content).digest("hex")
   };
+}
+
+function storedZip(name: string, content: Buffer): Buffer {
+  const fileName = Buffer.from(name);
+  const local = Buffer.alloc(30);
+  local.writeUInt32LE(0x04034b50, 0);
+  local.writeUInt32LE(content.length, 18);
+  local.writeUInt32LE(content.length, 22);
+  local.writeUInt16LE(fileName.length, 26);
+  const central = Buffer.alloc(46);
+  central.writeUInt32LE(0x02014b50, 0);
+  central.writeUInt32LE(content.length, 20);
+  central.writeUInt32LE(content.length, 24);
+  central.writeUInt16LE(fileName.length, 28);
+  const localData = Buffer.concat([local, fileName, content]);
+  const centralData = Buffer.concat([central, fileName]);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(1, 8);
+  end.writeUInt16LE(1, 10);
+  end.writeUInt32LE(centralData.length, 12);
+  end.writeUInt32LE(localData.length, 16);
+  return Buffer.concat([localData, centralData, end]);
 }

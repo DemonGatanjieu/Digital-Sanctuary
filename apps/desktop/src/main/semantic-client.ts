@@ -32,19 +32,31 @@ export class SemanticVectorStore {
   close() { this.#database.close(); }
 }
 
+export interface SemanticRuntime { command: string; args: string[]; required: string[] }
+/** What the model center installs: the frozen worker beside the verified model snapshot. */
+export function installedSemanticRuntime(modelDirectory: string): SemanticRuntime {
+  const command=join(modelDirectory,"sanctuary-semantic","sanctuary-semantic.exe");
+  return {command,args:[modelDirectory],required:[command,join(modelDirectory,"sanctuary.manifest.json"),join(modelDirectory,"sanctuary-model.json")]};
+}
+/** A development checkout: the project's own Python environment and model folder. */
+export function developmentSemanticRuntime(root: string): SemanticRuntime {
+  const python=join(root,".venv-semantic","Scripts","python.exe"),server=join(root,"services","semantic","server.py"),model=join(root,"models","embeddinggemma-2");
+  return {command:python,args:["-u",server,model],required:[python,server,join(model,"sanctuary.manifest.json")]};
+}
+
 /** One on-demand CPU worker; never competes for exploration GPU memory. */
 export class SemanticClient {
   #child: ChildProcessWithoutNullStreams | undefined;
   #startup: Promise<void> | undefined;
   #pending = new Map<string, { resolve: (v: number[]) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
   #idle?: ReturnType<typeof setTimeout>;
-  constructor(private root: string) {}
+  constructor(private runtimes: readonly SemanticRuntime[]) {}
+  #runtime(): SemanticRuntime | undefined { return this.runtimes.find(runtime=>runtime.required.every(path=>existsSync(path))); }
   availability(): SemanticAvailability {
-    const available = existsSync(join(this.root,".venv-semantic","Scripts","python.exe"))
-      && existsSync(join(this.root,"models","embeddinggemma-2","sanctuary.manifest.json")) && existsSync(join(this.root,"services","semantic","server.py"));
+    const available = Boolean(this.#runtime());
     return { available, model: "EmbeddingGemma 2", device: "cpu", message: available
       ? "本地离线找图 · CPU · 首次查询需要加载模型，闲置后自动释放"
-      : "尚未准备本地找图环境，请按项目使用说明安装模型与运行环境，再重新进入此页" };
+      : "按画面找图需要先下载找图模型：设置 → 模型管理 → 按画面找图" };
   }
   async encode(kind: "image" | "query", value: string): Promise<number[]> {
     if (this.#idle) clearTimeout(this.#idle);
@@ -67,8 +79,9 @@ export class SemanticClient {
   }
   #ensure(): Promise<void> {
     if(this.#startup) return this.#startup;
-    if(!this.availability().available) return Promise.reject(new Error(this.availability().message));
-    const child=spawn(join(this.root,".venv-semantic","Scripts","python.exe"),["-u",join(this.root,"services","semantic","server.py"),join(this.root,"models","embeddinggemma-2")],
+    const runtime=this.#runtime();
+    if(!runtime) return Promise.reject(new Error(this.availability().message));
+    const child=spawn(runtime.command,runtime.args,
       {windowsHide:true,stdio:["pipe","pipe","pipe"],env:{...process.env,HF_HUB_OFFLINE:"1",TRANSFORMERS_OFFLINE:"1",HF_HUB_DISABLE_TELEMETRY:"1"}});
     this.#child=child;
     let diagnostics="";
@@ -88,7 +101,7 @@ export class SemanticClient {
         }catch{fail(new Error("找图模型返回格式异常"));}
       });
       child.stderr.on("data",chunk=>{diagnostics=(diagnostics+String(chunk)).slice(-8000);});
-      child.on("error",()=>fail(new Error("无法启动找图模型，请检查独立 Python 环境")));
+      child.on("error",()=>fail(new Error("无法启动找图模型，请在模型管理中重新安装")));
       child.on("exit",()=>fail(new Error("找图模型已退出，请重试")));
     });
     return this.#startup;

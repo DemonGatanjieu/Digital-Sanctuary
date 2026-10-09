@@ -1,15 +1,43 @@
 # EmbeddingGemma 2 本地找图运行时
 
-已接入“首页 → 找图与整理”的图库及本地文件夹来源，用画面描述按图片内容排序。独立 CPU 环境按需加载，不自动分析图库；WD 仍负责明确元素和探索保护。模型中心下载安装与现有 0.1.2 安装器尚未集成此环境，GPU 环境目前仅用于独立探针。
+图库搜索框的“按画面”和整理页的描述找图，都用它按画面内容排序。独立 CPU 进程按需加载，闲置 60 秒释放；WD 仍负责明确元素和探索保护。
 
-- 官方模型：[`google/embeddinggemma-2`](https://huggingface.co/google/embeddinggemma-2/tree/914f7f89142e33e77833254d9c9b90c3cef7303b)，Apache-2.0。
-- 固定 revision：`914f7f89142e33e77833254d9c9b90c3cef7303b`。
-- 完整 15 文件约 1.53 GB；保留原始子目录，权重、分词器、配置与预处理器都已准备。
-- Python 3.12.14 基础解释器在 `runtime-data/semantic-python`，不依赖临时下载目录或系统 Python。
+- 官方模型：[`google/embeddinggemma-2`](https://huggingface.co/google/embeddinggemma-2/tree/914f7f89142e33e77833254d9c9b90c3cef7303b)，Apache-2.0，约 7.4 亿参数；应用只加载文字和图像编码器（438,760,448 参数）。
+- 固定 revision：`914f7f89142e33e77833254d9c9b90c3cef7303b`，15 个文件约 1.53 GB。
+
+## 用户怎么装（安装包不含）
+
+“设置 → 模型管理 → 按画面找图 → 下载到本机”。模型中心下载两样东西，逐个文件核对大小和 SHA-256，全部通过后才启用：
+
+1. 上面的 15 个官方文件，直接从 Hugging Face 固定 revision 下载；
+2. 找图运行包 `sanctuary-semantic-runtime-1.zip`（约 251 MB，解压约 1.9 GB），从项目的 GitHub Release 下载。
+
+安装位置是 `%LOCALAPPDATA%\digital-sanctuary\models\embeddinggemma-2`。下载走 Electron 网络栈，跟随系统代理；中断后重试，已校验的文件不会重下。
+
+## 发布新的运行包
+
+运行包是 `server.py` 用 PyInstaller 冻结的独立程序，不需要用户装 Python。
+
+```powershell
+uv pip install --python .venv-semantic/Scripts/python.exe -r services/semantic/requirements-build.txt
+npm.cmd run build:semantic-bundle     # 冻结并打包，最后一行输出 size 和 sha256
+npm.cmd run smoke:semantic-bundle     # 直接运行冻结程序，检查向量和排序
+npm.cmd run smoke:semantic-install    # 打包后的应用里走一遍下载、校验、解压和找图（不联网）
+```
+
+transformers 按名字动态加载模型类，PyInstaller 看不到。`build_bundle.py` 先真实加载一次模型，记录实际导入的模块，再把它们作为隐藏导入冻结。torchvision 的算子库按路径加载，需要单独收集。
+
+内容变了就换文件名（`-2.zip`），把新的大小和 SHA-256 写进 `apps/desktop/src/main/model-center/catalog.ts`，再上传到同名 Release 资源。已发布的文件不要原地替换，旧版本应用仍按旧哈希下载。
+
+## 开发环境
+
+开发时没有安装运行包，也会退回使用项目自己的 `.venv-semantic` 和 `models/embeddinggemma-2`。
+
+- Python 3.12.14 基础解释器在 `runtime-data/semantic-python`。
 - CPU 环境在 `.venv-semantic`；依赖精确版本见 `requirements.lock.txt`。
-- CUDA 13.0 环境在 `.venv-semantic-gpu`；精确版本见 `requirements-gpu.lock.txt`。RTX 4050 Laptop 离线实测通过，三张测试图编码 1,383 ms，PyTorch 峰值分配显存约 940 MiB；范围与限制见[验收记录](../../docs/research/2026-10-08-embeddinggemma2-offline-runtime.md)。
+- CUDA 13.0 环境在 `.venv-semantic-gpu`；精确版本见 `requirements-gpu.lock.txt`。范围与限制见[验收记录](../../docs/research/2026-10-08-embeddinggemma2-offline-runtime.md)。
 
-以上模型、运行时、虚拟环境和测试图均被忽略，不提交 Git；不打进既有 0.1.2 安装器，也不自动分析用户图库。
+以上模型、运行时、虚拟环境和测试图都不提交 Git。
 
 ## 固定快照下载
 
@@ -28,7 +56,7 @@
 
 验证脚本强制 `HF_HUB_OFFLINE=1`、`TRANSFORMERS_OFFLINE=1`、关闭遥测，使用本地目录、`local_files_only=True`、`trust_remote_code=False`。仅创建三张合成测试图，校验快照后产生图片与中文查询的 768 维向量，验证有限值、单位范数与不同图像响应，记录相似度、耗时和设备；不会打开用户图库。
 
-仅加载文字和图像编码器（438,760,448 参数），关闭音频编码器。CPU 使用 float32 和最多四个线程；GPU 有原生支持时使用 bfloat16，不能使用 float16。结果转为 float32 并再次归一化再比较。明确指定 CUDA 的验收若不可用会报错，不静默退回 CPU。
+关闭音频编码器。CPU 使用 float32 和最多四个线程；GPU 有原生支持时使用 bfloat16，不能使用 float16。结果转为 float32 并再次归一化再比较。明确指定 CUDA 的验收若不可用会报错，不静默退回 CPU。
 
 合成图通过只证明运行库完整及图文链路可用，不能证明中文二次元细节、角色身份或否定条件检索准确。相似度不展示成识别正确率，也不代替 WD 的明确元素筛选。
 

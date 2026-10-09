@@ -10,8 +10,10 @@ export function registerModelCenterIpc(options: {
   getWindow: () => BrowserWindow | undefined;
   onActivate: (modelId: string) => Promise<boolean>;
   onDeactivate: (modelId: string) => Promise<void>;
+  /** Stops anything still running from the model's folder before its files are deleted. */
+  onRemove?: (modelId: string) => void;
 }): () => void {
-  const { ipc, service, getWindow, onActivate, onDeactivate } = options;
+  const { ipc, service, getWindow, onActivate, onDeactivate, onRemove } = options;
   const unsubscribe = service.onProgress((progress) => {
     const window = getWindow();
     if (window && !window.isDestroyed()) window.webContents.send("models:download-progress", progress);
@@ -25,7 +27,9 @@ export function registerModelCenterIpc(options: {
     return service.cancel(requireModelId(modelId));
   });
   ipc.handle("models:remove", (_event, modelId: unknown): Promise<ModelCenterSnapshot> => {
-    return service.remove(requireModelId(modelId));
+    const safeModelId = requireModelId(modelId);
+    onRemove?.(safeModelId);
+    return service.remove(safeModelId);
   });
   ipc.handle("models:activate", async (_event, modelId: unknown): Promise<ModelActivationResult> => {
     const safeModelId = requireModelId(modelId);

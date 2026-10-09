@@ -7,7 +7,8 @@ export type ModelCapability =
 export type ModelRuntimeKind =
   | "wd_onnx"
   | "aesthetic_head"
-  | "llama_cpp_vlm";
+  | "llama_cpp_vlm"
+  | "semantic_runtime";
 
 export type ModelTier = "light" | "balanced" | "advanced";
 
@@ -21,10 +22,12 @@ export type ModelInstallState =
   | "failed";
 
 export interface ModelFileDefinition {
+  /** Path inside the model directory; may contain "/" for repositories with subfolders. */
   fileName: string;
   url: string;
   size: number;
   sha256: string;
+  /** Unpacked into the model directory after verification; the archive itself is not kept. */
   extract?: "zip" | undefined;
 }
 
@@ -47,6 +50,8 @@ export interface ModelCatalogEntry {
   badges: string[];
   files: ModelFileDefinition[];
   requiredRuntimeFiles?: string[] | undefined;
+  /** Pinned upstream snapshot; installs write a `sanctuary.manifest.json` listing every verified file. */
+  snapshot?: { repository: string; revision: string } | undefined;
 }
 
 export interface InstalledModelView extends ModelCatalogEntry {
