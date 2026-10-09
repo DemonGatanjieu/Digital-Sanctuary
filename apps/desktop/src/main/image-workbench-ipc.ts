@@ -46,6 +46,10 @@ export function registerImageWorkbenchIpc(ipc: Pick<IpcMain,"handle">, workbench
     if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
     return workbench.searchSimilar(e.sender.id,workId,assetId,resolveQuery(parseWorkQuery(query)));
   });
+  ipc.handle("gallery:save-picture-results",(e,id: unknown,name: unknown)=>{
+    if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中操作");
+    return workbench.saveResultsAsAlbum(e.sender.id,id,name);
+  });
   ipc.handle("gallery:picture-results",(e,id: unknown,offset: unknown,relevance: unknown)=>{
     if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
     return workbench.galleryResults(e.sender.id,id,offset,relevance);

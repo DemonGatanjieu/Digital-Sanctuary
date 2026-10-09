@@ -907,20 +907,13 @@ export class LibraryDatabase {
   }
 
   addWorkToCollection(workId: string, collectionId: string): void {
-    this.#database
-      .prepare(
-        `INSERT OR IGNORE INTO collection_works (collection_id, work_id, added_at)
-         SELECT ?, id, ? FROM works WHERE id = ?`
-      )
+    this.#database.prepare("INSERT OR IGNORE INTO collection_works (collection_id, work_id, added_at) SELECT ?, id, ? FROM works WHERE id = ?")
       .run(collectionId, new Date().toISOString(), workId);
-    this.#database
-      .prepare(
-        `INSERT OR IGNORE INTO collection_artworks (collection_id, artwork_id)
-         SELECT ?, legacy_artwork_id FROM assets
-          WHERE work_id = ? AND legacy_artwork_id IS NOT NULL`
-      )
+    this.#database.prepare("INSERT OR IGNORE INTO collection_artworks (collection_id, artwork_id) SELECT ?, legacy_artwork_id FROM assets WHERE work_id = ? AND legacy_artwork_id IS NOT NULL")
       .run(collectionId, workId);
   }
+  matchingWorkIdList(query: WorkQuery, cap: number): string[] { return this.#directory.matchingWorkIdList(query, cap); }
+  createAlbumFromWorks(name: string, workIds: readonly string[]) { return this.#directory.createAlbumFromWorks(name, workIds); }
 
   removeWorkFromCollection(workId: string, collectionId: string): void {
     this.#database.exec("BEGIN IMMEDIATE");

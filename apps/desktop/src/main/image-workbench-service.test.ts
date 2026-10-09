@@ -128,4 +128,16 @@ describe("one-step gallery picture search",()=>{
     expect(()=>f.service.searchSimilar(1,"local:missing","x",{})).toThrow("不在图库");
     expect(()=>f.service.searchSimilar(1,42,"x",{})).toThrow("选择");
   });
+  it("saves only the relevant results, in ranked order, as a new album once the search has finished",async()=>{
+    const f=fixture();
+    const night=f.database.importArtwork(f.image("night.png"));f.database.importArtwork(f.image("day.png"));
+    const started=f.service.searchGallery(1,"夜晚",{});
+    const result=await gallerySettled(f,started.progress.id);
+    expect(result.relevance.hiddenWorks).toBe(1);
+    const saved=f.service.saveResultsAsAlbum(1,result.progress.id,"夜晚的图");
+    expect(saved.workCount).toBe(1);
+    expect(f.database.queryWorks({collectionId:saved.collection.id}).items.map(work=>work.id)).toEqual([`local:${night.id}`]);
+    expect(()=>f.service.saveResultsAsAlbum(2,result.progress.id,"别人的")).toThrow("过期");
+  });
 });
+

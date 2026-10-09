@@ -173,6 +173,8 @@ export interface SanctuaryApi {
   resetHomeBackground(): Promise<null>;
   searchGalleryPictures(text: string, query: WorkQuery): Promise<GallerySearchSnapshot>;
   searchSimilarPictures(workId: string, assetId: string, query: WorkQuery): Promise<GallerySearchSnapshot>;
+  savePictureResultsAsAlbum(searchId: string, name: string): Promise<{ collection: CollectionRecord; workCount: number }>;
+  createAlbumFromQuery(name: string, query: WorkQuery): Promise<{ collection: CollectionRecord; workCount: number }>;
   galleryPictureResults(id: string, offset?: number, relevance?: GallerySearchRelevance): Promise<GallerySearchSnapshot>;
   currentGalleryPictureSearch(): Promise<GallerySearchSnapshot | null>;
   cancelWorkbench(id: string): Promise<WorkbenchSnapshot>;
@@ -320,6 +322,8 @@ const api: SanctuaryApi = {
   resetHomeBackground: () => ipcRenderer.invoke("home:background-reset"),
   searchGalleryPictures: (text, query) => ipcRenderer.invoke("gallery:search-pictures",text,query),
   searchSimilarPictures: (workId, assetId, query) => ipcRenderer.invoke("gallery:search-similar",workId,assetId,query),
+  savePictureResultsAsAlbum: (searchId, name) => ipcRenderer.invoke("gallery:save-picture-results",searchId,name),
+  createAlbumFromQuery: (name, query) => ipcRenderer.invoke("collections:create-from-query",name,query),
   galleryPictureResults: (id, offset=0, relevance="relevant") => ipcRenderer.invoke("gallery:picture-results",id,offset,relevance),
   currentGalleryPictureSearch: () => ipcRenderer.invoke("gallery:current-picture-search"),
   cancelWorkbench: (id) => ipcRenderer.invoke("workbench:cancel", id),

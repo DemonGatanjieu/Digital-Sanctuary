@@ -9,6 +9,11 @@ export function registerLibraryReadIpc(ipc: IpcMain, database: LibraryDatabase, 
   resolveQuery: (query: WorkQuery) => WorkQuery = (query) => query, activeTagger: () => string | null = () => null): void {
   ipc.handle("library:list", () => database.listArtworks());
   ipc.handle("library:query-works", (_event, query: unknown) => database.queryWorks(resolveQuery(parseWorkQuery(query))));
+  // The renderer sends the filter, never a list of IDs: the main process decides which works it matches.
+  ipc.handle("collections:create-from-query", (_event, name: unknown, query: unknown) => {
+    const ids = database.matchingWorkIdList(resolveQuery(parseWorkQuery(query)), 5_000);
+    return database.createAlbumFromWorks(typeof name === "string" ? name : "", ids);
+  });
   ipc.handle("library:element-coverage", (): ElementIndexStatus => {
     const engine = activeTagger();
     return { engine: engine ?? "", ...(engine ? database.elementCoverage(engine) : { totalAssets: 0, taggedAssets: 0 }) };

@@ -1,5 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { ArtistRecord, ArtistSummary, ArtworkPageQuery, ArtworkPageQueryResult, CollectionSummary, DirectoryPageQuery, FilterDecision, GalleryScope, SavedViewSummaryResult, ScopedArtworkRecord, VisionAssessment, WorkAssetRecord, WorkQuery, WorkQueryResult } from "@sanctuary/domain";
+import { randomUUID } from "node:crypto";
+import type { ArtistRecord, ArtistSummary, ArtworkPageQuery, ArtworkPageQueryResult, CollectionRecord, CollectionSummary, DirectoryPageQuery, FilterDecision, GalleryScope, SavedViewSummaryResult, ScopedArtworkRecord, VisionAssessment, WorkAssetRecord, WorkQuery, WorkQueryResult } from "@sanctuary/domain";
+import { workQueryPredicate } from "./work-query.js";
 import { mapSavedCollectionView } from "./saved-collection-view-store.js";
 
 type Row = Record<string, string | number | null>;
@@ -152,6 +154,37 @@ export class LibraryDirectoryStore {
   hasCollectionArtwork(collectionId: string, artworkId: string): boolean {
     return Boolean(this.database.prepare(`SELECT 1 ${pageFrom} JOIN collection_artworks ca ON ca.artwork_id = aw.id
       WHERE ${validPage} AND ca.collection_id = ? AND aw.id = ?`).get(collectionId, artworkId));
+  }
+
+  /** Every work the query matches, newest saved first, up to `cap`; for turning a result into an album. */
+  matchingWorkIdList(query: WorkQuery, cap: number): string[] {
+    const { sql, params } = workQueryPredicate(query);
+    const rows = this.database.prepare(`SELECT w.id FROM works w LEFT JOIN artists ar ON ar.id = w.artist_id WHERE ${sql}
+      ORDER BY w.saved_at DESC, w.id LIMIT ?`).all(...params, Math.max(1, Math.min(10_000, Math.trunc(cap)))) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
+  }
+
+  /** Creates an album holding the given works (all their pages) in one transaction; unknown or removed works are skipped. */
+  createAlbumFromWorks(name: string, workIds: readonly string[]): { collection: CollectionRecord; workCount: number } {
+    const trimmed = typeof name === "string" ? name.trim() : "";
+    if (!trimmed || trimmed.length > 80) throw new Error("相册名称需要 1–80 个字符");
+    if (!Array.isArray(workIds) || workIds.length === 0 || workIds.length > 10_000) throw new Error("没有可以存为相册的作品");
+    for (const id of workIds) requireId(id);
+    const collection: CollectionRecord = { id: randomUUID(), name: trimmed, description: "", createdAt: new Date().toISOString() };
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      this.database.prepare("INSERT INTO collections (id, name, description, created_at) VALUES (?, ?, ?, ?)").run(collection.id, collection.name, collection.description, collection.createdAt);
+      const addWork = this.database.prepare("INSERT OR IGNORE INTO collection_works (collection_id, work_id, added_at) SELECT ?, id, ? FROM works WHERE id = ? AND deleted_at IS NULL");
+      const addPages = this.database.prepare("INSERT OR IGNORE INTO collection_artworks (collection_id, artwork_id) SELECT ?, legacy_artwork_id FROM assets WHERE work_id = ? AND legacy_artwork_id IS NOT NULL");
+      let workCount = 0;
+      for (const workId of new Set(workIds)) {
+        const added = Number(addWork.run(collection.id, collection.createdAt, workId).changes);
+        if (added) { workCount += added; addPages.run(collection.id, workId); }
+      }
+      if (!workCount) throw new Error("这些作品已不在图库里");
+      this.database.exec("COMMIT");
+      return { collection, workCount };
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
   }
 
   addArtworksToCollection(artworkIds: readonly string[], collectionId: string): number {

@@ -28,7 +28,7 @@ export function parseDescription(value: unknown): WorkbenchQuery {
  */
 export class ImageWorkbenchService {
   #sessions=new Map<string,Session>();
-  constructor(private database: Pick<LibraryDatabase,"getWork"|"listGallerySearchAssets"|"gallerySearchAsset"|"matchingWorkIds"|"queryWorkIds">,
+  constructor(private database: Pick<LibraryDatabase,"getWork"|"listGallerySearchAssets"|"gallerySearchAsset"|"matchingWorkIds"|"queryWorkIds"|"createAlbumFromWorks">,
     private semantic: Pick<SemanticClient,"availability"|"encode"|"close">, private vectors: Pick<SemanticVectorStore,"get"|"put">) {}
 
   searchGallery(owner: number, value: unknown, query: WorkQuery): GallerySearchSnapshot {
@@ -78,6 +78,15 @@ export class ImageWorkbenchService {
     return {progress:structuredClone({...s.state,items:[],hasMore:false,matched:matchingPages,unanalysed:s.entries.filter(e=>e.item.status==="pending").length}),
       result:{items,total:entries.length,totalPages:matchingPages,offset,limit:60,hasMore:offset+60<entries.length},
       relevance:{mode:relevance,minimumScore:s.minimumScore,hiddenWorks:available.length-entries.length,hiddenPages:eligiblePages.length-matchingPages}};
+  }
+  /** Stores the works currently shown as relevant, in ranked order, as a new album. */
+  saveResultsAsAlbum(owner: number, id: unknown, name: unknown) {
+    const s=this.#owned(owner,id);if(["scanning","analyzing"].includes(s.state.phase))throw new Error("请等找图完成后再存为相册");
+    const ids: string[]=[];
+    for(let offset=0;offset<MAX_GALLERY_IMAGES;offset+=60){
+      const page=this.galleryResults(owner,id,offset,"relevant");ids.push(...page.result.items.map(work=>work.id));if(!page.result.hasMore)break;
+    }
+    return this.database.createAlbumFromWorks(typeof name==="string"?name:"",ids);
   }
   currentGallery(owner: number): GallerySearchSnapshot | null {
     this.#prune();const s=[...this.#sessions.values()].reverse().find(s=>s.owner===owner&&s.state.galleryQuery);
