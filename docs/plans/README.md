@@ -4,12 +4,15 @@
 
 ## 唯一现行计划
 
-- [`../design/IMAGE_FIRST_REDESIGN.md`](../design/IMAGE_FIRST_REDESIGN.md)：整顿期唯一路线（阶段与状态）。[`ACTIVE_ROADMAP.md`](./ACTIVE_ROADMAP.md) 只保留指向它的说明。
+- [`ACTIVE_ROADMAP.md`](./ACTIVE_ROADMAP.md)：收紧与补充（进 → 存 → 找 → 用），阶段与状态只记在这里。
+- 已完成的上一条路线：[`../design/IMAGE_FIRST_REDESIGN.md`](../design/IMAGE_FIRST_REDESIGN.md)。
 
-## 整顿期后再评估的提案
+## 未采纳的提案
 
-- [`TASK_LOCAL_AI_PLAYGROUND_AND_WIDGET_WORKSHOP.md`](./TASK_LOCAL_AI_PLAYGROUND_AND_WIDGET_WORKSHOP.md)：后续方向；本地灵感台之后的自由工作台与安全小组件，尚未整包授权施工。
-- [`TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md`](./TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md)：排队中的语义搜索架构提案，尚未授权施工。
+以下提案不在现行路线内；与现行定位冲突的部分以 `AGENTS.md` 第 0 节为准。
+
+- [`TASK_LOCAL_AI_PLAYGROUND_AND_WIDGET_WORKSHOP.md`](./TASK_LOCAL_AI_PLAYGROUND_AND_WIDGET_WORKSHOP.md)：自由 AI 工作台与小组件；与“从图出发”的创作方向不一致，暂不做。
+- [`TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md`](./TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md)：早期语义搜索架构提案；按画面找图已用 EmbeddingGemma 2 实现，相似图（C1）沿用现有向量。
 
 ## 历史归档
 
