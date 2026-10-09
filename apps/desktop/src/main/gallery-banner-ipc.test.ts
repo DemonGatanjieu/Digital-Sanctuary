@@ -39,18 +39,19 @@ describe("owned gallery banner", () => {
       finish(null); expect(await pending).toBeNull();
     } finally { store.close(); }
   });
-  it("permits banner/drag IPC only from the local window's main frame", async () => {
+  it("permits home background/drag IPC only from the local window's main frame", async () => {
     const store = new LibraryDatabase(":memory:"), handlers = new Map<string, (...args: any[]) => any>();
     const ipc = { handle: (channel: string, handler: (...args: any[]) => any) => handlers.set(channel, handler) } as Pick<IpcMain, "handle">;
     const sender = { id: 1, mainFrame: {}, startDrag: vi.fn(), isDestroyed: () => false }, window = { webContents: sender } as unknown as BrowserWindow;
     const output = { drag: vi.fn(async (_owner, _target, start) => start("trusted.png")) } as unknown as ImageOutputService;
     try {
       registerGalleryBannerIpc(ipc, store, () => window); registerImageDragIpc(ipc, output, () => window, {} as NativeImage);
-      for (const channel of ["gallery:banner-get", "gallery:banner-choose", "gallery:banner-reset", "gallery:banner-library", "home:background-get", "home:background-choose", "home:background-reset", "home:background-library", "images:drag"]) {
+      for (const channel of ["home:background-get", "home:background-choose", "home:background-reset", "home:background-library", "images:drag"]) {
         expect(() => handlers.get(channel)!({ sender: {}, senderFrame: sender.mainFrame }, {})).toThrow("请从");
         expect(() => handlers.get(channel)!({ sender, senderFrame: {} }, {})).toThrow("请从");
       }
-      expect(handlers.get("gallery:banner-get")!({ sender, senderFrame: sender.mainFrame })).toBeNull();
+      expect(handlers.get("home:background-get")!({ sender, senderFrame: sender.mainFrame })).toBeNull();
+      expect(handlers.has("gallery:banner-get")).toBe(false);
       await handlers.get("images:drag")!({ sender, senderFrame: sender.mainFrame }, { workId: "x", assetId: "y" });
       expect(sender.startDrag).toHaveBeenCalledWith({ file: "trusted.png", icon: {} });
     } finally { store.close(); }

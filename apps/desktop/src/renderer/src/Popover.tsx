@@ -83,14 +83,12 @@ export function Popover({ anchor, onClose, children, label, align = "start", rol
     window.addEventListener("pointerdown", onPointer, true);
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", close);
-    window.addEventListener("blur", close);
     return () => {
       window.clearTimeout(focusTimer);
       window.removeEventListener("keydown", onKey, true);
       window.removeEventListener("pointerdown", onPointer, true);
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", close);
-      window.removeEventListener("blur", close);
       const active = document.activeElement;
       if (previous?.isConnected && (!active || active === document.body || element?.contains(active))) previous.focus();
     };

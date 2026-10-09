@@ -75,6 +75,7 @@ import {
 } from "./inspector-image-candidates.js";
 import { fetchPixivReviewImage } from "./pixiv-review-fetch.js";
 import { PixivApiClient, PixivBatchAbortError, errorMessage } from "./pixiv-api.js";
+import { installIpcSenderGuard } from "./ipc-sender-guard.js";
 import {
   PIXIV_HOME_URL,
   PIXIV_LOGIN_URL,
@@ -259,6 +260,8 @@ if (!hasSingleInstanceLock) {
   });
 
   app.whenReady().then(async () => {
+    // Before any handler registers: only the app window may call non-explore channels.
+    installIpcSenderGuard(ipcMain, () => mainWindow?.webContents);
     const userDataPath = app.getPath("userData");
     database = new LibraryDatabase(join(userDataPath, "library.db"));
     database.recoverInterruptedAnalysisJobs();
@@ -398,6 +401,18 @@ function createWindow(): void {
   });
 
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // The app page carries the full local bridge; it must never navigate to anything else.
+  const appUrl = process.env.ELECTRON_RENDERER_URL ?? pathToFileURL(join(moduleDirectory, "../renderer/index.html")).toString();
+  const keepAppPage = (event: Electron.Event, url: string) => {
+    try {
+      const target = new URL(url), app = new URL(appUrl);
+      if (target.origin === app.origin && target.pathname === app.pathname) return;
+    } catch { /* malformed target: block */ }
+    event.preventDefault();
+  };
+  window.webContents.on("will-navigate", keepAppPage);
+  window.webContents.on("will-redirect", keepAppPage);
+  window.webContents.on("will-attach-webview", (event) => event.preventDefault());
   if (process.env.ELECTRON_RENDERER_URL) {
     void window.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
@@ -1766,7 +1781,10 @@ function registerIpc(): void {
   ipcMain.handle("preferences:library:get", (): LibraryPreferences => libraryPreferences());
   ipcMain.handle("preferences:library:update", (_event, value: unknown): LibraryPreferences => {
     if (!database || !isLibraryPreferences(value)) throw new Error("Invalid library preferences");
-    if (activeStorageMigration && value.downloadDirectory !== libraryPreferences().downloadDirectory) throw new Error("图片正在迁移，请等待完成后再更改保存位置");
+    const currentDirectory = libraryPreferences().downloadDirectory;
+    // The renderer may keep the folder or reset it to the default; choosing a new one goes through the native picker.
+    if (value.downloadDirectory !== null && value.downloadDirectory !== currentDirectory) throw new Error("请通过“更改存储盘 / 目录”选择保存位置");
+    if (activeStorageMigration && value.downloadDirectory !== currentDirectory) throw new Error("图片正在迁移，请等待完成后再更改保存位置");
     database.setPreference("library.preferences", value);
     return value;
   });

@@ -559,7 +559,9 @@ try {
         const ipc=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').ipcMain;
         const channels=['filters:update','models:snapshot','models:activate'];
         const originals=new Map(channels.map(channel=>[channel,ipc._invokeHandlers.get(channel)]));
-        const snapshot=await originals.get('models:snapshot')();
+        // Direct handler call: pass an event from the app window so the IPC sender guard accepts it.
+        const app=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').BrowserWindow.getAllWindows()[0].webContents;
+        const snapshot=await originals.get('models:snapshot')({sender:app,senderFrame:app.mainFrame});
         const template=snapshot.models.find(model=>model.capability==='element_tagging');
         if(!template) throw new Error('No production element model descriptor');
         const state=globalThis.__contextualProtectionSmoke={originals,saveMode:'hold',saveCalls:0,release:null,active:'smoke-engine-a',failModel:false,holdModel:false,releaseModel:null,modelCalls:[]};

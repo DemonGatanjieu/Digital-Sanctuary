@@ -78,11 +78,12 @@ function validBanner(value: unknown): value is string {
 }
 
 export function registerGalleryBannerIpc(ipc: Pick<IpcMain, "handle">, store: Store & Pick<LibraryDatabase,"getWork">, getWindow: () => BrowserWindow | null) {
-  for(const surface of ["gallery","home"] as const){
+  // Only the start page keeps a chosen background; the gallery banner was removed with the image-first redesign.
+  {
   const service = new GalleryBannerService(store, {
     async choose() {
       const { dialog } = await import("electron"), window = getWindow();
-      const options = { title: surface==="gallery"?"选择图库横幅":"选择首页背景", properties: ["openFile"] as ["openFile"], filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }] };
+      const options = { title: "选择首页背景", properties: ["openFile"] as ["openFile"], filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }] };
       const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
       return picked.canceled ? null : picked.filePaths[0] ?? null;
     },
@@ -97,11 +98,11 @@ export function registerGalleryBannerIpc(ipc: Pick<IpcMain, "handle">, store: St
       const resized = scale < 1 ? image.resize({ width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)), quality: "better" }) : image;
       return `data:image/jpeg;base64,${resized.toJPEG(85).toString("base64")}`;
     }
-  },surface==="gallery"?KEY:"home.background.v1",(workId,assetId)=>{
+  },"home.background.v1",(workId,assetId)=>{
     const asset=store.getWork(workId)?.assets.find(asset=>asset.id===assetId&&asset.mediaType==="image"&&asset.fileState==="available");
     return asset?.path??null;
   });
-  const prefix=surface==="gallery"?"gallery:banner":"home:background";
+  const prefix="home:background";
   for (const [suffix, action] of [["get", () => service.get()], ["choose", () => service.choose()], ["reset", () => service.reset()], ["library", (value:unknown)=>service.fromLibrary(value)]] as const) {
     ipc.handle(`${prefix}-${suffix}`, (event,value:unknown) => {
       const window = getWindow();

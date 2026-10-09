@@ -174,10 +174,6 @@ export interface SanctuaryApi {
   retryImageExport(id: string): Promise<ImageExportBatch>;
   useImage(target: ImageTarget, action: "copy" | "reveal"): Promise<void>;
   dragImage(target: ImageTarget): Promise<void>;
-  getGalleryBanner(): Promise<string | null>;
-  chooseGalleryBanner(): Promise<string | null>;
-  resetGalleryBanner(): Promise<null>;
-  setGalleryBannerFromLibrary(target: {workId:string;assetId:string}): Promise<string | null>;
   getHomeBackground(): Promise<string | null>;
   chooseHomeBackground(): Promise<string | null>;
   setHomeBackgroundFromLibrary(target: {workId:string;assetId:string}): Promise<string | null>;
@@ -347,10 +343,6 @@ const api: SanctuaryApi = {
   retryImageExport: (id) => ipcRenderer.invoke("images:export-retry", id),
   useImage: (target, action) => ipcRenderer.invoke("images:use", target, action),
   dragImage: (target) => ipcRenderer.invoke("images:drag", target),
-  getGalleryBanner: () => ipcRenderer.invoke("gallery:banner-get"),
-  chooseGalleryBanner: () => ipcRenderer.invoke("gallery:banner-choose"),
-  resetGalleryBanner: () => ipcRenderer.invoke("gallery:banner-reset"),
-  setGalleryBannerFromLibrary: target => ipcRenderer.invoke("gallery:banner-library",target),
   getHomeBackground: () => ipcRenderer.invoke("home:background-get"),
   chooseHomeBackground: () => ipcRenderer.invoke("home:background-choose"),
   setHomeBackgroundFromLibrary: target => ipcRenderer.invoke("home:background-library",target),

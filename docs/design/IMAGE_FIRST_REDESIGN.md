@@ -35,10 +35,33 @@
 | 1 | 设计变量、图标、共享控件；新侧栏；新图库页（工具条、网格、右键菜单）；探索的保存操作从侧栏移到探索工具条 | 完成 |
 | 2 | 大图查看器与作品信息抽屉；相册页、画师页 | 完成（画册翻页保留为可选视图，水族馆视图移除） |
 | 3 | 整理、探索、创作、设置改用同一套组件；精简“开始”页 | 完成（探索工具条、创作配色、设置与整理页头；“主题拨盘”移除；“开始”页沿用新配色，保留） |
-| 4 | 工程清理：删除旧 CSS 与装饰组件；拆分 `main/index.ts`、`database/src/index.ts`；更新冒烟脚本（`smoke-gallery-actions`、`smoke-gallery-search`、`smoke-navigation`、`smoke-viewer`、`smoke-gallery-return` 仍按旧图库 DOM 编写，阶段一后已过时）；移除图库横幅的剩余接口；文档瘦身 | 待做 |
-| 5 | 安全审计：IPC 输入校验、`sanctuary-image` 路径、CSP、密钥存储 | 待做 |
+| 4 | 工程清理：删除旧 CSS 与装饰组件；拆分 `main/index.ts`、`database/src/index.ts`；更新冒烟脚本；移除图库横幅的剩余接口；文档瘦身 | 大部分完成（见下） |
+| 5 | 安全审计：IPC 输入校验、`sanctuary-image` 路径、CSP、密钥存储 | 完成第一轮（见下） |
 
 ## 验收
 
 - 每个阶段：`npm.cmd run verify` 通过；新旧截图对比（1280×800、900×620，浅色与深色）。
 - 作品、文件、信任、删除语义不变，只改表现和入口。
+
+## 阶段四记录
+
+- 旧 CSS：`scripts/prune-dead-css.mjs` 按源码引用清除失效选择器，旧层从 11,175 行降到约 7,880 行；删除横幅、统计、卡片、水族馆、罗盘、旧大图、ArtworkCard 等不再使用的组件与样式。
+- 主进程：Pixiv 网络客户端拆为 `pixiv-api.ts`（含单测）；IPC 来源校验拆为 `ipc-sender-guard.ts`。
+- 冒烟脚本已全部按新界面移植并通过：gallery-actions、gallery-search（真实离线模型）、gallery-directory（万级夹具）、gallery-return、viewer（含真实重启）、navigation、image-workbench、discovery-workflow、library-images、inspiration。`smoke-explore` 需手动启动应用，`smoke-packaged` / `smoke-installer` 需先打包，未在本轮运行。
+- 剩余：`main/index.ts` 中约 1,200 行的 `registerIpc()` 按领域继续拆分；`database/src/index.ts`（约 3,000 行）按仓储拆分；图库横幅的 IPC 与 `ArtworkBackgroundControls` 的 gallery 分支可删除。
+
+## 安全审计（第一轮，2026-10-09）
+
+| 项目 | 结论 | 处理 |
+|---|---|---|
+| 渲染进程隔离 | 主窗口 `sandbox` + `contextIsolation`，无 `nodeIntegration`；网页探索无 preload | 保持 |
+| `sanctuary-image://` | 只放行数据库登记的作品、缩略图、头像路径；探索会话用独立分区，无法访问 | 保持 |
+| `sanctuary-font://` | 只接受 `custom/<ID>`，ID 白名单 | 保持 |
+| API 密钥 | 系统 safeStorage（DPAPI）加密落盘；不可用时只存内存 | 保持 |
+| IPC 来源 | 大多数处理器不校验调用方 | **已修**：除探索页 4 个通道外，所有 invoke 只接受主窗口主框架（`ipc-sender-guard.ts`） |
+| 主窗口导航 | 只拦截新窗口，未拦截页面跳转 | **已修**：`will-navigate` / `will-redirect` 只允许应用自身页面；禁止 `<webview>` |
+| CSP | 渲染页无内容安全策略 | **已修**：生产构建注入 CSP（只允许打包脚本；图片限本地协议、data、https 头像） |
+| 保存目录 | 渲染进程可把下载目录改成任意路径 | **已修**：渲染进程只能保留或恢复默认，新目录必须经原生选择框 |
+| `color-scheme` | 页面声明为纯深色 | **已修**：`light dark` |
+
+后续可做：对 `registerIpc()` 中接收 ID/查询对象的处理器逐个补齐结构校验（多数已有 `parse*` 函数）；检查主题包 zip 导入与模型下载的完整性校验（已有 `secure-zip.ts`，未复审）。

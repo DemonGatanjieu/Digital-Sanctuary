@@ -40,6 +40,31 @@ function rendererStylesPlugin(): Plugin {
   };
 }
 
+// Production renderer policy: only bundled code runs; images come from the app, the local image protocol or data URLs.
+// https: images stay allowed for user-chosen avatar URLs. Dev mode skips this so Vite's inline HMR preamble works.
+const RENDERER_CSP = [
+  "default-src 'none'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' sanctuary-image: data: blob: https:",
+  "media-src 'self' sanctuary-image: blob:",
+  "font-src 'self' sanctuary-font: data:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "frame-src 'none'",
+  "base-uri 'none'",
+  "form-action 'none'"
+].join("; ");
+
+function contentSecurityPolicyPlugin(): Plugin {
+  return {
+    name: "sanctuary-renderer-csp",
+    apply: "build",
+    transformIndexHtml: (html) => html.replace("<head>", `<head>
+    <meta http-equiv="Content-Security-Policy" content="${RENDERER_CSP}" />`)
+  };
+}
+
 const workspacePackages = [
   "@sanctuary/database",
   "@sanctuary/domain",
@@ -87,7 +112,7 @@ export default defineConfig({
     }
   },
   renderer: {
-    plugins: [rendererStylesPlugin(), react()],
+    plugins: [rendererStylesPlugin(), contentSecurityPolicyPlugin(), react()],
     resolve: { alias },
     root: resolve(desktopRoot, "src/renderer"),
     build: {
