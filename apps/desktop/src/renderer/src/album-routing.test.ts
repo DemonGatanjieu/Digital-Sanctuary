@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CollectionRecord, SavedCollectionView } from "@sanctuary/domain";
-import { formatSavedViewSummary } from "./CollectionGallery";
+import { formatSavedViewSummary } from "./DirectoryCards";
 
 describe("album & saved view routing contracts", () => {
   const collections: CollectionRecord[] = [

@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ArtistSummary, CollectionSummary, SavedViewSummary, WorkAssetRecord } from "@sanctuary/domain";
-import { AuthorBrowserCard, AuthorDetailPage } from "./AuthorGallery";
-import { CollectionCard, CollectionDetailPage, SavedCollectionViewCard } from "./CollectionGallery";
+import { AuthorDetailPage } from "./AuthorGallery";
+import { CollectionDetailPage } from "./CollectionGallery";
+import { AuthorBrowserCard, CollectionCard, SavedCollectionViewCard } from "./DirectoryCards";
 import { authorDetailFromSummary } from "./gallery-model";
 
 const cover = { id: "asset-only", workId: "work-only", legacyArtworkId: null, path: "C:\\local\\original.png", thumbnailPath: "C:\\local\\thumb.png" } as WorkAssetRecord;

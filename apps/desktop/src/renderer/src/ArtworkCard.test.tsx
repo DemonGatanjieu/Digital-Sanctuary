@@ -56,7 +56,7 @@ describe("local gallery trust boundary", () => {
 
   it("keeps every gallery presentation surface independent from filter actions", () => {
     const directory = dirname(fileURLToPath(import.meta.url));
-    for (const fileName of ["ArtworkLightbox.tsx", "AuthorGallery.tsx", "AquariumFloatingStage.tsx"]) {
+    for (const fileName of ["WorkLightbox.tsx", "AuthorGallery.tsx", "PageGrid.tsx", "WorkGrid.tsx"]) {
       const source = readFileSync(join(directory, fileName), "utf8");
       expect(source, fileName).not.toMatch(/decision\?\.action|action === ["'](?:blur|hide)["']/);
     }
@@ -64,7 +64,7 @@ describe("local gallery trust boundary", () => {
 
   it("never makes the full-size local image transparent while load state settles", () => {
     const directory = dirname(fileURLToPath(import.meta.url));
-    const component = readFileSync(join(directory, "ArtworkLightbox.tsx"), "utf8");
+    const component = readFileSync(join(directory, "WorkLightbox.tsx"), "utf8");
     const styles = readFileSync(join(directory, "styles", "lightbox.css"), "utf8");
     expect(component).toContain('className="cinema-image-entity"');
     expect(component).not.toMatch(/cinema-image-entity.*(?:loading|blurred)/);

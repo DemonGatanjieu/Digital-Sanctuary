@@ -16,9 +16,10 @@ import type {
 } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { Icon } from "./Icon";
-import { AuthorBrowserCard, AuthorDetailPage } from "./AuthorGallery";
+import { AuthorDetailPage } from "./AuthorGallery";
 import { Button } from "./Button";
-import { CollectionCard, CollectionDetailPage, SavedCollectionViewCard } from "./CollectionGallery";
+import { CollectionDetailPage } from "./CollectionGallery";
+import { AuthorBrowserCard, CollectionCard, SavedCollectionViewCard } from "./DirectoryCards";
 import { DialogOverlay } from "./DialogOverlay";
 import { SavedCollectionViewEditor } from "./SavedCollectionViewEditor";
 import { WorkLibrary } from "./WorkLibrary";
@@ -209,7 +210,7 @@ export function GalleryView({
 
   return (
     <>
-      {mode !== "flat" && (
+      {mode !== "flat" && !selectedCollection && !selectedAuthor && (
         <header className="gallery-toolbar">
           <div className="gallery-toolbar-row">
             {scopeTabs}
@@ -265,80 +266,40 @@ export function GalleryView({
             onRegisterCapture={(capture) => onRegisterDetailCapture({ kind: "collection", collectionId: selectedCollection.id }, capture)}
           />
         ) : (
-          <div className="collections-view-container">
-            {/* 1. Saved Collection Views Section */}
-            <section className="saved-views-section">
-              <div className="section-header-row">
-                <div>
-                  <h3 className="section-title">组合视图 ({savedViewsTotal})</h3>
-                  <p className="section-subtext">把多个相册一起查看，可选择同时包含、任意包含或排除</p>
-                </div>
-                <Button variant="ghost" onClick={() => setIsCreatingSavedView(true)}>
-                  + 新建组合
-                </Button>
-              </div>
-
-              {savedViewsLoading && savedViewSummaries.length === 0 ? (
-                <p role="status">正在读取组合视图…</p>
-              ) : savedViewSummaries.length === 0 ? (
-                <div className="saved-views-empty-card" onClick={() => setIsCreatingSavedView(true)}>
-                  <div className="saved-views-empty-icon">⚡</div>
-                  <div className="saved-views-empty-text">
-                    <strong>还没有创建组合视图</strong>
-                    <p>点击“新建组合”，即可同时组合多个分类进行“全部满足”、“任意满足”或“排除”筛选。</p>
+          <div className="directory-page">
+            {(savedViewsTotal > 0 || savedViewsLoading) && (
+              <section className="directory-section" aria-label="相册组合">
+                <h2>相册组合 <small>{savedViewsTotal}</small></h2>
+                {savedViewsLoading && savedViewSummaries.length === 0 ? <p role="status" className="directory-status">正在读取…</p> : (
+                  <div className="directory-grid">
+                    {savedViewSummaries.map((view) => (
+                      <SavedCollectionViewCard key={view.id} view={view} collections={collections}
+                        onOpen={() => { onWorkQueryChange(savedViewWorkQuery(view.effectiveQuery, normalSort, workQuery.limit)); onModeChange("flat"); }}
+                        onEdit={() => setEditingSavedView(view)} onDelete={() => setDeletingSavedView(view)} />
+                    ))}
                   </div>
-                  <Button type="button">新建组合</Button>
+                )}
+                {savedViewsHasMore && <Button variant="ghost" busy={savedViewsLoading} busyLabel="正在读取…" onClick={onLoadMoreSavedViews}>继续加载（{savedViewSummaries.length}/{savedViewsTotal}）</Button>}
+              </section>
+            )}
+            <section className="directory-section" aria-label="相册">
+              {(savedViewsTotal > 0 || savedViewsLoading) && <h2>相册 <small>{collections.length}</small></h2>}
+              {collections.length === 0 ? (
+                <div className="gallery-empty">
+                  <h2>还没有相册</h2>
+                  <p>相册用来归类作品，一件作品可以放进多个相册。</p>
+                  <div className="gallery-empty-actions"><Button variant="primary" onClick={onCreateCollection}><Icon name="plus" size={16} />新建相册</Button></div>
                 </div>
               ) : (
-                <div className="collections-grid saved-views-grid">
-                  {savedViewSummaries.map((view) => (
-                    <SavedCollectionViewCard
-                      key={view.id}
-                      view={view}
-                      collections={collections}
-                      onOpen={() => {
-                        onWorkQueryChange(savedViewWorkQuery(view.effectiveQuery, normalSort, workQuery.limit));
-                        onModeChange("flat");
-                      }}
-                      onEdit={() => setEditingSavedView(view)}
-                      onDelete={() => setDeletingSavedView(view)}
-                    />
+                <div className="directory-grid">
+                  {collectionSummaries.map((collection) => (
+                    <CollectionCard key={collection.id} collection={collection}
+                      onOpen={() => onScopeChange({ kind: "collection", collectionId: collection.id })}
+                      onEdit={() => onEditCollection(collection)}
+                      onFilter={() => viewScopeWorks({ kind: "collection", collectionId: collection.id })} />
                   ))}
                 </div>
               )}
-              {savedViewsHasMore && <Button busy={savedViewsLoading} busyLabel="正在读取…" onClick={onLoadMoreSavedViews}>继续加载组合视图（已显示 {savedViewSummaries.length} / {savedViewsTotal}）</Button>}
-            </section>
-
-            {/* 2. Normal Collections Section */}
-            <section className="normal-collections-section">
-              <div className="section-header-row">
-                <div>
-                  <h3 className="section-title">全部普通相册 ({collections.length})</h3>
-                  <p className="section-subtext">用于归纳管理图片的实体相册</p>
-                </div>
-                <Button onClick={onCreateCollection}>
-                  + 新建相册
-                </Button>
-              </div>
-
-              <div className="collections-grid">
-                {collections.length === 0 && (
-                  <div className="empty-state">
-                    <p className="eyebrow">NO COLLECTIONS</p>
-                    <h2>暂无相册</h2>
-                    <p>点击上方“新建相册”来组织你的画廊</p>
-                  </div>
-                )}
-                {collectionSummaries.map((collection) => (
-                  <CollectionCard
-                    key={collection.id}
-                    collection={collection}
-                    onOpen={() => onScopeChange({ kind: "collection", collectionId: collection.id })}
-                    onEdit={() => onEditCollection(collection)}
-                    onFilter={() => viewScopeWorks({ kind: "collection", collectionId: collection.id })}
-                  />
-                ))}
-              </div>
             </section>
           </div>
         )
@@ -364,7 +325,7 @@ export function GalleryView({
       ) : (
         <section className="author-gallery">
           {!selectedAuthor ? (
-            <div className="author-browser-grid">
+            <div className="directory-grid">
               {artistSummaries.map((author) => (
                 <AuthorBrowserCard key={author.key} author={author} onOpen={() => onScopeChange({ kind: "artist", artistId: author.artistId })} />
               ))}
@@ -431,7 +392,6 @@ export function GalleryView({
           <section className="dialog-shell" aria-labelledby="delete-saved-view-title">
             <header className="dialog-header">
               <div>
-                <p className="eyebrow">DELETE VIEW</p>
                 <h2 id="delete-saved-view-title">删除组合视图“{deletingSavedView.name}”</h2>
               </div>
               <button type="button" className="dialog-close" onClick={() => setDeletingSavedView(null)} aria-label="关闭">✕</button>

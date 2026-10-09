@@ -30,7 +30,6 @@
 @import "./styles/vision-radar.css" layer(legacy);
 @import "./styles/prompt-bridge.css" layer(legacy);
 @import "./styles/typography-settings.css" layer(legacy);
-@import "./styles/aquarium.css" layer(legacy);
 @import "./styles/inspiration.css" layer(legacy);
 @import "./styles/interaction-motion.css" layer(legacy);
 @import "./styles/gallery-actions.css" layer(legacy);
@@ -39,3 +38,5 @@
 @import "./styles/app-shell.css" layer(views);
 @import "./styles/gallery.css" layer(views);
 @import "./styles/viewer.css" layer(views);
+@import "./styles/directory.css" layer(views);
+@import "./styles/detail.css" layer(views);

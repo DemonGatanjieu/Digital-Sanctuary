@@ -1,0 +1,68 @@
+/* Views: album, combination and artist directories — covers first, text underneath, actions in a menu. */
+
+.directory-page { display: grid; gap: 28px; padding-top: 4px; }
+.directory-section { display: grid; gap: 12px; }
+.directory-section > h2 { margin: 0; color: var(--ds-text-heading); font-size: var(--ds-font-14); font-weight: var(--ds-weight-semibold); }
+.directory-section > h2 small { margin-left: 4px; color: var(--ds-text-muted); font-weight: 400; }
+.directory-status { margin: 0; color: var(--ds-text-secondary); }
+
+.directory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 24px 16px;
+}
+.app-shell[data-grid-density="compact"] .directory-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+
+.directory-card { position: relative; min-width: 0; }
+.directory-card-open {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.directory-card-open:focus-visible { outline: none; }
+.directory-card-open:focus-visible .directory-card-cover { outline: 2px solid var(--ds-primary); outline-offset: 2px; }
+
+.directory-card-cover {
+  display: grid;
+  gap: 2px;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-card-subtle);
+}
+.directory-card-cover img { width: 100%; height: 100%; min-height: 0; object-fit: cover; transition: transform var(--ds-transition-normal); }
+.directory-card-cover.covers-2 { grid-template-columns: 1fr 1fr; }
+.directory-card-cover.covers-3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; }
+.directory-card-cover.covers-3 img:first-child { grid-row: 1 / 3; }
+.directory-card-open:hover .directory-card-cover img { transform: scale(1.02); }
+.directory-card-placeholder { display: grid; place-items: center; color: var(--ds-text-muted); }
+
+.directory-card-body { display: flex; align-items: center; gap: 10px; min-width: 0; padding-right: 32px; }
+.directory-card-copy { display: grid; gap: 2px; min-width: 0; }
+.directory-card-copy strong { overflow: hidden; color: var(--ds-text-heading); font-size: var(--ds-font-14); font-weight: var(--ds-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
+.directory-card-copy small { overflow: hidden; color: var(--ds-text-secondary); font-size: var(--ds-font-12); text-overflow: ellipsis; white-space: nowrap; }
+.directory-card-note { color: var(--ds-text-muted); }
+.directory-card-more { position: absolute; right: -4px; bottom: 6px; opacity: 0; }
+.directory-card:hover .directory-card-more, .directory-card-more:focus-visible, .directory-card-more[aria-expanded="true"] { opacity: 1; }
+
+.directory-card .author-monogram {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: var(--ds-text-secondary);
+  background: var(--ds-bg-active);
+  font-size: var(--ds-font-13);
+  font-weight: var(--ds-weight-semibold);
+  box-shadow: none;
+  object-fit: cover;
+}

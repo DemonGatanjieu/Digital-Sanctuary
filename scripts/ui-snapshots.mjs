@@ -80,8 +80,17 @@ try {
           await key("Escape"); await settle();
         }
         if (await openFirstWork("[data-work-tile]:has(.work-tile-pages) .work-tile-image")) { await settle(500); await shot(`viewer-pages-${suffix}`); await key("Escape"); await settle(); }
-        if (await clickFirst(["[data-scope='collections']", "button"], "相册")) { await imagesSettled(); await shot(`albums-${suffix}`); }
-        if (await clickFirst(["[data-scope='author-work']", "button"], "画师")) { await imagesSettled(); await shot(`artists-${suffix}`); }
+        if (await clickFirst(["[data-scope='collections']", "button"], "相册")) {
+          await imagesSettled(); await shot(`albums-${suffix}`);
+          if (await cdp.evaluate("(()=>{const e=document.querySelector('.directory-card-open, .collection-card');e?.click();return Boolean(e)})()")) { await settle(600); await shot(`album-detail-${suffix}`);
+            if (await clickFirst([".detail-header .ui-segmented button"], "画册")) { await settle(800); await shot(`album-book-${suffix}`); await clickFirst([".detail-header .ui-segmented button"], "网格"); await settle(); } }
+          await clickFirst(["[data-scope='collections']", "button"], "相册"); await settle();
+        }
+        if (await clickFirst(["[data-scope='author-work']", "button"], "画师")) {
+          await imagesSettled(); await shot(`artists-${suffix}`);
+          if (await cdp.evaluate("(()=>{const e=document.querySelector('.directory-card-open, .author-browser-card');e?.click();return Boolean(e)})()")) { await settle(600); await shot(`artist-detail-${suffix}`); }
+          await clickFirst(["[data-scope='author-work']", "button"], "画师"); await settle();
+        }
         await clickFirst(["[data-scope='flat']", "button"], "全部作品") || await clickFirst(["button"], "作品");
       }
       await nav("organize"); await shot(`organize-${suffix}`);

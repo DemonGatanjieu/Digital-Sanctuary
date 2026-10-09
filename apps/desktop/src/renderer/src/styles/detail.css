@@ -1,0 +1,67 @@
+/* Views: album and artist detail — the gallery's header bar and grid, inside the content area. */
+
+.detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--ds-toolbar-height);
+  background: var(--ds-bg-app);
+}
+.detail-back { margin-left: -8px; }
+.detail-title { display: grid; min-width: 0; }
+.detail-title h1 { overflow: hidden; margin: 0; color: var(--ds-text-heading); font-size: var(--ds-font-16); font-weight: var(--ds-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
+.detail-title small { overflow: hidden; color: var(--ds-text-secondary); font-size: var(--ds-font-12); text-overflow: ellipsis; white-space: nowrap; }
+.detail-actions { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.detail-header .ui-segmented { flex: none; }
+.detail-header .author-monogram {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ds-text-secondary);
+  background: var(--ds-bg-active);
+  font-size: var(--ds-font-13);
+  font-weight: var(--ds-weight-semibold);
+  box-shadow: none;
+  object-fit: cover;
+}
+
+/* Album: the old full-window theater now fills the content area and owns its scrolling. */
+.app-shell > main:has(> .album-fullscreen-theater) { position: relative; overflow: hidden; padding: 0; }
+.album-fullscreen-theater {
+  position: absolute;
+  inset: 0;
+  z-index: auto;
+  padding: 0 24px;
+  color: var(--ds-text-body);
+  background: var(--ds-bg-app);
+  animation: none;
+}
+.album-fullscreen-theater .theater-stage-canvas { align-items: stretch; justify-content: flex-start; padding: 0; }
+.album-fullscreen-theater .theater-grid-scroll-box,
+.album-fullscreen-theater .theater-toc-scroll-box { flex: 1; max-width: none; max-height: none; padding: 0 0 48px; }
+.album-fullscreen-theater[data-detail-mode="flip"] .theater-stage-canvas { align-items: center; justify-content: center; padding: 8px 0 24px; }
+
+/* Artist: flows in the main scroll like the gallery. */
+.author-detail-page { min-height: 0; overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.author-detail-page .author-stage-canvas { padding: 0 0 48px; overflow: visible; }
+.author-detail-page .gallery-empty, .album-fullscreen-theater .gallery-empty { color: var(--ds-text-body); }
+
+/* Contents lists for albums and artists */
+.album-toc-container, .author-catalog-container { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.album-toc-header, .author-catalog-header { color: var(--ds-text-muted); font-size: var(--ds-font-12); letter-spacing: 0; text-transform: none; background: transparent; border-bottom: 1px solid var(--ds-border-subtle); }
+.album-toc-row, .author-catalog-row { border-bottom: 1px solid var(--ds-border-subtle); border-radius: 0; color: var(--ds-text-body); background: transparent; box-shadow: none; transform: none; }
+.album-toc-row:hover, .author-catalog-row:hover { background: var(--ds-bg-hover); transform: none; box-shadow: none; }
+.toc-number, .catalog-number { color: var(--ds-text-muted); font-family: inherit; font-size: var(--ds-font-12); }
+.toc-title, .catalog-title { color: var(--ds-text-heading); font-size: var(--ds-font-13); font-weight: var(--ds-weight-medium); }
+.toc-artist, .catalog-subtitle { color: var(--ds-text-secondary); font-size: var(--ds-font-12); }
+.catalog-page-tag, .toc-cover-tag { border: 0; color: var(--ds-text-secondary); background: var(--ds-bg-hover); }
+.toc-set-cover-btn { border: 1px solid var(--ds-border-light); color: var(--ds-text-body); background: transparent; box-shadow: none; }
+.toc-thumb-cell img, .catalog-thumb-img { border-radius: var(--ds-radius-sm); box-shadow: none; }

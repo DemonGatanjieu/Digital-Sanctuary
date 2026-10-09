@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ArtworkRecord, CollectionRecord, CollectionSummary, SavedCollectionView, SavedViewSummary } from "@sanctuary/domain";
-import { AquariumFloatingStage } from "./AquariumFloatingStage";
-import { ArtworkCard, artworkImageUrl } from "./ArtworkCard";
+import { artworkImageUrl } from "./ArtworkCard";
 import { Button } from "./Button";
+import { Icon } from "./Icon";
+import { MenuItem, MenuLabel, MenuSeparator } from "./Popover";
+import { PageGrid } from "./PageGrid";
+import { SegmentedControl } from "./SegmentedControl";
 import { PagedArtworkPicker } from "./PagedArtworkPicker";
 import {
   getPhotobookArtworkIndex,
@@ -52,8 +55,9 @@ export function CollectionDetailPage({
   const items = artworks;
   const coverArtwork = artworks.find((a) => a.id === collection.coverArtworkId) ?? items[0];
   const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
-  const [fallbackMode, setFallbackMode] = useState<CollectionDetailViewMode>("flip");
-  const viewMode = session?.viewMode ?? fallbackMode;
+  const [fallbackMode, setFallbackMode] = useState<CollectionDetailViewMode>("grid");
+  // The floating "aquarium" stage was retired; sessions that remember it open the grid instead.
+  const viewMode: CollectionDetailViewMode = session?.viewMode && session.viewMode !== "aquarium" ? session.viewMode : fallbackMode;
   const [isPickingWorks, setIsPickingWorks] = useState(false);
   const [isPhotobookTocOpen, setIsPhotobookTocOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
@@ -109,74 +113,31 @@ export function CollectionDetailPage({
 
   return (
     <section className="album-fullscreen-theater" data-detail-mode={viewMode} role="dialog" aria-modal="true" aria-label={`相册《${collection.name}》`}>
-      {/* Ambient Blurred Art Backdrop (Game-like Cinema Stage) */}
-      <div
-        className="theater-ambient-backdrop"
-        style={{ backgroundImage: coverUrl ? `url(${coverUrl})` : undefined }}
-      />
-      <div className="theater-ambient-overlay" />
-
-      {/* Top Game HUD Navigation Bar */}
-      <header className="theater-hud-header">
-        <div className="theater-hud-left">
-          <button className="theater-game-back-btn" onClick={onBack} title="退出相册返回书架 (ESC)">
-            <span className="key-badge">ESC</span>
-            <span>✕ 返回书架</span>
-          </button>
-          <div className="theater-album-title-block">
-            <span className="theater-sub-tag">DIGITAL SANCTUARY · MEMORIAL ALBUM</span>
-            <h1 className="theater-album-title">{collection.name}</h1>
-          </div>
+      <header className="detail-header">
+        <button type="button" className="ui-tool-button detail-back" onClick={onBack} title="返回相册（Esc）"><Icon name="chevronLeft" size={16} /><span>相册</span></button>
+        <div className="detail-title">
+          <h1>{collection.name}</h1>
+          <small>{items.length} 页{collection.description ? ` · ${collection.description}` : ""}</small>
         </div>
-
-        <div className="theater-hud-center">
-          <BrowseModeMenu
-            compact
-            label="画册模式"
-            value={viewMode}
-            options={[
-              { value: "flip", label: "📖 翻页画册", title: "实体画册双页对开翻页质感" },
-              { value: "aquarium", label: "🫧 水族漂浮", title: "深海沉浸漂浮水泡，大小错落，流动触感" },
-              { value: "grid", label: "🖼️ 典藏网格", title: "全景网格速览" },
-              { value: "toc", label: "📑 篇目目录", title: "书籍篇目索引" }
-            ]}
-            onChange={(val) => changeViewMode(val as CollectionDetailViewMode)}
-          />
-        </div>
-
-        <div className="theater-hud-right">
-          {onFilterInGallery && (
-            <button className="theater-action-pill" onClick={onFilterInGallery} title="在画廊大网格中筛选此相册">
-              在画廊中筛选
-            </button>
-          )}
-          <button className="theater-action-pill primary" onClick={() => setIsPickingWorks(true)} title="从全库挑选作品收录入相册">
-            + 添加画作 ({items.length})
-          </button>
+        <SegmentedControl label="浏览方式" value={viewMode} onChange={changeViewMode}
+          options={[{ value: "grid", label: "网格" }, { value: "flip", label: "画册" }, { value: "toc", label: "目录" }]} />
+        <div className="detail-actions">
+          {onFilterInGallery && <button type="button" className="ui-tool-button" onClick={onFilterInGallery} title="在作品页按此相册筛选"><Icon name="filter" size={16} /><span>在作品中筛选</span></button>}
+          <Button variant="primary" onClick={() => setIsPickingWorks(true)}><Icon name="plus" size={16} />添加作品</Button>
         </div>
       </header>
 
       {/* Main Theater Content Area */}
       <main className="theater-stage-canvas" ref={stageRef}>
         {items.length === 0 ? (
-          <div className="theater-empty-state">
-            <div className="theater-empty-book-icon">📖</div>
-            <h2>{collection.workCount > 0 ? "本相册的作品可在图库中浏览" : `《${collection.name}》尚未收录画作`}</h2>
-            <p>{collection.workCount > 0 ? "当前没有可编入画册的页面，原图仍保留在图库中。" : collection.description || "暂无题记。您可以直接从画廊中挑选精美作品收录至本相册。"}</p>
-            {onFilterInGallery && <Button onClick={onFilterInGallery}>在图库中查看作品 ({collection.workCount})</Button>}
-            <Button variant="primary" style={{ marginTop: 16 }} onClick={() => setIsPickingWorks(true)}>
-              + 立即从画廊挑选作品入册
-            </Button>
+          <div className="gallery-empty">
+            <h2>{collection.workCount > 0 ? "本相册的作品可在图库中浏览" : "相册还是空的"}</h2>
+            <p>{collection.workCount > 0 ? "当前没有可编入画册的页面，原图仍保留在图库中。" : "从图库挑选作品加入这个相册。"}</p>
+            <div className="gallery-empty-actions">
+              {onFilterInGallery && collection.workCount > 0 && <Button onClick={onFilterInGallery}>在图库中查看作品 ({collection.workCount})</Button>}
+              <Button variant="primary" onClick={() => setIsPickingWorks(true)}><Icon name="plus" size={16} />添加作品</Button>
+            </div>
           </div>
-        ) : viewMode === "aquarium" ? (
-          /* Abyssal Aquarium Floating Bubble Stage */
-          <AquariumFloatingStage
-            items={items}
-            onOpenArtwork={onOpenArtwork}
-            onSetCover={onSetCover}
-            coverArtworkId={collection.coverArtworkId}
-            title={collection.name}
-          />
         ) : viewMode === "flip" ? (
           /* 3D Real Photobook Double-Spread Flip Theater */
           <PhotobookFlipSpread
@@ -199,10 +160,10 @@ export function CollectionDetailPage({
           <div className="theater-toc-scroll-box" ref={listRef}>
             <div className="album-toc-container">
               <div className="album-toc-header">
-                <span>INDEX / 索引编号</span>
-                <span>TITLE & ARTIST / 作品篇目</span>
-                <span>PREVIEW / 预览缩略图</span>
-                <span>ACTION / 选项</span>
+                <span>序号</span>
+                <span>作品</span>
+                <span>预览</span>
+                <span>封面</span>
               </div>
               <div className="album-toc-list">
                 {items.map((artwork, idx) => {
@@ -216,7 +177,7 @@ export function CollectionDetailPage({
                       onClick={() => onOpenArtwork(artwork.id)}
                     >
                       <div className="toc-index-cell">
-                        <span className="toc-number">№ {numStr}</span>
+                        <span className="toc-number">{numStr}</span>
                         {isCover && <span className="toc-cover-tag">封面</span>}
                       </div>
 
@@ -249,39 +210,22 @@ export function CollectionDetailPage({
             </div>
           </div>
         ) : (
-          /* Grid Mode (画册网格画廊模式) */
           <div className="theater-grid-scroll-box" ref={listRef}>
-            <div className="gallery-grid collection-detail-grid">
-              {items.map((artwork) => (
-                <div className="collection-artwork" key={artwork.id} {...detailPageAttributes(artwork)}>
-                  <ArtworkCard artwork={artwork} collections={collections} onAssign={onAssign} onOpen={onOpenArtwork} />
-                  <button
-                    type="button"
-                    className={`collection-cover-action ${collection.coverArtworkId === artwork.id ? "active" : ""}`}
-                    onClick={() => onSetCover(artwork.id)}
-                    disabled={collection.coverArtworkId === artwork.id}
-                  >
-                    {collection.coverArtworkId === artwork.id ? "当前封面" : "设为相册封面"}
-                  </button>
-                </div>
-              ))}
-            </div>
+            <PageGrid pages={items} onOpen={onOpenArtwork}
+              badgeFor={(page) => collection.coverArtworkId === page.id ? "封面" : null}
+              renderMenu={(page, close) => <>
+                <MenuItem icon="open" label="打开" onSelect={() => { close(); onOpenArtwork(page.id); }} />
+                <MenuItem icon="gallery" label={collection.coverArtworkId === page.id ? "已是相册封面" : "设为相册封面"} disabled={collection.coverArtworkId === page.id}
+                  onSelect={() => { close(); onSetCover(page.id); }} />
+                {collections.length > 1 && <><MenuSeparator /><MenuLabel>加入其他相册</MenuLabel></>}
+                {collections.filter((item) => item.id !== collection.id).map((item) => (
+                  <MenuItem key={item.id} label={item.name} checked={page.collectionIds.includes(item.id)} disabled={page.collectionIds.includes(item.id)}
+                    onSelect={() => { close(); void onAssign(page.id, item.id); }} />
+                ))}
+              </>} />
           </div>
         )}
       </main>
-
-      {/* Bottom Game Hotkey Legend Bar */}
-      <footer className="theater-hud-footer">
-        <div className="game-key-prompt-row">
-          <span className="key-prompt"><kbd>←</kbd> <kbd>A</kbd> 上一页</span>
-          <span className="key-prompt"><kbd>→</kbd> <kbd>D</kbd> <kbd>Space</kbd> 下一页</span>
-          <span className="key-prompt"><kbd>Click</kbd> 点击左右页翻页</span>
-          <span className="key-prompt"><kbd>ESC</kbd> 退出相册</span>
-        </div>
-        <div className="theater-footer-stats">
-          <span>共收录 <strong>{items.length}</strong> 幅典藏画作</span>
-        </div>
-      </footer>
 
       {/* Add Works from Library Modal Picker */}
       {isPickingWorks && (
@@ -1064,13 +1008,12 @@ function PhotobookSpreadPageContent({
     return (
       <>
         <header className="page-header-index">
-          <span className="page-eyebrow">CHAPTER / 卷首题记</span>
-          <span className="page-corner-num">P. 00</span>
+          <span className="page-eyebrow">卷首</span>
+          <span className="page-corner-num">00</span>
         </header>
 
         <div className="verso-content-scroll" onClick={(e) => e.stopPropagation()}>
           <div className="verso-preface-hero">
-            <span className="preface-curation-badge">SANCTUARY FINE ARTBOOK</span>
             <h1 className="preface-album-title">{collection.name}</h1>
           </div>
 
@@ -1140,15 +1083,13 @@ function PhotobookSpreadPageContent({
     return (
       <>
         <header className={side === "left" ? "page-header-index" : "page-header-art"}>
-          <span className="page-eyebrow">COLOPHON / 篇目尾声</span>
-          <span className="page-corner-num">P. {pageNumStr}</span>
+          <span className="page-eyebrow">尾声</span>
+          <span className="page-corner-num">{pageNumStr}</span>
         </header>
 
         <div className="verso-content-scroll" onClick={(e) => e.stopPropagation()}>
           <div className="colophon-card">
-            <span className="colophon-seal">🏛️</span>
-            <h3 className="colophon-title">DIGITAL SANCTUARY</h3>
-            <p className="colophon-text">本画集全篇呈现完毕 · 感谢您的静心驻足</p>
+            <h3 className="colophon-title">全书完</h3>
             <button
               type="button"
               className="colophon-home-btn"
@@ -1181,9 +1122,9 @@ function PhotobookSpreadPageContent({
     <>
       <header className={side === "left" ? "page-header-index" : "page-header-art"}>
         <span className={side === "left" ? "page-eyebrow" : "page-ribbon-tag"}>
-          {isCover ? "★ 卷首封面首作" : `GALLERY FINE ART · № ${pageNumStr}`}
+          {isCover ? "封面" : pageNumStr}
         </span>
-        <span className="page-corner-num">P. {pageNumStr}</span>
+        <span className="page-corner-num">{pageNumStr}</span>
       </header>
 
       <PhotoMountCard
@@ -1278,7 +1219,7 @@ function PhotobookTocDrawer({
         {/* Drawer Header */}
         <div className="toc-drawer-header">
           <div className="toc-drawer-title-group">
-            <span className="toc-drawer-eyebrow">TABLE OF CONTENTS</span>
+            <span className="toc-drawer-eyebrow">目录</span>
             <h2 className="toc-drawer-title">📑 篇目索引目录</h2>
             <p className="toc-drawer-subtitle">
               《{collection.name}》· 共收录 {items.length} 篇典藏原画
@@ -1436,155 +1377,11 @@ function PhotoMountCard({
           <div className="polaroid-caption-bar">
             <span className="polaroid-caption-title">{artwork.displayName ?? artwork.source?.title ?? artwork.fileName}</span>
             <span className="polaroid-caption-meta">
-              № {pageNumStr} · {artwork.source?.authorName ?? "典藏原画"}
+              {pageNumStr} · {artwork.source?.authorName ?? "本地作品"}
             </span>
           </div>
         )}
       </div>
     </div>
-  );
-}
-
-export function CollectionCard({
-  collection,
-  onOpen,
-  onEdit,
-  onFilter
-}: {
-  collection: CollectionSummary;
-  onOpen: () => void;
-  onEdit: () => void;
-  onFilter?: () => void;
-}) {
-  const coverUrl = collection.coverAsset ? `sanctuary-image://local/${encodeURIComponent(collection.coverAsset.thumbnailPath ?? collection.coverAsset.path)}` : "";
-
-  return (
-    <article className="collection-card album-card-book" onClick={onOpen}>
-      <div className="collection-cover album-book-cover">
-        <div className="album-card-spine" />
-        {coverUrl ? (
-          <img src={coverUrl} alt="" loading="lazy" />
-        ) : (
-          <div className="collection-cover-placeholder"><span>📖</span></div>
-        )}
-        <span className="album-card-tag">ALBUM</span>
-
-        <div className="collection-card-actions-top" onClick={(e) => e.stopPropagation()}>
-          {onFilter && (
-            <button
-              type="button"
-              className="collection-filter-button"
-              title="在画廊中筛选此相册"
-              onClick={onFilter}
-            >
-              筛选
-            </button>
-          )}
-          <button
-            type="button"
-            className="collection-edit-button"
-            aria-label={`编辑相册 ${collection.name}`}
-            onClick={onEdit}
-            title="编辑相册"
-          >
-            ···
-          </button>
-        </div>
-      </div>
-      <div className="collection-info">
-        <h3>{collection.name}</h3>
-        <small>{collection.workCount} 个作品 · {collection.bookPageCount} 页画作</small>
-        {collection.description && <p className="collection-desc">{collection.description}</p>}
-      </div>
-    </article>
-  );
-}
-
-export function formatSavedViewSummary(
-  view: SavedCollectionView,
-  collections: CollectionRecord[]
-): string {
-  const includeNames = view.includedCollectionIds
-    .map((id) => collections.find((c) => c.id === id)?.name)
-    .filter(Boolean);
-  const excludeNames = view.excludedCollectionIds
-    .map((id) => collections.find((c) => c.id === id)?.name)
-    .filter(Boolean);
-
-  const modeText = view.matchMode === "all" ? "全部满足" : "任一满足";
-  const parts: string[] = [];
-
-  if (includeNames.length > 0) {
-    parts.push(`包含 [${includeNames.join(", ")}] (${modeText})`);
-  }
-  if (excludeNames.length > 0) {
-    parts.push(`排除 [${excludeNames.join(", ")}]`);
-  }
-
-  return parts.join(" 且 ") || "无条件筛选";
-}
-
-export function SavedCollectionViewCard({
-  view,
-  collections,
-  onOpen,
-  onEdit,
-  onDelete
-}: {
-  view: SavedViewSummary;
-  collections: CollectionRecord[];
-  onOpen: () => void;
-  onEdit: () => void;
-  onDelete?: () => void;
-}) {
-  const previewArtworks = view.previewAssets;
-
-  return (
-    <article className="collection-card saved-view-card" onClick={onOpen}>
-      <div className="saved-view-cover-grid">
-        <div className="saved-view-card-actions" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            className="saved-view-btn-action"
-            aria-label={`编辑相册组合 ${view.name}`}
-            onClick={onEdit}
-            title="编辑组合"
-          >
-            ✏️
-          </button>
-          {onDelete && (
-            <button
-              type="button"
-              className="saved-view-btn-action btn-danger"
-              aria-label={`删除相册组合 ${view.name}`}
-              onClick={onDelete}
-              title="删除组合"
-            >
-              🗑️
-            </button>
-          )}
-        </div>
-        {previewArtworks.length > 0 ? (
-          previewArtworks.map((artwork, idx) => (
-            <div key={artwork.id} className={`preview-quadrant quadrant-${idx}`}>
-              <img src={`sanctuary-image://local/${encodeURIComponent(artwork.thumbnailPath ?? artwork.path)}`} alt="" loading="lazy" />
-            </div>
-          ))
-        ) : (
-          <div className="collection-cover-placeholder">
-            <span>⊞</span>
-          </div>
-        )}
-      </div>
-      <div className="collection-info">
-        <div className="saved-view-title-row">
-          <h3>{view.name}</h3>
-          <span className="saved-view-badge">组合视图</span>
-        </div>
-        <small>{view.workCount} 个作品 · {view.pageCount} 页</small>
-        <p className="collection-desc">{formatSavedViewSummary(view, collections)}</p>
-        {(view.missingIncludedIds.length > 0 || view.missingExcludedIds.length > 0) && <small>部分相册已删除，按现有条件展示</small>}
-      </div>
-    </article>
   );
 }

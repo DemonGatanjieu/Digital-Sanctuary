@@ -5,10 +5,13 @@ import { MenuItem, MenuLabel, MenuSeparator, Popover, type PopoverAnchor } from 
 import { localImageUrl } from "./image-url";
 
 /** Portrait is the most common shape in the library; used until real dimensions are known. */
-const FALLBACK_RATIO = 0.75;
+export const FALLBACK_RATIO = 0.75;
 /** Ratios measured from loaded thumbnails this session, so returning to the gallery does not re-flow rows. */
 const measuredRatios = new Map<string, number>();
-function rememberRatio(assetId: string, ratio: number) {
+export function measuredRatio(key: string): number | null {
+  return measuredRatios.get(key) ?? null;
+}
+export function rememberRatio(assetId: string, ratio: number) {
   if (measuredRatios.size > 20000) measuredRatios.clear();
   measuredRatios.set(assetId, ratio);
 }
@@ -109,7 +112,7 @@ export const WorkTile = memo(function WorkTile({ work, selecting, selected, open
   );
 });
 
-function LazyImage({ path, onRatio }: { path: string; onRatio?: ((ratio: number) => void) | undefined }) {
+export function LazyImage({ path, onRatio }: { path: string; onRatio?: ((ratio: number) => void) | undefined }) {
   const ref = useRef<HTMLImageElement>(null);
   const [load, setLoad] = useState(false);
   useEffect(() => {

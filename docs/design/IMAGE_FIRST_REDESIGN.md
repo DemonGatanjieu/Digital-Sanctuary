@@ -33,7 +33,7 @@
 |---|---|---|
 | 0 | 规范；截图基线（`scripts/ui-snapshots.mjs`）；CSS 分层机制 | 完成 |
 | 1 | 设计变量、图标、共享控件；新侧栏；新图库页（工具条、网格、右键菜单）；探索的保存操作从侧栏移到探索工具条 | 完成 |
-| 2 | 大图查看器与作品信息抽屉；相册页、画师页 | 待做 |
+| 2 | 大图查看器与作品信息抽屉；相册页、画师页 | 完成（画册翻页保留为可选视图，水族馆视图移除） |
 | 3 | 整理、探索、创作、设置改用同一套组件；精简“开始”页 | 待做 |
 | 4 | 工程清理：删除旧 CSS 与装饰组件；拆分 `main/index.ts`、`database/src/index.ts`；更新冒烟脚本（`smoke-gallery-actions`、`smoke-gallery-search`、`smoke-navigation`、`smoke-viewer`、`smoke-gallery-return` 仍按旧图库 DOM 编写，阶段一后已过时）；移除图库横幅的剩余接口；文档瘦身 | 待做 |
 | 5 | 安全审计：IPC 输入校验、`sanctuary-image` 路径、CSP、密钥存储 | 待做 |
