@@ -71,7 +71,15 @@ try {
         await cdp.evaluate("document.querySelector('main').scrollTop=600"); await imagesSettled(); await shot(`gallery-scrolled-${suffix}`);
         await cdp.evaluate("document.querySelector('main').scrollTop=0"); await imagesSettled();
         await galleryInteractions(suffix);
-        if (await openFirstWork()) { await settle(400); await shot(`viewer-${suffix}`); await key("Escape"); await settle(); }
+        if (await openFirstWork()) {
+          await settle(400); await shot(`viewer-${suffix}`);
+          if (await cdp.evaluate("(()=>{const b=document.querySelector('[aria-label=\"作品信息\"]');b?.click();return Boolean(b)})()")) {
+            await waitFor("Boolean(document.querySelector('.work-information-drawer dl'))", 8000).catch(() => {}); await settle(300); await shot(`viewer-info-${suffix}`);
+            await key("Escape"); await settle(150);
+          }
+          await key("Escape"); await settle();
+        }
+        if (await openFirstWork("[data-work-tile]:has(.work-tile-pages) .work-tile-image")) { await settle(500); await shot(`viewer-pages-${suffix}`); await key("Escape"); await settle(); }
         if (await clickFirst(["[data-scope='collections']", "button"], "相册")) { await imagesSettled(); await shot(`albums-${suffix}`); }
         if (await clickFirst(["[data-scope='author-work']", "button"], "画师")) { await imagesSettled(); await shot(`artists-${suffix}`); }
         await clickFirst(["[data-scope='flat']", "button"], "全部作品") || await clickFirst(["button"], "作品");
@@ -102,8 +110,8 @@ async function nav(view) {
   await settle(350);
   await cdp.evaluate("document.querySelector('main')&&(document.querySelector('main').scrollTop=0)");
 }
-async function openFirstWork() {
-  return cdp.evaluate(`(()=>{const e=document.querySelector('[data-work-tile] button, .work-cover-button');if(!e)return false;e.click();return true})()`)
+async function openFirstWork(selector = "[data-work-tile] .work-tile-image, .work-cover-button") {
+  return cdp.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)return false;e.click();return true})()`)
     .then(async (ok) => { if (ok) await waitFor("Boolean(document.querySelector('[role=dialog] img'))", 8000).catch(() => {}); return ok; });
 }
 async function clickFirst(selectors, text) {

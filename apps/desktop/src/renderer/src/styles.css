@@ -38,3 +38,4 @@
 @import "./styles/ui.css" layer(components);
 @import "./styles/app-shell.css" layer(views);
 @import "./styles/gallery.css" layer(views);
+@import "./styles/viewer.css" layer(views);

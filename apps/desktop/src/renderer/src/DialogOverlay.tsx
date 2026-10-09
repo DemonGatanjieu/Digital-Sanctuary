@@ -29,10 +29,13 @@ export function handleDialogEscape(
 export function DialogOverlay({
   children,
   busy = false,
+  placement = "center",
   onClose
 }: {
   children: ReactNode;
   busy?: boolean;
+  /** "side" docks the surface to the right edge without dimming, e.g. details beside an open image. */
+  placement?: "center" | "side";
   onClose: () => void;
 }) {
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -89,7 +92,7 @@ export function DialogOverlay({
   return createPortal(
     <div
       ref={overlayRef}
-      className="dialog-overlay"
+      className={`dialog-overlay${placement === "side" ? " dialog-overlay--side" : ""}`}
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !busyRef.current) closeRef.current();

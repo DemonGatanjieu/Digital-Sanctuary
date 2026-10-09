@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { GenerationProvenance, VisionEvaluationResult, WorkRecord } from "@sanctuary/domain";
-import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
+import { Icon } from "./Icon";
+import { MenuItem, Popover } from "./Popover";
 import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 import { WorkInformationDrawer } from "./WorkInformationDrawer";
 import { localImageUrl as workImageUrl } from "./image-url";
@@ -20,6 +21,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
   const [showProvenance, setShowProvenance] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
   const [showInformation, setShowInformation] = useState(false);
+  const [toolsAnchor, setToolsAnchor] = useState<HTMLElement | null>(null);
   const page = work.assets[pageIndex];
   const interactionSuspended = showInspector || showRadar || showProvenance || showInformation;
   const viewerPages = useMemo(() => work.assets.map((asset) => ({ url: workImageUrl(asset.path), width: asset.width, height: asset.height, byteLength: asset.byteLength })), [work.assets]);
@@ -57,56 +59,35 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
       onFocusCapture={resetHudTimer}
       tabIndex={-1}
     >
-      <header className="cinema-hud-island">
+      <header className="cinema-hud-island viewer-bar">
         <div className="cinema-heading-group">
           <strong>{displayTitle}</strong>
-          <small>{work.artistName ?? "本地作品"} {work.assets.length > 1 ? `· 第 ${pageIndex + 1}/${work.assets.length} 页` : ""}</small>
+          <small>{work.artistName ?? "本地作品"}{work.assets.length > 1 ? ` · ${pageIndex + 1} / ${work.assets.length}` : ""}</small>
         </div>
 
         <div className="cinema-controls-group">
-          <div className="zoom-capsule">
-            <button type="button" title="缩小 (-)" onClick={() => viewer.changeZoom(zoom - 0.25)}>-</button>
-            <button type="button" className="zoom-readout" title="原始像素比例 · 点击自适应全貌 (0)" onClick={viewer.resetZoom}>{viewer.zoomPercent}%</button>
-            <button type="button" title="放大 (+)" onClick={() => viewer.changeZoom(zoom + 0.25)}>+</button>
-          </div>
-          <button type="button" className={`cinema-btn-fit ${zoom === 1 ? "active" : ""}`} title="自适应 / 原始像素 (每像素对应 1 CSS px；双击或按 1)" onClick={viewer.toggleNativeZoom}>
-            {nativeMode ? "自适应全貌" : "1:1 原图"}
+          <button type="button" className="viewer-icon" aria-label="缩小" title="缩小（-）" onClick={() => viewer.changeZoom(zoom - 0.25)}><Icon name="zoomOut" /></button>
+          <button type="button" className="viewer-readout" title="适应窗口（0）" onClick={viewer.resetZoom}>{viewer.zoomPercent}%</button>
+          <button type="button" className="viewer-icon" aria-label="放大" title="放大（+）" onClick={() => viewer.changeZoom(zoom + 0.25)}><Icon name="zoomIn" /></button>
+          <button type="button" className="viewer-text" aria-pressed={nativeMode} title="原始像素 / 适应窗口（1 或双击）" onClick={viewer.toggleNativeZoom}>
+            {nativeMode ? "适应窗口" : "原始尺寸"}
           </button>
-          <ArtworkToolsMenu>
-          <button type="button" className="cinema-btn-fit" onClick={() => { setShowInformation(true); setShowRadar(false); setShowInspector(false); setShowProvenance(false); }}>作品信息与相册</button>
-          <button
-            type="button"
-            className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
-            title="切换 AI 视觉雷达图画像"
-            onClick={() => { setShowRadar((v) => !v); setShowInformation(false); setShowInspector(false); setShowProvenance(false); }}
-          >
-            ✦ 雷达画像
-          </button>
-          <button
-            type="button"
-            className={`cinema-btn-fit ${showInspector ? "active" : ""}`}
-            title="查看当前页 WD 标签并打开提示词调音台"
-            onClick={() => { setShowInspector((value) => !value); setShowInformation(false); setShowRadar(false); setShowProvenance(false); }}
-          >
-            ◇ 元素透视
-          </button>
-          <button
-            type="button"
-            className="cinema-btn-fit"
-            title="把当前图片带到本地灵感台"
-            onClick={() => { onClose(); onOpenInspiration(work.id, pageIndex); }}
-          >
-            ✦ 一起创作
-          </button>
-          </ArtworkToolsMenu>
-          {provenance && (
-            <button type="button" className={`cinema-btn-fit ${showProvenance ? "active" : ""}`} title="查看 ComfyUI 生成来源" onClick={() => { setShowProvenance((value) => !value); setShowRadar(false); setShowInspector(false); }}>
-              ✦ 生成来源
-            </button>
-          )}
-          <button type="button" className="cinema-btn-close" aria-label="关闭大图" title="关闭大图 (Esc)" onClick={onClose}>✕</button>
+          <span className="viewer-divider" />
+          <button type="button" className="viewer-icon" aria-label="作品信息" aria-pressed={showInformation} title="作品信息（相册、来源、取用）"
+            onClick={() => { setShowInformation((value) => !value); setShowRadar(false); setShowInspector(false); setShowProvenance(false); }}><Icon name="info" /></button>
+          <button type="button" className="viewer-icon" aria-label="更多工具" aria-haspopup="menu" aria-expanded={Boolean(toolsAnchor)} title="更多工具"
+            onClick={(event) => setToolsAnchor(toolsAnchor ? null : event.currentTarget)}><Icon name="more" /></button>
+          <button type="button" className="viewer-icon cinema-btn-close" aria-label="关闭大图" title="关闭（Esc）" onClick={onClose}><Icon name="close" /></button>
         </div>
       </header>
+      {toolsAnchor && (
+        <Popover anchor={toolsAnchor} label="更多工具" align="end" onClose={() => setToolsAnchor(null)} className="viewer-menu">
+          <MenuItem icon="create" label="带着这张图去创作" onSelect={() => { setToolsAnchor(null); onClose(); onOpenInspiration(work.id, pageIndex); }} />
+          <MenuItem icon="search" label="元素与提示词" onSelect={() => { setToolsAnchor(null); setShowInspector(true); setShowInformation(false); setShowRadar(false); setShowProvenance(false); }} />
+          <MenuItem icon="filter" label="画像与画评" onSelect={() => { setToolsAnchor(null); setShowRadar(true); setShowInformation(false); setShowInspector(false); setShowProvenance(false); }} />
+          {provenance && <MenuItem icon="info" label="生成来源" onSelect={() => { setToolsAnchor(null); setShowProvenance(true); setShowRadar(false); setShowInspector(false); setShowInformation(false); }} />}
+        </Popover>
+      )}
 
       {showRadar && (
         <aside className="cinema-radar-drawer" role="complementary" aria-label="画作多维视觉雷达图">
@@ -180,10 +161,10 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
       </div>
 
       {pageIndex > 0 && (
-        <button type="button" className="cinema-nav-arrow prev" aria-label="上一页" disabled={interactionSuspended} onClick={() => setPageIndex((v) => v - 1)}>‹</button>
+        <button type="button" className="cinema-nav-arrow prev" aria-label="上一页" disabled={interactionSuspended} onClick={() => setPageIndex((v) => v - 1)}><Icon name="chevronLeft" size={28} /></button>
       )}
       {pageIndex < work.assets.length - 1 && (
-        <button type="button" className="cinema-nav-arrow next" aria-label="下一页" disabled={interactionSuspended} onClick={() => setPageIndex((v) => v + 1)}>›</button>
+        <button type="button" className="cinema-nav-arrow next" aria-label="下一页" disabled={interactionSuspended} onClick={() => setPageIndex((v) => v + 1)}><Icon name="chevronRight" size={28} /></button>
       )}
 
       {work.assets.length > 1 && (

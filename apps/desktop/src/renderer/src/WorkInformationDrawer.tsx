@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { WorkInformation, WorkRecord } from "@sanctuary/domain";
 import { Button } from "./Button";
 import { DialogOverlay } from "./DialogOverlay";
+import { Icon } from "./Icon";
 import { ExportImagesButton, SingleImageActions } from "./ImageOutputActions";
 
 export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector, onRadar, onInspiration, onChanged, onRenamed }: {
@@ -69,14 +70,14 @@ export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector,
   const asset = work?.assets.find((item) => item.pageIndex === pageIndex);
   const tags = Object.entries(information?.assessment?.labels ?? {}).filter(([, confidence]) => confidence >= 0.2)
     .sort((a, b) => b[1] - a[1]).slice(0, 12);
-  return <DialogOverlay busy={busy} onClose={onClose}>
+  return <DialogOverlay busy={busy} placement="side" onClose={onClose}>
     <section className="dialog-surface work-information-drawer" role="dialog" aria-modal="true" aria-labelledby="work-information-title">
-      <header><h2 id="work-information-title">作品信息</h2><Button size="small" disabled={busy} onClick={onClose} aria-label="关闭作品信息">关闭</Button></header>
+      <header><h2 id="work-information-title">作品信息</h2><button type="button" className="ui-icon-button" disabled={busy} onClick={onClose} aria-label="关闭作品信息" title="关闭"><Icon name="close" size={16} /></button></header>
       {loading && <p role="status">正在读取作品信息…</p>}
       {error && <p role="alert">{error}<Button size="small" disabled={busy} onClick={() => setRevision((value) => value + 1)}>重新读取</Button></p>}
       {work && <>
         <div><div className="work-information-name-heading"><h3>{work.title}</h3>
-          {!editingName && <Button size="small" variant="ghost" disabled={busy} onClick={() => { setName(work.title); setEditingName(true); setNotice(""); }}>修改图库名称</Button>}</div>
+          {!editingName && <Button size="small" variant="ghost" disabled={busy} onClick={() => { setName(work.title); setEditingName(true); setNotice(""); }}>改名</Button>}</div>
           {editingName && <form className="work-information-name" onSubmit={(event) => { event.preventDefault(); void rename(); }}>
             <label>图库名称<input ref={nameInput} aria-label="图库名称" maxLength={200} value={name} disabled={busy}
               onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}
@@ -103,11 +104,10 @@ export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector,
             if (updated) { setInformation((current) => current ? { ...current, work: updated } : null); setNotice("已更新图片位置"); await onChanged(); }
           }).catch((cause) => setError(cause instanceof Error ? cause.message : "重新定位失败，请重试")).finally(() => setBusy(false));
         }}>重新定位原文件…</Button><small className="muted">原文件移动到其他位置时使用，名称和相册会保留。{!asset.contentHash && "旧版未记录内容指纹，重新定位后会清除无法校验的分析记录。"}</small></div>}
-        <section aria-label="取用图片"><h3>拿出去使用</h3>
+        <section aria-label="取用图片"><h3>取用</h3>
           {asset&&<SingleImageActions target={{workId,assetId:asset.id}} disabled={busy} />}
           <ExportImagesButton targets={[{workId}]} label={`复制整件作品原图（${work.pageCount} 页）`} disabled={busy} />
-          <small className="muted">原图复制保留文件名，同名自动另存。剪贴板图片用于粘贴，超大图可能缩小。</small>
-        </section>
+                  </section>
         <section aria-label="作品相册"><h3>相册</h3>
           {work.collectionIds.length ? <ul className="work-information-albums">{work.collectionIds.map((id) => <li key={id}>
             <span>{information?.collections.find((item) => item.id === id)?.name ?? "相册已移除"}</span>
@@ -116,13 +116,12 @@ export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector,
           <div className="work-information-assign"><select aria-label="作品信息相册" value={album} disabled={busy} onChange={(event) => setAlbum(event.target.value)}>
             <option value="">选择相册</option>{information?.collections.filter((item) => !work.collectionIds.includes(item.id)).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select><Button size="small" disabled={!album} busy={busy} onClick={() => void membership(album)}>加入相册</Button></div>
-          <small className="muted">归档整件作品及其所有页，不移动原文件。</small>
-        </section>
-        <section><h3>已有识别与画评</h3>
+                  </section>
+        <section><h3>识别与画评</h3>
           <p className="muted">{information?.assessment?.status === "complete" ? "本页已有标签识别记录" : information?.assessment ? "上次标签识别未成功，可重新识别" : "这页还没有保存的标签识别"}</p>
           {information?.assessment && <details><summary>查看已存标签与识别模型</summary><p>{information.assessment.engine} · 版本 {information.assessment.engineVersion}（保存时的模型）</p>
             <p className="work-information-tags">{tags.map(([name, confidence]) => <span key={name}>{name} {Math.round(confidence * 100)}%</span>)}</p></details>}
-          <p className="muted">已有 {information?.evaluations.length ?? 0} 项画像 / 画评，查看详情或重新分析由你决定。</p>
+          <p className="muted">已有 {information?.evaluations.length ?? 0} 项画像 / 画评</p>
           <div className="work-information-actions"><Button size="small" onClick={onInspector}>元素与提示词</Button><Button size="small" onClick={onRadar}>查看画像与画评</Button><Button size="small" onClick={onInspiration}>携图创作</Button></div>
         </section>
         {information?.provenance && <details><summary>生成来源与提示词</summary><p>工作流：{information.provenance.templateName}</p><p>来源作品：{information.provenance.sourceWorkId}</p><p>正向：{information.provenance.positivePrompt || "（空）"}</p><p>负向：{information.provenance.negativePrompt || "（空）"}</p></details>}
