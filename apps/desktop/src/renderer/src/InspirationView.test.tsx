@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { InspirationMessage } from "@sanctuary/domain";
-import { InspirationMessageTimeline } from "./InspirationView.js";
+import { InspirationMessageTimeline } from "./InspirationParts.js";
 
 const history: InspirationMessage[] = [{
   id: "assistant-1",
