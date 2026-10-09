@@ -118,6 +118,8 @@ export function LazyImage({ path, onRatio }: { path: string; onRatio?: ((ratio: 
   useEffect(() => {
     const image = ref.current;
     if (!image || load) return;
+    // Tiles near the first screen start at once instead of waiting a frame for the observer.
+    if (image.getBoundingClientRect().top < innerHeight * 1.5 || !("IntersectionObserver" in window)) { setLoad(true); return; }
     const observer = new IntersectionObserver((entries) => {
       if (!entries.some((entry) => entry.isIntersecting)) return;
       setLoad(true);

@@ -98,10 +98,10 @@ try {
       }
       document.querySelector('[data-nav="gallery"]').click();
       let image;
-      while (!(image = document.querySelector(".work-ambient-cover")) || !image.currentSrc) {
+      while (!(image = document.querySelector("[data-work-tile] img")) || !image.currentSrc) {
         if (performance.now() - started > 10000) {
           const summary = document.body?.innerText.replace(/\s+/g, " ").slice(0, 500) ?? "";
-          const cards = document.querySelectorAll(".work-library-card").length;
+          const cards = document.querySelectorAll("[data-work-tile]").length;
           throw new Error(
             "library image did not render (cards=" + cards + ", url=" + location.href + ", body=" + summary + ")"
           );
@@ -130,7 +130,7 @@ try {
       const activeTheme = await window.sanctuary.getActiveTheme();
       await window.sanctuary.setActiveTheme("default");
       return {
-        cardCount: document.querySelectorAll(".work-library-card").length,
+        cardCount: document.querySelectorAll("[data-work-tile]").length,
         complete: image.complete,
         naturalWidth: image.naturalWidth,
         protocol: new URL(image.currentSrc).protocol,
