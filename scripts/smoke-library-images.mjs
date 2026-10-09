@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const port = 9239;
+// A fixed port can fall inside a Windows reserved range; ask the OS for a free loopback port.
+const port = await new Promise((done, reject) => { const server = createServer(); server.once("error", reject); server.listen(0, "127.0.0.1", () => { const free = server.address().port; server.close((error) => error ? reject(error) : done(free)); }); });
 const userData = await mkdtemp(join(tmpdir(), "sanctuary-library-images-"));
 const imagePath = join(userData, "original.png");
 const thumbnailPath = join(userData, "registered-thumbnail.png");

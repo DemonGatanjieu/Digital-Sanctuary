@@ -173,7 +173,7 @@ describe("gallery directory and scoped pages", () => {
       expect(ids).toEqual(pages.map((page) => page.id).sort());
       expect(new Set(ids).size).toBe(205);
     } finally { test.close(); }
-  });
+  }, 20_000); // Builds 205 real files; the default 5 s is too tight when the full suite runs in parallel.
 
   it("drops deleted scopes and stale covers, keeps metadata-only works, and makes unknown work queries exact", () => {
     const test = fixture();

@@ -74,6 +74,7 @@ import {
   inspectorImageCandidates
 } from "./inspector-image-candidates.js";
 import { fetchPixivReviewImage } from "./pixiv-review-fetch.js";
+import { PixivApiClient, PixivBatchAbortError, errorMessage } from "./pixiv-api.js";
 import {
   PIXIV_HOME_URL,
   PIXIV_LOGIN_URL,
@@ -99,10 +100,6 @@ import {
   completedDownloadPhase,
   hasContiguousPixivPages,
   IDLE_EXPLORE_DOWNLOAD_STATE,
-  parsePixivArtistProfile,
-  parsePixivArtworkMetadata,
-  parsePixivArtworkPages,
-  parsePixivBookmarkPage,
   parsePixivPageContext,
   reachedConsecutiveFailureLimit,
   safePixivImageExtension,
@@ -110,8 +107,6 @@ import {
   type BookmarkDownloadPreview,
   type ExploreDownloadResult,
   type ExploreDownloadState,
-  type PixivArtworkMetadata,
-  type PixivArtworkPage
 } from "../shared/pixiv-download.js";
 import {
   AsyncTaskGate,
@@ -216,7 +211,6 @@ let exploreReviewGeneration = 0;
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const MAX_ORIGINAL_IMAGE_BYTES = 128 * 1024 * 1024;
 const MAX_MEMORY_REVIEW_CACHE_ENTRIES = 500;
-const PIXIV_BOOKMARK_PAGE_SIZE = 48;
 const PIXIV_DOWNLOAD_CONCURRENCY = 4;
 const ENABLE_VIEWPORT_REVIEW = true;
 const THRESHOLD_OVERRIDES_PREFERENCE_PREFIX = "filters.threshold-overrides.v1";
@@ -227,6 +221,7 @@ const ADAPTIVE_FEEDBACK_PREFERENCE = "filters.adaptive-feedback.v1";
 let exploreProtectionBypassed = false;
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 const pixivDownloadNetworkGate = new AsyncTaskGate(PIXIV_DOWNLOAD_CONCURRENCY);
+const pixivApi = new PixivApiClient(pixivDownloadNetworkGate, (progress) => updateExploreDownloadState(progress));
 
 interface ExploreState {
   browserMode?: "pixiv" | "web";
@@ -1266,7 +1261,7 @@ function registerIpc(): void {
       throw new Error("请先进入 Pixiv 的收藏作品页");
     }
     const session = requireExploreSession();
-    const total = await fetchPixivBookmarkTotal(session, context.bookmarkUserId);
+    const total = await pixivApi.bookmarkTotal(session, context.bookmarkUserId);
     return { userId: context.bookmarkUserId, total };
   });
   ipcMain.handle("explore:download-bookmarks", () => {
@@ -1279,7 +1274,7 @@ function registerIpc(): void {
         phase: "discovering",
         message: "正在分页读取公开与非公开收藏…"
       });
-      const artworkIds = await fetchAllPixivBookmarkIds(
+      const artworkIds = await pixivApi.allBookmarkIds(
         requireExploreSession(),
         context.bookmarkUserId
       );
@@ -2449,231 +2444,6 @@ async function runArtistAvatarRepair(): Promise<ArtistAvatarRepairResult> {
   return result;
 }
 
-async function fetchPixivBookmarkTotal(
-  targetSession: Session,
-  userId: string
-): Promise<number> {
-  const visible = await fetchPixivBookmarkPage(targetSession, userId, "show", 0);
-  let hiddenTotal = 0;
-  try {
-    hiddenTotal = (await fetchPixivBookmarkPage(targetSession, userId, "hide", 0)).total;
-  } catch (error) {
-    console.info("[pixiv-download] private bookmarks are unavailable", error);
-  }
-  return visible.total + hiddenTotal;
-}
-
-async function fetchAllPixivBookmarkIds(
-  targetSession: Session,
-  userId: string
-): Promise<string[]> {
-  const allIds = new Set<string>();
-  for (const visibility of ["show", "hide"] as const) {
-    try {
-      let offset = 0;
-      let total = Number.POSITIVE_INFINITY;
-      while (offset < total) {
-        const page = await fetchPixivBookmarkPage(
-          targetSession,
-          userId,
-          visibility,
-          offset
-        );
-        total = page.total;
-        for (const artworkId of page.artworkIds) allIds.add(artworkId);
-        updateExploreDownloadState({
-          totalArtworks: allIds.size,
-          message: `已读取 ${allIds.size} 个收藏作品…`
-        });
-        if (page.artworkIds.length === 0) break;
-        offset += PIXIV_BOOKMARK_PAGE_SIZE;
-      }
-    } catch (error) {
-      if (visibility === "show") throw error;
-      console.info("[pixiv-download] private bookmarks are unavailable", error);
-    }
-  }
-  return [...allIds];
-}
-
-async function fetchPixivBookmarkPage(
-  targetSession: Session,
-  userId: string,
-  visibility: "show" | "hide",
-  offset: number
-) {
-  const endpoint = new URL(
-    `/ajax/user/${encodeURIComponent(userId)}/illusts/bookmarks`,
-    PIXIV_HOME_URL
-  );
-  endpoint.searchParams.set("tag", "");
-  endpoint.searchParams.set("offset", String(offset));
-  endpoint.searchParams.set("limit", String(PIXIV_BOOKMARK_PAGE_SIZE));
-  endpoint.searchParams.set("rest", visibility);
-  endpoint.searchParams.set("lang", "zh");
-  return parsePixivBookmarkPage(
-    await fetchPixivJson(targetSession, endpoint.toString(), `${PIXIV_HOME_URL}users/${userId}/bookmarks/artworks`)
-  );
-}
-
-async function fetchPixivArtworkPages(
-  targetSession: Session,
-  artworkId: string
-): Promise<PixivArtworkPage[]> {
-  const endpoint = new URL(`/ajax/illust/${encodeURIComponent(artworkId)}/pages`, PIXIV_HOME_URL);
-  endpoint.searchParams.set("lang", "zh");
-  return parsePixivArtworkPages(
-    await fetchPixivJson(targetSession, endpoint.toString(), `${PIXIV_HOME_URL}artworks/${artworkId}`)
-  );
-}
-
-async function fetchPixivArtworkMetadata(
-  targetSession: Session,
-  artworkId: string
-): Promise<PixivArtworkMetadata> {
-  const endpoint = new URL(`/ajax/illust/${encodeURIComponent(artworkId)}`, PIXIV_HOME_URL);
-  endpoint.searchParams.set("lang", "zh");
-  return parsePixivArtworkMetadata(
-    await fetchPixivJson(
-      targetSession,
-      endpoint.toString(),
-      `${PIXIV_HOME_URL}artworks/${artworkId}`
-    ),
-    artworkId
-  );
-}
-
-async function fetchPixivArtistProfile(
-  targetSession: Session,
-  authorId: string
-) {
-  const endpoint = new URL(`/ajax/user/${encodeURIComponent(authorId)}`, PIXIV_HOME_URL);
-  endpoint.searchParams.set("full", "1");
-  endpoint.searchParams.set("lang", "zh");
-  return parsePixivArtistProfile(
-    await fetchPixivJson(
-      targetSession,
-      endpoint.toString(),
-      `${PIXIV_HOME_URL}users/${authorId}`
-    ),
-    authorId
-  );
-}
-
-let nextPixivApiCall = 0;
-const PIXIV_API_DELAY_MS = 800;
-const PIXIV_API_MAX_RETRIES = 2;
-
-class PixivBatchAbortError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PixivBatchAbortError";
-  }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "未知错误";
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-async function waitForPixivApiSlot(): Promise<void> {
-  const now = Date.now();
-  const waitTime = Math.max(0, nextPixivApiCall - now);
-  nextPixivApiCall = now + waitTime + PIXIV_API_DELAY_MS;
-  if (waitTime > 0) await delay(waitTime);
-}
-
-function pixivRetryDelay(response: Response | null, attempt: number): number {
-  const retryAfter = response?.headers.get("retry-after")?.trim() ?? "";
-  const seconds = Number(retryAfter);
-  const headerDelay = Number.isFinite(seconds) && seconds >= 0
-    ? seconds * 1_000
-    : 0;
-  const fallback = attempt === 0 ? 5_000 : 15_000;
-  return Math.min(30_000, Math.max(headerDelay, fallback));
-}
-
-async function fetchPixivJson(
-  targetSession: Session,
-  url: string,
-  referrer: string
-): Promise<unknown> {
-  let attempt = 0;
-  while (true) {
-    await waitForPixivApiSlot();
-    let response: Response;
-    try {
-      response = await pixivDownloadNetworkGate.run(() => targetSession.fetch(url, {
-        credentials: "include",
-        referrer,
-        headers: {
-          Accept: "application/json",
-          Referer: referrer
-        },
-        bypassCustomProtocolHandlers: true
-      }));
-    } catch (networkError) {
-      if (attempt >= PIXIV_API_MAX_RETRIES) {
-        throw new PixivBatchAbortError(
-          `Pixiv 网络连续失败，批量任务已停止：${errorMessage(networkError)}`
-        );
-      }
-      const backoffMs = pixivRetryDelay(null, attempt);
-      attempt += 1;
-      updateExploreDownloadState({
-        message: `网络异常，${Math.ceil(backoffMs / 1_000)} 秒后重试 (${attempt}/${PIXIV_API_MAX_RETRIES})…`
-      });
-      await delay(backoffMs);
-      continue;
-    }
-
-    if (response.status === 429) {
-      if (attempt >= PIXIV_API_MAX_RETRIES) {
-        throw new PixivBatchAbortError(
-          "Pixiv 已限制请求频率，批量任务已停止。请稍后从收藏页重新开始，已保存作品会自动跳过。"
-        );
-      }
-      const backoffMs = pixivRetryDelay(response, attempt);
-      attempt += 1;
-      updateExploreDownloadState({
-        message: `Pixiv 频率限制，${Math.ceil(backoffMs / 1_000)} 秒后重试 (${attempt}/${PIXIV_API_MAX_RETRIES})…`
-      });
-      await delay(backoffMs);
-      continue;
-    }
-
-    if (response.status === 401) {
-      throw new PixivBatchAbortError("Pixiv 登录会话已失效，请重新登录后再继续下载");
-    }
-    if (response.status === 403) {
-      throw new Error("作品不可访问、已删除或当前账号无权读取 (HTTP 403)");
-    }
-    if (response.status >= 500 && response.status <= 599) {
-      if (attempt >= PIXIV_API_MAX_RETRIES) {
-        throw new PixivBatchAbortError(`Pixiv 服务连续返回 HTTP ${response.status}，批量任务已停止`);
-      }
-      const backoffMs = pixivRetryDelay(response, attempt);
-      attempt += 1;
-      updateExploreDownloadState({
-        message: `Pixiv 服务暂时异常，${Math.ceil(backoffMs / 1_000)} 秒后重试 (${attempt}/${PIXIV_API_MAX_RETRIES})…`
-      });
-      await delay(backoffMs);
-      continue;
-    }
-    if (!response.ok) {
-      throw new Error(`Pixiv 数据请求失败：HTTP ${response.status}`);
-    }
-    try {
-      return await response.json();
-    } catch {
-      throw new Error("Pixiv 返回的不是有效 JSON 数据");
-    }
-  }
-}
-
 function hasUsableArtistAvatar(artist: ArtistRecord | undefined): boolean {
   return !!artist?.avatarLocalPath && existsSync(artist.avatarLocalPath);
 }
@@ -2684,7 +2454,7 @@ async function fetchAndStorePixivArtist(
   fallbackName: string
 ): Promise<ArtistRecord> {
   if (!database) throw new Error("本地画廊尚未准备好");
-  const profile = await fetchPixivArtistProfile(targetSession, authorId);
+  const profile = await pixivApi.artistProfile(targetSession, authorId);
   let avatarLocalPath: string | null = null;
   if (profile.avatarUrl) {
     const extension = safePixivImageExtension(profile.avatarUrl);
@@ -2732,7 +2502,7 @@ async function downloadPixivArtwork(
   }
 
   const targetSession = requireExploreSession();
-  const metadata = await fetchPixivArtworkMetadata(targetSession, artworkId);
+  const metadata = await pixivApi.artworkMetadata(targetSession, artworkId);
   const existingArtistBefore = database.listArtists().find((artist) => artist.id === metadata.authorId);
   if (existingArtistBefore && hasUsableArtistAvatar(existingArtistBefore)) {
     database.importArtist({
@@ -2754,7 +2524,7 @@ async function downloadPixivArtwork(
       });
     }
   }
-  const pages = await fetchPixivArtworkPages(targetSession, artworkId);
+  const pages = await pixivApi.artworkPages(targetSession, artworkId);
   updateExploreDownloadState({
     phase: "downloading",
     totalPages: resetPageTotal
