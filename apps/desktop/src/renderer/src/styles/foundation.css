@@ -1,0 +1,155 @@
+/* Foundation: neutral design tokens. Overrides the legacy palette so every screen calms down at once;
+   installed themes (injected unlayered) still override these values. */
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces */
+  --ds-bg-app: #f6f6f7;
+  --ds-bg-sidebar: #eeeef0;
+  --ds-bg-card: #ffffff;
+  --ds-bg-card-subtle: #f1f1f3;
+  --ds-bg-surface-glass: #ffffff;
+  --ds-bg-overlay: rgba(9, 9, 11, 0.56);
+  --ds-bg-lightbox: #000000;
+  --ds-bg-hover: color-mix(in srgb, var(--ds-text-heading) 6%, transparent);
+  --ds-bg-active: color-mix(in srgb, var(--ds-text-heading) 10%, transparent);
+
+  /* Single accent; gradients collapse to the flat accent */
+  --ds-primary: #2f6fe4;
+  --ds-primary-hover: #255ccc;
+  --ds-primary-active: #1f4fae;
+  --ds-primary-light: #e7eefc;
+  --ds-primary-subtle: #f1f5fd;
+  --ds-primary-border: #c3d4f5;
+  --ds-primary-glow: rgba(47, 111, 228, 0.16);
+  --ds-gradient-primary: var(--ds-primary);
+  --ds-gradient-accent: var(--ds-primary);
+  --ds-gradient-surface: var(--ds-bg-card);
+
+  /* Status */
+  --ds-success: #16a34a;
+  --ds-success-light: #edf8f0;
+  --ds-success-border: #bfe5cb;
+  --ds-success-text: #15803d;
+  --ds-warning: #d97706;
+  --ds-warning-light: #fdf6ea;
+  --ds-warning-border: #f3d9a8;
+  --ds-warning-text: #b45309;
+  --ds-danger: #dc2626;
+  --ds-danger-hover: #b91c1c;
+  --ds-danger-light: #fdf0f0;
+  --ds-danger-border: #f3c4c4;
+  --ds-danger-text: #b91c1c;
+  --ds-purple: var(--ds-primary);
+  --ds-purple-light: var(--ds-primary-light);
+  --ds-purple-border: var(--ds-primary-border);
+  --ds-purple-text: var(--ds-primary);
+
+  /* Text and lines */
+  --ds-text-heading: #18181b;
+  --ds-text-body: #3f3f46;
+  --ds-text-secondary: #6b6b74;
+  --ds-text-muted: #9d9da6;
+  --ds-text-inverse: #ffffff;
+  --ds-border-light: #e3e3e7;
+  --ds-border-subtle: #ececef;
+  --ds-border-glass: var(--ds-border-light);
+
+  /* Elevation: only for floating layers (menus, dialogs, toasts) */
+  --ds-shadow-xs: none;
+  --ds-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --ds-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --ds-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --ds-shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.18);
+  --ds-shadow-glow: none;
+  --ds-glass-blur: 0px;
+  --ds-glass-bg: var(--ds-bg-card);
+  --ds-glass-border: var(--ds-border-light);
+
+  /* Scale */
+  --ds-radius-sm: 4px;
+  --ds-radius-md: 8px;
+  --ds-radius-lg: 12px;
+  --ds-radius-xl: 12px;
+  --ds-font-12: 12px;
+  --ds-font-13: 13px;
+  --ds-font-14: 14px;
+  --ds-font-16: 16px;
+  --ds-font-20: 20px;
+  --ds-font-24: 24px;
+  --ds-weight-medium: 500;
+  --ds-weight-semibold: 600;
+  --ds-weight-bold: 650;
+  --ds-control-sm: 32px;
+  --ds-control-md: 36px;
+  --ds-rail-width: 64px;
+  --ds-toolbar-height: 56px;
+  --ds-ease: cubic-bezier(0.2, 0, 0, 1);
+  --ds-transition-fast: 0.12s var(--ds-ease);
+  --ds-transition-normal: 0.18s var(--ds-ease);
+  --ds-transition-slow: 0.28s var(--ds-ease);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ds-bg-app: #131315;
+    --ds-bg-sidebar: #19191c;
+    --ds-bg-card: #1e1e22;
+    --ds-bg-card-subtle: #25252a;
+    --ds-bg-surface-glass: #1e1e22;
+    --ds-bg-overlay: rgba(0, 0, 0, 0.64);
+
+    --ds-primary: #6d9cff;
+    --ds-primary-hover: #8cb2ff;
+    --ds-primary-active: #5687f0;
+    --ds-primary-light: #1c2740;
+    --ds-primary-subtle: #172033;
+    --ds-primary-border: #31497a;
+    --ds-primary-glow: rgba(109, 156, 255, 0.2);
+
+    --ds-success: #4ade80;
+    --ds-success-light: #13261a;
+    --ds-success-border: #24543a;
+    --ds-success-text: #6ee79a;
+    --ds-warning: #fbbf24;
+    --ds-warning-light: #2a2111;
+    --ds-warning-border: #5c4718;
+    --ds-warning-text: #fcd06a;
+    --ds-danger: #f87171;
+    --ds-danger-hover: #fca5a5;
+    --ds-danger-light: #2c1516;
+    --ds-danger-border: #6b2a2a;
+    --ds-danger-text: #fca5a5;
+
+    --ds-text-heading: #f4f4f5;
+    --ds-text-body: #d6d6db;
+    --ds-text-secondary: #a3a3ad;
+    --ds-text-muted: #74747e;
+    --ds-text-inverse: #131315;
+    --ds-border-light: #2e2e34;
+    --ds-border-subtle: #242429;
+
+    --ds-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --ds-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+    --ds-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --ds-shadow-xl: 0 16px 40px rgba(0, 0, 0, 0.6);
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--ds-bg-app);
+  color: var(--ds-text-body);
+  font-size: var(--ds-font-13);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--ds-primary);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--ds-primary-light);
+}

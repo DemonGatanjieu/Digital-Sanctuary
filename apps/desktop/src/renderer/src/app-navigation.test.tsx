@@ -26,18 +26,18 @@ function settingsMarkup(section: SettingsSection) {
 
 function sidebarMarkup(status: AppStatus | null = null, exploreState = initialExploreState) {
   return renderToStaticMarkup(
-    <AppSidebar activeView="organize" exploreState={exploreState} downloadBusy={false}
+    <AppSidebar activeView="organize" exploreState={exploreState}
       appearance={appearance} status={status} onOpenGallery={ignore} onViewChange={ignore}
-      onDownloadCurrentArtwork={ignore} onPreviewBookmarks={ignore} onOpenSettings={ignore} />
+      onOpenSettings={ignore} />
   );
 }
 
 describe("task-based navigation", () => {
-  it("keeps organization under the library and adds a home entry without shifting existing destinations", () => {
+  it("gives organizing its own rail entry and keeps home behind the brand mark", () => {
     const markup = sidebarMarkup();
     expect([...markup.matchAll(/data-nav="([^"]+)"/g)].map((match) => match[1]))
-      .toEqual(["home", "gallery", "explore", "inspiration", "settings"]);
-    expect(markup).toMatch(/aria-current="page"[^>]+data-nav="gallery"/);
+      .toEqual(["home", "gallery", "organize", "explore", "inspiration", "settings"]);
+    expect(markup).toMatch(/data-nav="organize" aria-current="page"/);
     expect(markup).not.toContain("显示性能档位");
   });
 

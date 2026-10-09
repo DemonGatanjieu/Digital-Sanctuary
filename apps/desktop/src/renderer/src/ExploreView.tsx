@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { ExploreBounds, ExploreCommand, ExploreState } from "../../preload/index";
 import { AppNotice } from "./AppNotice";
+import { Icon } from "./Icon";
 
 export const initialExploreState: ExploreState = {
   url: "https://www.pixiv.net/",
@@ -55,6 +56,10 @@ export function ExploreView({
   onFocusRestored,
   protectionOpen = false,
   protectionPanel,
+  downloadBusy = false,
+  onDownloadCurrentArtwork,
+  onPreviewBookmarks,
+  onOpenStorageDirectory,
   onProtectionOpen,
   onProtectionClose,
   onStateChange,
@@ -68,6 +73,10 @@ export function ExploreView({
   onFocusRestored?: () => void;
   protectionOpen?: boolean;
   protectionPanel?: ReactNode;
+  downloadBusy?: boolean;
+  onDownloadCurrentArtwork?: () => void | Promise<void>;
+  onPreviewBookmarks?: () => void | Promise<void>;
+  onOpenStorageDirectory?: () => void;
   onProtectionOpen?: () => void;
   onProtectionClose?: () => void;
   onStateChange: (state: ExploreState) => void;
@@ -231,6 +240,16 @@ export function ExploreView({
             </>
           )}
         </div>
+        {!web && (state.pageKind === "bookmarks" ? (
+          <button className="explore-save-button" disabled={downloadBusy} onClick={() => void onPreviewBookmarks?.()} title="先预览范围，再开始下载">
+            <Icon name="download" size={16} /><span>下载全部收藏</span>
+          </button>
+        ) : (
+          <button className="explore-save-button" disabled={state.pageKind !== "artwork" || downloadBusy} onClick={() => void onDownloadCurrentArtwork?.()}
+            title={state.pageKind === "artwork" ? `保存作品 ${state.artworkId} 的全部页` : "打开作品详情后可保存"}>
+            <Icon name="download" size={16} /><span>保存作品</span>
+          </button>
+        ))}
         {!web && <button className="explore-protection-trigger" type="button" aria-expanded={protectionOpen}
           onClick={protectionOpen ? onProtectionClose : onProtectionOpen}>浏览保护</button>}
         <button className="maximize-button" title={state.maximized ? "还原窗口" : "最大化窗口"} onClick={() => void runCommand("maximize")}>
@@ -243,6 +262,19 @@ export function ExploreView({
         <button onClick={() => void saveSite()}>＋ 保存当前网站</button>
         <small>{web ? "图片上右键 → 加入图库" : "支持输入其他图片网站的网址"}</small>
       </nav>
+      {state.download.phase !== "idle" && (
+        <div className={`explore-download-strip ${state.download.phase}`} role="status">
+          <strong>{downloadPhaseLabel(state.download.phase)}</strong>
+          <span>{state.download.message}</span>
+          {state.download.totalArtworks > 0 && (
+            <small>
+              {state.download.completedArtworks + state.download.failedArtworks}/{state.download.totalArtworks} 件
+              {state.download.failedArtworks > 0 ? ` · 失败 ${state.download.failedArtworks}` : ""}
+            </small>
+          )}
+          {onOpenStorageDirectory && <button type="button" onClick={onOpenStorageDirectory}>打开文件夹</button>}
+        </div>
+      )}
       {state.notice && <AppNotice tone="success">{state.notice}</AppNotice>}
       {accountOpen && !web && <div className="explore-account-actions" aria-label="登录与账号">
         <button className="login-button" disabled={!contentAvailable} onClick={() => void runCommand("login")}>邮箱登录</button>

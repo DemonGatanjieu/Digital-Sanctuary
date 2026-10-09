@@ -164,11 +164,11 @@ export class ThemeManagerService {
     if (!byId.has("default")) {
       byId.set("default", {
         id: "default",
-        name: "Digital Sanctuary Default",
-        version: "1.0.0",
+        name: "默认（跟随系统）",
+        version: "2.0.0",
         author: "Digital Sanctuary Official",
-        description: "Built-in default design tokens",
-        colorScheme: "light",
+        description: "中性配色，随系统切换浅色或深色。",
+        colorScheme: "auto",
         tags: ["official", "default"],
         isPreset: true,
         localPath: join(this.#bundledThemesPath, "default"),

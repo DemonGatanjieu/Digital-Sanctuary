@@ -12,6 +12,7 @@ import {
   ipcMain,
   net,
   nativeImage,
+  nativeTheme,
   protocol,
   screen,
   session,
@@ -376,7 +377,7 @@ function createWindow(): void {
     ...(savedState ? { x: savedState.x, y: savedState.y } : {}),
     minWidth: 900,
     minHeight: 620,
-    backgroundColor: "#f7f8fa",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#131315" : "#f6f6f7",
     title: "纯净领域",
     webPreferences: {
       preload: join(moduleDirectory, "../preload/index.cjs"),

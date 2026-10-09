@@ -50,7 +50,7 @@ const DEFAULT_APPEARANCE: AppearancePreferences = {
 };
 
 export function App() {
-  const [activeView, setActiveViewState] = useState<ActiveView>("home");
+  const [activeView, setActiveViewState] = useState<ActiveView>("gallery");
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("library");
   const mainRef = useRef<HTMLElement>(null);
   const [galleryScope, setGalleryScopeState] = useState<GalleryScope | null>(null);
@@ -583,44 +583,19 @@ export function App() {
       <AppSidebar
         activeView={activeView}
         exploreState={exploreState}
-        downloadBusy={downloadBusy}
         appearance={appearance}
         status={status}
-        storageLocation={storageLocation}
         onOpenGallery={openGallery}
         onQuickActions={openQuickActions}
         onOpenTasks={() => setTasksOpen(true)}
         taskCount={activeTaskCount(localImport.batch, exploreState.download, thumbnailActivity, analysisTasks.jobs)+analysisTasks.images.filter(t=>["running","scanning","analyzing"].includes(t.phase)).length}
         onViewChange={setActiveView}
-        onDownloadCurrentArtwork={downloadCurrentArtwork}
-        onPreviewBookmarks={previewAllBookmarks}
         onOpenSettings={openSettings}
-        onChooseDownloadDirectory={async () => {
-          try {
-            const res = await window.sanctuary.chooseDownloadDirectory();
-            setLibraryPreferences(res.preferences);
-            setStorageLocation(res.location);
-            await refreshLibrary();
-          } catch (caught) { showError(caught); }
-        }}
-        onOpenStorageDirectory={async () => {
-          await window.sanctuary.openStorageDirectory();
-        }}
       />
 
       <main ref={mainRef} className="animate-fade-in" onScroll={(event) => {
         if (activeView === "gallery" && !galleryScope) scrollPositions.current.set(scrollKey, event.currentTarget.scrollTop);
       }}>
-        {(activeView === "gallery" || activeView === "organize") && (
-          <nav className="workspace-navigation" aria-label="图库工作区">
-            <button type="button" data-nav="browse" aria-current={activeView === "gallery" ? "page" : undefined} onClick={() => void openGallery()}>浏览作品</button>
-            <button type="button" data-nav="organize" aria-current={activeView === "organize" ? "page" : undefined} onClick={() => {
-              if (activeView === "organize") return;
-              setAnalysisWorkIds([]);
-              setActiveView("organize");
-            }}>整理与分类</button>
-          </nav>
-        )}
         <Suspense fallback={<section className="page-loading" role="status">正在打开…</section>}>
         {activeView === "home" ? (
           <>
@@ -774,6 +749,10 @@ export function App() {
             focusOnShow={nativeFocusPending.current}
             onFocusRestored={() => { nativeFocusPending.current = false; }}
             protectionOpen={protectionOpen}
+            downloadBusy={downloadBusy}
+            onDownloadCurrentArtwork={downloadCurrentArtwork}
+            onPreviewBookmarks={previewAllBookmarks}
+            onOpenStorageDirectory={() => void window.sanctuary.openStorageDirectory().catch(showError)}
             onProtectionOpen={openProtection}
             onProtectionClose={closeProtection}
             protectionPanel={protectionOpen && <Suspense fallback={<aside className="explore-protection-panel">正在读取保护设置…</aside>}>

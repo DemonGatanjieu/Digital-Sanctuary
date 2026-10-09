@@ -2,7 +2,6 @@
 @layer legacy, foundation, components, views;
 @import "./styles/tokens.css" layer(legacy);
 @import "./styles/base.css" layer(legacy);
-@import "./styles/shell.css" layer(legacy);
 @import "./styles/main-content.css" layer(legacy);
 @import "./styles/home.css" layer(legacy);
 @import "./styles/components.css" layer(legacy);
@@ -39,3 +38,6 @@
 @import "./styles/inspiration.css" layer(legacy);
 @import "./styles/interaction-motion.css" layer(legacy);
 @import "./styles/gallery-actions.css" layer(legacy);
+@import "./styles/foundation.css" layer(foundation);
+@import "./styles/ui.css" layer(components);
+@import "./styles/app-shell.css" layer(views);

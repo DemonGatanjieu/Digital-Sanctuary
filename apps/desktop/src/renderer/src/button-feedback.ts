@@ -1,4 +1,4 @@
-const FEEDBACK_BUTTONS = ".ui-button, .home-task-card, .nav-item, .sidebar-quick-actions, .sidebar-task-entry, .settings-disclosure-toggle, .workspace-navigation button, .settings-navigation button";
+const FEEDBACK_BUTTONS = ".ui-button, .home-task-card, .rail-item, .settings-disclosure-toggle, .workspace-navigation button, .settings-navigation button";
 const activeFeedback = new WeakMap<HTMLButtonElement, Animation>();
 
 export function buttonFeedbackDuration(profile: string | undefined, reducedMotion: boolean, systemReducedMotion: boolean): number {

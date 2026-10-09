@@ -1,11 +1,14 @@
 {
   "id": "default",
-  "name": "Digital Sanctuary Default",
-  "version": "1.0.0",
+  "name": "默认（跟随系统）",
+  "version": "2.0.0",
   "author": "Digital Sanctuary Official",
-  "description": "The built-in light sanctuary design using the application's default tokens.",
-  "colorScheme": "light",
+  "description": "中性配色，随系统切换浅色或深色。",
+  "colorScheme": "auto",
   "cssEntry": "theme.css",
-  "tags": ["official", "default", "light"],
+  "tags": [
+    "official",
+    "default"
+  ],
   "isPreset": true
 }
