@@ -7,7 +7,6 @@ import {
 } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
-import { TypographySettingsSection } from "./typography/TypographySettingsSection";
 import { VisionSettingsSection } from "./VisionSettingsSection";
 import { ComfyUiSettingsSection } from "./ComfyUiSettingsSection";
 import { ModelCenterView } from "./ModelCenterView";
@@ -99,6 +98,12 @@ export function SettingsView({
             options={DISPLAY_PROFILES.map(([value, label, title]) => ({ value, label, title }))}
             onChange={(displayProfile) => void onAppearanceChange({ ...appearance, displayProfile })} />
         </div>
+        <div className="settings-row">
+          <span><strong>界面字体</strong><small>宋体会优先使用已安装的思源宋体。</small></span>
+          <SegmentedControl label="界面字体" value={appearance.interfaceFont ?? "default"}
+            options={[{ value: "default", label: "默认" }, { value: "dengxian", label: "等线" }, { value: "songti", label: "宋体" }]}
+            onChange={(interfaceFont) => void onAppearanceChange({ ...appearance, interfaceFont })} />
+        </div>
         <label className="settings-row">
           <span><strong>减少动态效果</strong><small>关闭位移、缩放和非必要的动画。</small></span>
           <input type="checkbox" checked={appearance.reducedMotion} onChange={(event) => void onAppearanceChange({ ...appearance, reducedMotion: event.target.checked })} />
@@ -138,7 +143,6 @@ export function SettingsView({
           </div>
         </div>
       </SettingsDisclosure>
-      <SettingsDisclosure name="typography" title="字体与排版" description="默认字体已配置；需要时再自定义。"><TypographySettingsSection /></SettingsDisclosure>
       </SettingsPanel>
       <SettingsPanel active={section === "library"}>
       <section className="library-preferences-card">

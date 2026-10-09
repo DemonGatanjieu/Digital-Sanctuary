@@ -76,9 +76,12 @@ export type DisplayProfile = "quality" | "balanced" | "efficient";
 
 /** Light or dark interface; "system" follows Windows. */
 export type ColorSchemePreference = "system" | "light" | "dark";
+/** Interface typeface; all ship with Windows. */
+export type InterfaceFont = "default" | "dengxian" | "songti";
 
 export interface AppearancePreferences {
   colorScheme?: ColorSchemePreference;
+  interfaceFont?: InterfaceFont;
   displayProfile: DisplayProfile;
   reducedMotion: boolean;
   ambientArtwork: boolean;
@@ -678,7 +681,6 @@ export function decideFilter(
 }
 
 export * from "./vision-suites.js";
-export * from "./typography.js";
 export * from "./local-import.js";
 export * from "./work-information.js";
 export * from "./saved-work-filter.js";

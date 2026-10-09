@@ -40,8 +40,6 @@ import type {
   ExternalVisionPublicConfig,
   VisionEvaluationResult,
   VisionEvaluationRequest,
-  TypographyFontDescriptor,
-  TypographyPreferencesV1,
   TriageQueryResultItem,
   ExploreTriageResult,
   VisionAssessment,
@@ -292,11 +290,6 @@ export interface SanctuaryApi {
   downloadCurrentArtwork(): Promise<ExploreDownloadResult>;
   previewBookmarkDownload(): Promise<BookmarkDownloadPreview>;
   downloadAllBookmarks(): Promise<ExploreDownloadResult>;
-  listFonts(): Promise<TypographyFontDescriptor[]>;
-  importFontFromDialog(): Promise<TypographyFontDescriptor | null>;
-  deleteFont(fontId: string): Promise<boolean>;
-  getTypographyPreferences(): Promise<TypographyPreferencesV1>;
-  saveTypographyPreferences(preferences: TypographyPreferencesV1): Promise<TypographyPreferencesV1>;
   onExploreState(listener: (state: ExploreState) => void): () => void;
   onExploreOpenInspector(listener: (data: { artworkId?: string; url?: string; pageIndex?: number }) => void): () => void;
   onAppStatus(listener: (status: ApplicationStatus) => void): () => void;
@@ -555,12 +548,6 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("explore:bookmarks-preview") as Promise<BookmarkDownloadPreview>,
   downloadAllBookmarks: () =>
     ipcRenderer.invoke("explore:download-bookmarks") as Promise<ExploreDownloadResult>,
-  listFonts: () => ipcRenderer.invoke("typography:list-fonts") as Promise<TypographyFontDescriptor[]>,
-  importFontFromDialog: () => ipcRenderer.invoke("typography:import-dialog") as Promise<TypographyFontDescriptor | null>,
-  deleteFont: (fontId) => ipcRenderer.invoke("typography:delete-font", fontId) as Promise<boolean>,
-  getTypographyPreferences: () => ipcRenderer.invoke("typography:get-preferences") as Promise<TypographyPreferencesV1>,
-  saveTypographyPreferences: (preferences) =>
-    ipcRenderer.invoke("typography:save-preferences", preferences) as Promise<TypographyPreferencesV1>,
   onExploreState: (listener) => {
     const wrapped = (_event: Electron.IpcRendererEvent, state: ExploreState) => listener(state);
     ipcRenderer.on("explore:state-changed", wrapped);

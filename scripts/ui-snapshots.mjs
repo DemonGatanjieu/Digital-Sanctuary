@@ -60,6 +60,12 @@ try {
   main = await connectElectronMainInspector(mainPort); await showElectronTestWindow(main); cdp = await renderer();
   await cdp.send("Page.enable");
   await waitFor("Boolean(document.querySelector('[data-nav]'))", 20000);
+  // UI_SNAPSHOT_FONT=dengxian|songti captures the same screens with another interface font.
+  if (process.env.UI_SNAPSHOT_FONT) {
+    await cdp.evaluate(`(async () => { const a = await window.sanctuary.getAppearancePreferences(); await window.sanctuary.updateAppearancePreferences({ ...a, interfaceFont: ${JSON.stringify(process.env.UI_SNAPSHOT_FONT)} }); })()`);
+    await cdp.evaluate("location.reload()"); await waitFor("Boolean(document.querySelector('[data-nav]'))", 20000);
+    await waitFor(`document.documentElement.dataset.font === ${JSON.stringify(process.env.UI_SNAPSHOT_FONT)}`);
+  }
   for (const scheme of ["light", "dark"]) {
     await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }, { name: "prefers-reduced-motion", value: "reduce" }] });
     for (const [width, height] of [[1280, 800], [900, 620]]) {

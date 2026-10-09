@@ -133,9 +133,6 @@ import { registerWorkInformationIpc } from "./work-information-ipc.js";
 import { registerSavedWorkFilterIpc } from "./saved-work-filter-ipc.js";
 import { VisionSecretStore } from "./vision/vision-secret-store.js";
 import { ExternalVisionService } from "./vision/external-vision-service.js";
-import { FontService } from "./typography/font-service.js";
-import { registerFontProtocol } from "./typography/font-protocol.js";
-import { registerTypographyIpc } from "./typography/typography-ipc.js";
 import { registerPromptBridgeIpc } from "./prompt-bridge-ipc.js";
 import { ComfyUiService } from "./comfyui/service.js";
 import { registerComfyUiIpc } from "./comfyui/ipc.js";
@@ -154,17 +151,12 @@ protocol.registerSchemesAsPrivileged([
   {
     scheme: "sanctuary-image",
     privileges: { secure: true, standard: true, supportFetchAPI: true }
-  },
-  {
-    scheme: "sanctuary-font",
-    privileges: { secure: true, standard: true, supportFetchAPI: true }
   }
 ]);
 
 let database: LibraryDatabase | undefined;
 let vision: VisionClient | undefined;
 let externalVisionService: ExternalVisionService | undefined;
-let fontService: FontService | undefined;
 let comfyUiService: ComfyUiService | undefined;
 let modelCenter: ModelCenterService | undefined;
 let localArtCriticService: LocalArtCriticService | undefined;
@@ -318,9 +310,6 @@ if (!hasSingleInstanceLock) {
         write: (config) => database?.setPreference(`vision.config.${config.provider}`, config)
       }
     );
-    fontService = new FontService(userDataPath);
-    registerFontProtocol(session.defaultSession, fontService);
-    registerTypographyIpc(fontService, () => database, () => mainWindow);
     database.invalidateAssessmentsExcept(vision.engine);
     database.pruneRemoteImageReviews();
     registerImageProtocol();
@@ -442,6 +431,7 @@ function parseAppearancePreferences(value: unknown): AppearancePreferences | nul
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<AppearancePreferences>;
   if (candidate.colorScheme !== undefined && !["system", "light", "dark"].includes(candidate.colorScheme)) return null;
+  if (candidate.interfaceFont !== undefined && !["default", "dengxian", "songti"].includes(candidate.interfaceFont)) return null;
   if (
     candidate.displayProfile !== "quality" &&
     candidate.displayProfile !== "balanced" &&
@@ -452,6 +442,7 @@ function parseAppearancePreferences(value: unknown): AppearancePreferences | nul
   }
   return {
     colorScheme: candidate.colorScheme ?? "system",
+    interfaceFont: candidate.interfaceFont ?? "default",
     displayProfile: candidate.displayProfile,
     reducedMotion: candidate.reducedMotion,
     ambientArtwork: candidate.ambientArtwork,

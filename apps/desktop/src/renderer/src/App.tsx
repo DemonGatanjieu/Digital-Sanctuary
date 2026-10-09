@@ -78,8 +78,9 @@ export function App() {
   useLayoutEffect(() => {
     document.body.dataset.displayProfile = appearance.displayProfile;
     document.body.dataset.reducedMotion = String(appearance.reducedMotion);
-    return () => { delete document.body.dataset.displayProfile; delete document.body.dataset.reducedMotion; };
-  }, [appearance.displayProfile, appearance.reducedMotion]);
+    document.documentElement.dataset.font = appearance.interfaceFont ?? "default";
+    return () => { delete document.body.dataset.displayProfile; delete document.body.dataset.reducedMotion; delete document.documentElement.dataset.font; };
+  }, [appearance.displayProfile, appearance.reducedMotion, appearance.interfaceFont]);
   const [libraryPreferences, setLibraryPreferences] = useState<LibraryPreferences>(DEFAULT_LIBRARY_PREFERENCES);
   const [storageLocation, setStorageLocation] = useState<StorageLocationInfo | null>(null);
   const [customElementGroups, setCustomElementGroups] = useState<CustomElementGroup[]>([]);

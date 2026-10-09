@@ -5,7 +5,6 @@ import { AppSidebar, type AppStatus } from "./AppSidebar";
 import { AnalysisView } from "./AnalysisView";
 import { initialExploreState } from "./ExploreView";
 import { SettingsView } from "./SettingsView";
-import { TypographyProvider } from "./typography/TypographyProvider";
 import { restoreDefaultDownloadLocation, type SettingsSection } from "./app-navigation";
 
 const appearance = { displayProfile: "balanced", reducedMotion: false, ambientArtwork: true } as const;
@@ -14,13 +13,11 @@ const resolve = async () => undefined;
 
 function settingsMarkup(section: SettingsSection) {
   return renderToStaticMarkup(
-    <TypographyProvider>
-      <SettingsView section={section} onSectionChange={ignore} onError={ignore}
-        appearance={appearance} libraryPreferences={DEFAULT_LIBRARY_PREFERENCES} error=""
-        onOpenProtection={ignore} onAppearanceChange={resolve}
-        onLibraryPreferencesChange={resolve} onChooseDownloadDirectory={resolve}
-        onCreateBackup={async () => null} />
-    </TypographyProvider>
+    <SettingsView section={section} onSectionChange={ignore} onError={ignore}
+      appearance={appearance} libraryPreferences={DEFAULT_LIBRARY_PREFERENCES} error=""
+      onOpenProtection={ignore} onAppearanceChange={resolve}
+      onLibraryPreferencesChange={resolve} onChooseDownloadDirectory={resolve}
+      onCreateBackup={async () => null} />
   );
 }
 

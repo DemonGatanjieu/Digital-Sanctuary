@@ -155,3 +155,11 @@ body {
 ::selection {
   background: var(--ds-primary-light);
 }
+
+/* Interface font (Settings → 外观与显示). Set on <html> so portals follow it too. */
+:root[data-font="dengxian"] {
+  --ds-font-body: "Segoe UI Variable Text", DengXian, "等线", "Microsoft YaHei UI", sans-serif;
+}
+:root[data-font="songti"] {
+  --ds-font-body: "Source Han Serif SC", "Noto Serif CJK SC", "思源宋体", SimSun, "宋体", Georgia, serif;
+}

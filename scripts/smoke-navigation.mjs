@@ -356,15 +356,14 @@ try {
     assert.deepEqual(await cdp.evaluate("[document.querySelector('#vision-model-input').value, document.querySelector('#vision-key-input').value, document.querySelector('.comfy-config-row input').value]"),
       ["navigation-draft-model", "navigation-test-placeholder", "http://127.0.0.1:8288"]);
     await click('[data-settings="appearance"]');
-    await click('[data-disclosure="typography"] > button');
-    await waitFor("document.querySelector('.slot-select')?.options.length > 1");
-    await fill('.slot-select', "preset::preset.classical-editorial");
-    await waitFor("Boolean(document.querySelector('.typography-save-bar'))");
+    await click('[aria-label="界面字体"] button:nth-child(2)');
+    await waitFor("document.documentElement.dataset.font === 'dengxian' && getComputedStyle(document.body).fontFamily.includes('DengXian')");
     await click('[data-settings="library"]');
     await click('[data-settings="appearance"]');
-    assert.equal(await cdp.evaluate("document.querySelector('.slot-select').value"), "preset::preset.classical-editorial");
-    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.typography-save-bar'))"), true);
-    checks.push({ name: "unsaved-connection-and-font-drafts-survive-category-switches" });
+    assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.getAppearancePreferences()).interfaceFont)()"), "dengxian");
+    await click('[aria-label="界面字体"] button:nth-child(1)');
+    await waitFor("document.documentElement.dataset.font === 'default'");
+    checks.push({ name: "unsaved-connection-drafts-survive-category-switches-and-the-interface-font-applies-at-once" });
     await click('[data-nav="inspiration"]');
     await waitFor("Boolean(document.querySelector('.inspiration-no-model button'))");
     assert.equal(await cdp.evaluate("document.querySelector('.inspiration-no-model button').getBoundingClientRect().bottom <= innerHeight"), true);

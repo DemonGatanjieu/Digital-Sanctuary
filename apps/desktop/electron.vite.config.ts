@@ -48,7 +48,7 @@ const RENDERER_CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' sanctuary-image: data: blob: https:",
   "media-src 'self' sanctuary-image: blob:",
-  "font-src 'self' sanctuary-font: data:",
+  "font-src 'self' data:",
   "connect-src 'self'",
   "object-src 'none'",
   "frame-src 'none'",
