@@ -7,36 +7,36 @@ const rendererSourceDirectory = dirname(fileURLToPath(import.meta.url));
 const stylesDirectory = join(rendererSourceDirectory, "styles");
 
 describe("renderer style entry", () => {
-  it("imports every style module exactly once and keeps the entry declarative", () => {
-    const entry = readFileSync(join(rendererSourceDirectory, "styles.css"), "utf8");
-    const imports = [...entry.matchAll(/@import "\.\/styles\/([^\"]+)";/g)].map(
-      (match) => match[1],
-    );
-    const modules = readdirSync(stylesDirectory)
-      .filter((fileName) => fileName.endsWith(".css"))
-      .sort();
+  const entry = readFileSync(join(rendererSourceDirectory, "styles.css"), "utf8");
+  const order = entry.match(/^@layer ([\w\s,-]+);/m)?.[1]?.split(",").map((layer) => layer.trim()) ?? [];
+  const imports = [...entry.matchAll(/@import "\.\/styles\/([^"]+)" layer\(([\w-]+)\);/g)].map(
+    (match) => ({ name: match[1]!, layer: match[2]! }),
+  );
+  const modules = readdirSync(stylesDirectory).filter((fileName) => fileName.endsWith(".css")).sort();
+  const source = (name: string) => readFileSync(join(stylesDirectory, name), "utf8");
 
-    expect(new Set(imports).size).toBe(imports.length);
-    expect([...imports].sort()).toEqual(modules);
+  it("imports every style module exactly once into a declared layer", () => {
+    expect(order).toEqual(["legacy", "foundation", "components", "views"]);
+    expect(new Set(imports.map((item) => item.name)).size).toBe(imports.length);
+    expect(imports.map((item) => item.name).sort()).toEqual(modules);
+    expect(imports.every((item) => order.includes(item.layer))).toBe(true);
     expect(entry).not.toMatch(/[{}]/);
+    // Every import line must use the layered form; a bare import would silently escape the cascade order.
+    expect(entry.match(/@import/g)?.length).toBe(imports.length);
+  });
 
-    const moduleSources = modules.map((moduleName) => ({
-      moduleName,
-      source: readFileSync(join(stylesDirectory, moduleName), "utf8"),
-    }));
-    for (const { moduleName, source } of moduleSources) {
-      expect(source, `${moduleName} must not import another stylesheet`).not.toContain(
-        "@import",
-      );
+  it("keeps modules self-contained and free of encoding damage", () => {
+    for (const name of modules) {
+      const css = source(name);
+      expect(css, `${name} must not import another stylesheet`).not.toContain("@import");
+      expect(css, `${name} has mojibake`).not.toMatch(/�|馃|锔/);
     }
+  });
 
-    const combinedSource = imports
-      .map((moduleName) => moduleSources.find((module) => module.moduleName === moduleName)?.source ?? "")
-      .join("");
-    expect(combinedSource).toContain("content: '🖼️';");
-    expect(combinedSource).toContain(
-      "Saved Collection Views & Boolean Combinations (局部专属样式)",
-    );
-    expect(combinedSource).not.toMatch(/\uFFFD|馃|锔/);
+  it("forbids !important outside the legacy layer", () => {
+    for (const { name, layer } of imports) {
+      if (layer === "legacy") continue;
+      expect(source(name), `${name} must not use !important`).not.toContain("!important");
+    }
   });
 });

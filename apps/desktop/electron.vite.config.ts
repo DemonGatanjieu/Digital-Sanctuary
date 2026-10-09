@@ -21,17 +21,19 @@ function rendererStylesPlugin(): Plugin {
       if (id !== resolvedId) return null;
       this.addWatchFile(rendererStylesEntry);
       const entry = readFileSync(rendererStylesEntry, "utf8");
-      const modules = [...entry.matchAll(/@import "\.\/styles\/([^\"]+)";/g)].flatMap(
-        (match) => (match[1] ? [match[1]] : []),
+      const order = entry.match(/^@layer ([\w\s,-]+);/m)?.[1];
+      const modules = [...entry.matchAll(/@import "\.\/styles\/([^\"]+)" layer\(([\w-]+)\);/g)].flatMap(
+        (match) => (match[1] && match[2] ? [{ name: match[1], layer: match[2] }] : []),
       );
-      if (modules.length === 0) {
-        throw new Error("Renderer style manifest does not import any modules");
+      if (!order || modules.length === 0) {
+        throw new Error("Renderer style manifest must declare its layer order and import modules");
       }
-      return modules
-        .map((moduleName) => {
-          const modulePath = resolve(rendererStylesDirectory, moduleName);
+      // Each module is wrapped in its cascade layer, so newer layers win regardless of selector specificity.
+      return `@layer ${order};\n` + modules
+        .map(({ name, layer }) => {
+          const modulePath = resolve(rendererStylesDirectory, name);
           this.addWatchFile(modulePath);
-          return readFileSync(modulePath, "utf8");
+          return `@layer ${layer} {\n${readFileSync(modulePath, "utf8")}\n}\n`;
         })
         .join("");
     },
