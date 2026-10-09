@@ -66,8 +66,8 @@ try {
       }
 
       const navigationStarted = Date.now();
-      while (!document.querySelector('[data-home-task="organize"]') && Date.now() - navigationStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
-      const organize = document.querySelector('[data-home-task="organize"]');
+      while (!document.querySelector('[data-nav="organize"]') && Date.now() - navigationStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
+      const organize = document.querySelector('[data-nav="organize"]');
       organize?.click();
       const analysisStarted = Date.now();
       while (!document.querySelector(".studio-root") && Date.now() - analysisStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
@@ -75,8 +75,7 @@ try {
         title: document.title,
         appStatus,
         analysisReady: Boolean(document.querySelector(".studio-root")),
-        activeNavigation: document.querySelector(".workspace-navigation [aria-current='page']")?.textContent.trim()
-          ?? document.querySelector("nav [aria-current='page']")?.textContent.trim() ?? ""
+        activeNavigation: document.querySelector(".app-rail [aria-current='page']")?.textContent.trim() ?? ""
       };
     })()`);
     const failures = [];
@@ -85,7 +84,7 @@ try {
     if (state.appStatus.visionEngine !== "wd-swinv2-tagger-v3") failures.push("packaged app did not select WD Tagger");
     if (!state.appStatus.visionReady || state.appStatus.visionState !== "ready") failures.push("packaged WD Tagger did not become ready");
     if (!state.analysisReady) failures.push("analysis center did not render");
-    if (!["整理与分类", "智能工坊", "模型整理"].includes(state.activeNavigation)) failures.push("navigation accessibility state is missing");
+    if (state.activeNavigation !== "整理") failures.push("navigation accessibility state is missing");
     console.log(JSON.stringify({ executable, visionRuntimeMb: Math.round(visionStat.size / 1024 / 1024 * 10) / 10, modelMb: Math.round(modelStat.size / 1024 / 1024), ...state, status: failures.length ? "failed" : "passed", failures }, null, 2));
     if (failures.length) process.exitCode = 1;
     assert.equal(failures.length, 0, failures.join("; "));
