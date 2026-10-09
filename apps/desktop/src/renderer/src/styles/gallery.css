@@ -317,3 +317,19 @@
 .element-filter-more label { display: grid; gap: 4px; margin-top: 8px; font-size: var(--ds-font-13); }
 .element-filter-dialog footer { display: flex; gap: 8px; justify-content: flex-end; }
 .element-filter-dialog footer > :first-child { margin-right: auto; }
+
+/* "存为相册" on the result line: quiet text action, full-size hit area. */
+.work-result-meta { align-items: center; }
+.work-result-action {
+  min-height: 32px;
+  margin-left: auto;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--ds-radius-md);
+  background: transparent;
+  color: var(--ds-primary);
+  font-size: var(--ds-font-12);
+  cursor: pointer;
+}
+.work-result-action:hover { background: var(--ds-primary-subtle); }
+

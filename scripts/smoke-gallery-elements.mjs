@@ -51,6 +51,16 @@ try {
   await clickText(".element-filter-dialog footer button", "应用");
   await waitFor("[...document.querySelectorAll('.work-filter-chips .ui-chip')].some(e => e.textContent.includes('需要：无人物'))");
   const included = await tiles();
+  // The filtered result becomes an album; the main process re-resolves the filter.
+  await click(".work-result-action");
+  await waitFor("Boolean(document.querySelector('[aria-labelledby=save-as-album-title]'))");
+  assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"新相册名称\"]').value"), "需要：无人物");
+  await clickText("[aria-labelledby=save-as-album-title] footer button", "存为相册");
+  await waitFor("document.querySelector('.ui-toast-region')?.textContent.includes('已存为相册')");
+  const album = (await cdp.evaluate("window.sanctuary.listCollections()")).find((item) => item.name === "需要：无人物");
+  assert.ok(album, "album was not created");
+  assert.equal((await cdp.evaluate(`window.sanctuary.queryWorks({ collectionId: ${JSON.stringify(album.id)} })`)).total, included);
+  checks.push(`a-filtered-result-saves-as-an-album (${included} works)`);
   // Reopened, the common element shows as "需要"; one more click turns it into "排除".
   await openElementDialog();
   await waitFor(`Boolean(document.querySelector('[aria-label="无人物：需要"]'))`);

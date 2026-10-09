@@ -100,6 +100,13 @@ try {
   assert.ok(similarAll.result.items.every(work=>work.id!=='pixiv:456'),'the source work was not left out');
   assert.equal(similarAll.result.items[0].id,'local:seed-3');
   checks.push('find-similar-ranks-the-library-by-one-picture-and-leaves-its-own-work-out');
+  await click('.work-result-action');await waitFor("Boolean(document.querySelector('[aria-labelledby=save-as-album-title]'))");
+  await cdp.evaluate("Array.from(document.querySelectorAll('[aria-labelledby=save-as-album-title] footer button')).find(b=>b.textContent.includes('存为相册')).click()");
+  await waitFor("document.querySelector('.ui-toast-region')?.textContent.includes('已存为相册')");
+  const similarAlbum=(await cdp.evaluate("window.sanctuary.listCollections()")).find(item=>item.name==='相似：双页测试作品');
+  assert.ok(similarAlbum,'picture result album missing');
+  assert.equal((await cdp.evaluate(`window.sanctuary.queryWorks({collectionId:${JSON.stringify(similarAlbum.id)}})`)).total,similar.result.total);
+  checks.push('a-picture-search-result-saves-as-an-album-in-ranked-order');
   const report={status:'passed',checks,coldMs,warmMs,indexedUniqueContents:cached,screenshots:shots,limits:'Synthetic image fixtures with real offline EmbeddingGemma CPU inference; not a benchmark of arbitrary large personal libraries.'};await writeFile(join(shots,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } catch(error) {console.error(error.stack||error);if(cdp){console.error(await cdp.evaluate("(async()=>JSON.stringify({feedback:document.querySelector('.gallery-search-status')?.textContent,visibility:document.visibilityState,progress:(await window.sanctuary.currentGalleryPictureSearch())?.progress.phase}))()").catch(()=>''));await shot('failure').catch(()=>{});}console.error(stderr.slice(-4000));process.exitCode=1;}
 finally {cdp?.close();main?.close();child.kill();await new Promise(done=>{if(child.exitCode!==null)done();else{child.once('exit',done);setTimeout(done,2000);}});const absolute=resolve(root);if(!absolute.startsWith(`${resolve(tmpdir())}${sep}sanctuary-gallery-search-`))throw new Error('Unexpected temporary directory');await rm(absolute,{recursive:true,force:true,maxRetries:8,retryDelay:150});}

@@ -8,6 +8,7 @@ import { Icon } from "./Icon";
 import { ExportImagesButton } from "./ImageOutputActions";
 import { MenuItem, Popover, type PopoverAnchor } from "./Popover";
 import { RenameWorkDialog } from "./RenameWorkDialog";
+import { SaveAsAlbumDialog } from "./SaveAsAlbumDialog";
 import { FilterChips, FilterMenuButton, SortMenuButton } from "./WorkFilters";
 import { WorkContextMenu, WorkTile, type WorkTileHandlers } from "./WorkGrid";
 import { WorkLightbox } from "./WorkLightbox";
@@ -76,6 +77,7 @@ export function WorkLibrary({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [menu, setMenu] = useState<{ work: WorkListItem; anchor: PopoverAnchor } | null>(null);
   const [albumMenu, setAlbumMenu] = useState<HTMLElement | null>(null);
+  const [savingAlbum, setSavingAlbum] = useState(false);
   const activeCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
   const preset = getWorkPreset(query);
   const artistName = query.artistId ? normalResult.items.find((item) => item.artistId === query.artistId)?.artistName : null;
@@ -213,6 +215,9 @@ export function WorkLibrary({
   }), []);
 
   const selectedList = [...selectedIds];
+  // A result worth keeping: a finished picture search, or a filtered / searched gallery.
+  const pictureSnapshot = searchingPictures && !stalePictureScope ? pictureSearch?.snapshot : null;
+  const canSaveAsAlbum = result.total > 0 && !loading && (pictureSnapshot ? !["scanning", "analyzing"].includes(pictureSnapshot.progress.phase) : !searchingPictures && (chips.length > 0 || Boolean(query.search)));
   const findSimilar = pictureSearch?.available
     ? (workId: string, assetId: string, title: string) => { void pictureSearch.similar({ workId, assetId, title }); }
     : undefined;
@@ -248,6 +253,7 @@ export function WorkLibrary({
       <div className="work-result-meta">
         <span>{result.total} 件{searchingPictures ? ` · ${result.totalPages} 张${pictureSearch?.relevance === "all" ? "候选" : "匹配"}图片` : result.totalPages > result.total ? ` · ${result.totalPages} 页` : ""}</span>
         {loading && <span className="work-querying">正在更新…</span>}
+        {canSaveAsAlbum && <button type="button" className="work-result-action" onClick={() => setSavingAlbum(true)}>存为相册</button>}
       </div>
 
       {empty ? (
@@ -333,6 +339,16 @@ export function WorkLibrary({
           }} />)}
         </Popover>
       )}
+
+      {savingAlbum && <SaveAsAlbumDialog count={result.total}
+        suggestedName={pictureSnapshot ? pictureSnapshot.progress.name : [query.search, ...chips.map((chip) => chip.label)].filter(Boolean).join(" · ") || "新相册"}
+        onClose={() => setSavingAlbum(false)}
+        onSave={async (name) => {
+          const saved = pictureSnapshot ? await window.sanctuary.savePictureResultsAsAlbum(pictureSnapshot.progress.id, name) : await window.sanctuary.createAlbumFromQuery(name, query);
+          await onLibraryChanged();
+          setNotice({ message: `已存为相册“${saved.collection.name}”· ${saved.workCount} 件` });
+          return saved;
+        }} />}
 
       {notice && (
         <div className="ui-toast-region">
