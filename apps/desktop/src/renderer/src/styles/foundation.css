@@ -1,28 +1,28 @@
-/* Foundation: neutral design tokens. Overrides the legacy palette so every screen calms down at once;
-   installed themes (injected unlayered) still override these values. */
+/* Foundation: the one theme. Warm, paper-like neutrals that stay out of the pictures' way,
+   plus a single soft indigo accent. Light and dark follow the system unless Settings picks one. */
 
 :root {
   color-scheme: light dark;
 
   /* Surfaces */
-  --ds-bg-app: #f6f6f7;
-  --ds-bg-sidebar: #eeeef0;
+  --ds-bg-app: #f7f6f3;
+  --ds-bg-sidebar: #efeeea;
   --ds-bg-card: #ffffff;
-  --ds-bg-card-subtle: #f1f1f3;
+  --ds-bg-card-subtle: #f2f1ed;
   --ds-bg-surface-glass: #ffffff;
-  --ds-bg-overlay: rgba(9, 9, 11, 0.56);
+  --ds-bg-overlay: rgba(20, 18, 14, 0.52);
   --ds-bg-lightbox: #000000;
   --ds-bg-hover: color-mix(in srgb, var(--ds-text-heading) 6%, transparent);
   --ds-bg-active: color-mix(in srgb, var(--ds-text-heading) 10%, transparent);
 
   /* Single accent; gradients collapse to the flat accent */
-  --ds-primary: #2f6fe4;
-  --ds-primary-hover: #255ccc;
-  --ds-primary-active: #1f4fae;
-  --ds-primary-light: #e7eefc;
-  --ds-primary-subtle: #f1f5fd;
-  --ds-primary-border: #c3d4f5;
-  --ds-primary-glow: rgba(47, 111, 228, 0.16);
+  --ds-primary: #5b5bd6;
+  --ds-primary-hover: #4c4cc4;
+  --ds-primary-active: #4040ad;
+  --ds-primary-light: #ececfb;
+  --ds-primary-subtle: #f4f4fd;
+  --ds-primary-border: #cacaf2;
+  --ds-primary-glow: rgba(91, 91, 214, 0.16);
   --ds-gradient-primary: var(--ds-primary);
   --ds-gradient-accent: var(--ds-primary);
   --ds-gradient-surface: var(--ds-bg-card);
@@ -47,14 +47,14 @@
   --ds-purple-text: var(--ds-primary);
 
   /* Text and lines */
-  --ds-text-heading: #18181b;
-  --ds-text-body: #3f3f46;
-  --ds-text-secondary: #6b6b74;
-  --ds-text-muted: #9d9da6;
+  --ds-text-heading: #1d1c1a;
+  --ds-text-body: #3e3c38;
+  --ds-text-secondary: #6e6b65;
+  --ds-text-muted: #a29e97;
   --ds-text-inverse: #ffffff;
   --ds-on-accent: #ffffff;
-  --ds-border-light: #e3e3e7;
-  --ds-border-subtle: #ececef;
+  --ds-border-light: #e5e3de;
+  --ds-border-subtle: #edebe7;
   --ds-border-glass: var(--ds-border-light);
 
   /* Elevation: only for floating layers (menus, dialogs, toasts) */
@@ -94,20 +94,20 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --ds-bg-app: #131315;
-    --ds-bg-sidebar: #19191c;
-    --ds-bg-card: #1e1e22;
-    --ds-bg-card-subtle: #25252a;
-    --ds-bg-surface-glass: #1e1e22;
-    --ds-bg-overlay: rgba(0, 0, 0, 0.64);
+    --ds-bg-app: #131312;
+    --ds-bg-sidebar: #191917;
+    --ds-bg-card: #1f1e1c;
+    --ds-bg-card-subtle: #272624;
+    --ds-bg-surface-glass: #1f1e1c;
+    --ds-bg-overlay: rgba(0, 0, 0, 0.66);
 
-    --ds-primary: #6d9cff;
-    --ds-primary-hover: #8cb2ff;
-    --ds-primary-active: #5687f0;
-    --ds-primary-light: #1c2740;
-    --ds-primary-subtle: #172033;
-    --ds-primary-border: #31497a;
-    --ds-primary-glow: rgba(109, 156, 255, 0.2);
+    --ds-primary: #9090f5;
+    --ds-primary-hover: #a9a9f8;
+    --ds-primary-active: #7c7ce8;
+    --ds-primary-light: #25254a;
+    --ds-primary-subtle: #1d1d38;
+    --ds-primary-border: #3d3d78;
+    --ds-primary-glow: rgba(144, 144, 245, 0.2);
 
     --ds-success: #4ade80;
     --ds-success-light: #13261a;
@@ -123,14 +123,14 @@
     --ds-danger-border: #6b2a2a;
     --ds-danger-text: #fca5a5;
 
-    --ds-text-heading: #f4f4f5;
-    --ds-text-body: #d6d6db;
-    --ds-text-secondary: #a3a3ad;
-    --ds-text-muted: #74747e;
-    --ds-text-inverse: #131315;
-    --ds-on-accent: #0c111b;
-    --ds-border-light: #2e2e34;
-    --ds-border-subtle: #242429;
+    --ds-text-heading: #f2f1ee;
+    --ds-text-body: #d7d5d0;
+    --ds-text-secondary: #a5a29b;
+    --ds-text-muted: #75726c;
+    --ds-text-inverse: #131312;
+    --ds-on-accent: #11112b;
+    --ds-border-light: #302e2b;
+    --ds-border-subtle: #252422;
 
     --ds-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --ds-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);

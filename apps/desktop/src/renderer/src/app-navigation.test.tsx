@@ -60,13 +60,13 @@ describe("task-based navigation", () => {
 
   it.each([
     ["library", "storage-preference-card"],
-    ["appearance", "theme-settings-container"],
+    ["appearance", "appearance-settings-card"],
     ["models", "model-center-page"],
     ["connections", "external-vision"]
   ] as const)("renders only the requested settings category: %s", (section, expectedClass) => {
     const markup = settingsMarkup(section);
     expect(markup).toContain(expectedClass);
-    const classes = ["storage-preference-card", "theme-settings-container", "model-center-page", "external-vision"];
+    const classes = ["storage-preference-card", "appearance-settings-card", "model-center-page", "external-vision"];
     for (const otherClass of classes.filter((value) => value !== expectedClass)) {
       expect(markup).not.toContain(otherClass);
     }

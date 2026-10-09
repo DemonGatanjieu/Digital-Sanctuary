@@ -7,11 +7,11 @@ import {
 } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
-import { ThemeSettingsSection } from "./ThemeSettingsSection";
 import { TypographySettingsSection } from "./typography/TypographySettingsSection";
 import { VisionSettingsSection } from "./VisionSettingsSection";
 import { ComfyUiSettingsSection } from "./ComfyUiSettingsSection";
 import { ModelCenterView } from "./ModelCenterView";
+import { SegmentedControl } from "./SegmentedControl";
 import { SettingsDisclosure } from "./SettingsDisclosure";
 import { Icon } from "./Icon";
 import { SETTINGS_SECTIONS, restoreDefaultDownloadLocation, type SettingsSection } from "./app-navigation";
@@ -34,6 +34,12 @@ interface SettingsViewProps {
   onMigrateStorage?: () => Promise<StorageMigrationResult>;
   onCreateBackup: () => Promise<string | null>;
 }
+
+const DISPLAY_PROFILES = [
+  ["quality", "精致", "完整过渡与更丰富的层次。"],
+  ["balanced", "均衡", "日常推荐，减少合成效果。"],
+  ["efficient", "省电", "减少动画与阴影。"]
+] as const;
 
 export function SettingsView({
   section,
@@ -80,91 +86,58 @@ export function SettingsView({
         <SettingsDisclosure name="comfyui" title="ComfyUI 绘图连接" description="连接本机服务和工作流。"><ComfyUiSettingsSection /></SettingsDisclosure>
       </SettingsPanel>
       <SettingsPanel active={section === "appearance"}>
-      <ThemeSettingsSection />
-      <SettingsDisclosure name="avatar" title="个人头像" description="选择显示在侧栏的图片。"><section className="user-profile-card">
-        <header>
-          <div>
-            
-            <h2>个人头像设置</h2>
-          </div>
-          <span>显示在左侧导航栏与专属控制台</span>
-        </header>
+      <section className="appearance-settings-card">
+        <div className="settings-row">
+          <span><strong>配色</strong><small>跟随系统时，随 Windows 的浅色 / 深色设置切换。</small></span>
+          <SegmentedControl label="配色" value={appearance.colorScheme ?? "system"}
+            options={[{ value: "system", label: "跟随系统" }, { value: "light", label: "浅色" }, { value: "dark", label: "深色" }]}
+            onChange={(colorScheme) => void onAppearanceChange({ ...appearance, colorScheme })} />
+        </div>
+        <div className="settings-row">
+          <span><strong>显示档位</strong><small>{DISPLAY_PROFILES.find(([profile]) => profile === appearance.displayProfile)?.[2]}</small></span>
+          <SegmentedControl label="显示档位" value={appearance.displayProfile}
+            options={DISPLAY_PROFILES.map(([value, label, title]) => ({ value, label, title }))}
+            onChange={(displayProfile) => void onAppearanceChange({ ...appearance, displayProfile })} />
+        </div>
+        <label className="settings-row">
+          <span><strong>减少动态效果</strong><small>关闭位移、缩放和非必要的动画。</small></span>
+          <input type="checkbox" checked={appearance.reducedMotion} onChange={(event) => void onAppearanceChange({ ...appearance, reducedMotion: event.target.checked })} />
+        </label>
+      </section>
+      <SettingsDisclosure name="avatar" title="个人头像" description="显示在侧栏左上角。">
         <div className="user-avatar-setting-row">
           <div className="user-avatar-preview-box">
             {appearance.customAvatarUrl ? (
-              <img src={appearance.customAvatarUrl} alt="Avatar Preview" className="avatar-preview-img" />
+              <img src={appearance.customAvatarUrl} alt="当前头像" className="avatar-preview-img" />
             ) : (
               <div className="avatar-placeholder-brand">DS</div>
             )}
           </div>
           <div className="user-avatar-actions">
             <label className="button variant-secondary avatar-upload-button">
-              <span>🖼️ 选择本地图片作为头像</span>
+              <span>选择图片</span>
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
-                style={{ display: "none" }}
+                hidden
                 onChange={(event) => {
                   const file = event.target.files?.[0];
                   if (!file) return;
                   const reader = new FileReader();
                   reader.onload = () => {
-                    const result = reader.result;
-                    if (typeof result === "string") {
-                      void onAppearanceChange({ ...appearance, customAvatarUrl: result });
-                    }
+                    if (typeof reader.result === "string") void onAppearanceChange({ ...appearance, customAvatarUrl: reader.result });
                   };
                   reader.readAsDataURL(file);
                 }}
               />
             </label>
             {appearance.customAvatarUrl && (
-              <Button
-                variant="ghost"
-                onClick={() => void onAppearanceChange({ ...appearance, customAvatarUrl: null })}
-              >
-                恢复默认品牌图标
-              </Button>
+              <Button variant="ghost" onClick={() => void onAppearanceChange({ ...appearance, customAvatarUrl: null })}>恢复默认</Button>
             )}
-            <small className="avatar-hint">支持 PNG、JPEG、WebP、GIF 格式图片，自动适配并持久化保存。</small>
+            <small className="avatar-hint">PNG、JPEG、WebP 或 GIF。</small>
           </div>
         </div>
-      </section></SettingsDisclosure>
-
-      <section className="appearance-settings-card">
-        <header>
-          <div><h2>外观与性能</h2></div>
-          <span>功能位置不会随档位改变</span>
-        </header>
-        <div className="appearance-profile-options">
-          {([
-            ["quality", "精致", "环境作品、完整过渡与更丰富层次"],
-            ["balanced", "均衡", "日常推荐，保留静态氛围并减少合成"],
-            ["efficient", "省电", "不加载环境作品，减少动画与阴影"]
-          ] as const).map(([profile, label, detail]) => (
-            <button
-              key={profile}
-              type="button"
-              className={appearance.displayProfile === profile ? "active" : ""}
-              onClick={() => void onAppearanceChange({ ...appearance, displayProfile: profile })}
-            >
-              <span>{appearance.displayProfile === profile ? "✓" : ""}</span>
-              <strong>{label}</strong>
-              <small>{detail}</small>
-            </button>
-          ))}
-        </div>
-        <div className="appearance-toggle-row">
-          <label>
-            <span><strong>作品环境展示</strong><small>使用最近作品修饰画廊顶部；省电档始终关闭。</small></span>
-            <input type="checkbox" checked={appearance.ambientArtwork} onChange={(event) => void onAppearanceChange({ ...appearance, ambientArtwork: event.target.checked })} />
-          </label>
-          <label>
-            <span><strong>减少动态效果</strong><small>关闭位移、缩放和非必要动画。</small></span>
-            <input type="checkbox" checked={appearance.reducedMotion} onChange={(event) => void onAppearanceChange({ ...appearance, reducedMotion: event.target.checked })} />
-          </label>
-        </div>
-      </section>
+      </SettingsDisclosure>
       <SettingsDisclosure name="typography" title="字体与排版" description="默认字体已配置；需要时再自定义。"><TypographySettingsSection /></SettingsDisclosure>
       </SettingsPanel>
       <SettingsPanel active={section === "library"}>

@@ -106,8 +106,8 @@ try{
     const bounds=await cdp.evaluate("(()=>{const e=document.querySelector('.image-workbench'),r=e.getBoundingClientRect();return {overflow:e.scrollWidth-e.clientWidth,right:r.right,width:innerWidth}})()");assert.ok(bounds.overflow<=2&&bounds.right<=bounds.width);await shot(`library-description-${width}`);
   }
   checks.push("1280-and-900-window-layout-without-horizontal-clipping");
-  await cdp.evaluate("window.sanctuary.setActiveTheme('builtin.cyber-deck')");
-  await waitFor("(async()=>{const a=await window.sanctuary.getActiveTheme();return a.themeId==='builtin.cyber-deck'&&document.querySelector('#ds-dynamic-theme')?.textContent===a.cssContent})()");
+  await cdp.evaluate("(async()=>{const a=await window.sanctuary.getAppearancePreferences();await window.sanctuary.updateAppearancePreferences({...a,colorScheme:'dark'});})()");
+  await waitFor("matchMedia('(prefers-color-scheme: dark)').matches");
   await cdp.evaluate("document.querySelector('[aria-label=\"画面描述\"]').scrollIntoView({block:'center'})");await shot("library-description-dark-900");
   const contrast=await cdp.evaluate(`(()=>{const s=getComputedStyle(document.querySelector('[aria-label="画面描述"]'));const l=c=>c.match(/[\\d.]+/g).slice(0,3).map(Number).map(v=>{const n=v/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4}).reduce((sum,n,i)=>sum+n*[.2126,.7152,.0722][i],0);const a=l(s.color),b=l(s.backgroundColor);return(Math.max(a,b)+.05)/(Math.min(a,b)+.05)})()`);assert.ok(contrast>=4.5,`Input contrast ${contrast}`);
   checks.push("dark-theme-query-readable-and-result-actions-reachable");

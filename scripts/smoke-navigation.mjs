@@ -331,7 +331,7 @@ try {
     await checkLayout("organize-900", true);
     await click('[data-nav="settings"]');
     const categories = [
-      ["library", ".storage-preference-card"], ["appearance", ".theme-settings-container"],
+      ["library", ".storage-preference-card"], ["appearance", ".appearance-settings-card"],
       ["models", ".model-center-page"], ["connections", '[data-disclosure="external-vision"]']
     ];
     for (const [section, selector] of categories) {
@@ -376,16 +376,17 @@ try {
     assert.equal(await cdp.evaluate("document.querySelector('[data-settings][aria-current=\"page\"]').dataset.settings"), "models");
     checks.push({ name: "creation-model-setup-link" });
 
-    // Cover the common rendering policies and contrasting built-in themes.
+    // Cover the display profiles and both color schemes.
     await click('[data-settings="appearance"]');
     for (const profile of ["quality", "balanced", "efficient"]) {
       const index = ["quality", "balanced", "efficient"].indexOf(profile);
-      await click(`.appearance-profile-options button:nth-child(${index + 1})`);
+      await click(`[aria-label="显示档位"] button:nth-child(${index + 1})`);
       await waitFor(`document.querySelector('.app-shell').dataset.displayProfile === ${JSON.stringify(profile)}`);
       await checkLayout(`appearance-${profile}-900`);
     }
-    for (const theme of ["builtin.cyber-deck", "builtin.sakura-dream"]) {
-      await cdp.evaluate(`window.sanctuary.setActiveTheme(${JSON.stringify(theme)})`);
+    for (const theme of ["dark", "light"]) {
+      await click(`[aria-label="配色"] button:nth-child(${theme === "dark" ? 3 : 2})`);
+      await waitFor(`matchMedia('(prefers-color-scheme: dark)').matches === ${theme === "dark"}`);
       await new Promise((done) => setTimeout(done, 200));
       await checkLayout(`appearance-${theme}-900`);
       await click('[data-nav="home"]');
@@ -399,7 +400,7 @@ try {
       await waitFor("document.querySelector('.studio-root')?.textContent.includes('默认使用探索的元素规则')");
       await checkLayout(`organize-${theme}-900`, true);
       await click('[data-nav="settings"]');
-      await waitFor("Boolean(document.querySelector('.settings-panel:not([hidden]) .theme-settings-container'))");
+      await waitFor("Boolean(document.querySelector('.settings-panel:not([hidden]) .appearance-settings-card'))");
     }
     await click('[data-nav="gallery"]');
     await waitFor("document.querySelectorAll('[data-work-tile]').length === 2");
@@ -725,13 +726,13 @@ try {
       await click('[data-nav="home"]');
       await click('.home-library-entry button');
       await waitFor("Boolean(document.querySelector('.import-images-dialog'))");
-      await cdp.evaluate("window.sanctuary.setActiveTheme('builtin.cyber-deck')");
-      await cdp.evaluate("new Promise(done=>setTimeout(done,280))");
+      await cdp.evaluate("(async()=>{const a=await window.sanctuary.getAppearancePreferences();await window.sanctuary.updateAppearancePreferences({...a,colorScheme:'dark'});})()");
+      await waitFor("matchMedia('(prefers-color-scheme: dark)').matches");
       const importTheme = await cdp.evaluate("(()=>{const n=document.querySelector('.import-images-dialog');return {color:getComputedStyle(n).color,background:getComputedStyle(n).backgroundColor};})()");
       assert.notEqual(importTheme.color, importTheme.background, 'dark import dialog lost text contrast');
-      await checkLayout('import-confirmation-cyber-900', true);
+      await checkLayout('import-confirmation-dark-900', true);
       await checkButtonContrast('.import-images-dialog .ui-button--secondary');
-      await cdp.evaluate("window.sanctuary.setActiveTheme('builtin.sakura-dream')");
+      await cdp.evaluate("(async()=>{const a=await window.sanctuary.getAppearancePreferences();await window.sanctuary.updateAppearancePreferences({...a,colorScheme:'light'});})()");
       assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()"), beforeImport);
       await fill('.import-images-dialog select', 'fixture-collection');
       await click('[data-import-action="start"]');

@@ -29,11 +29,6 @@ import type {
   SavedWorkFilterDraft,
   StorageLocationInfo,
   StorageMigrationResult,
-  ActiveTheme,
-  InstalledTheme,
-  StoreCatalogResponse,
-  ThemeChangedEvent,
-  ThemeDownloadProgress,
   WorkQuery,
   WorkQueryResult,
   WorkRecord,
@@ -245,15 +240,6 @@ export interface SanctuaryApi {
   chooseDownloadDirectory(): Promise<StorageDirectoryChoiceResult>;
   openStorageDirectory(): Promise<boolean>;
   migrateStorage(): Promise<StorageMigrationResult>;
-  getInstalledThemes(): Promise<InstalledTheme[]>;
-  getActiveTheme(): Promise<ActiveTheme>;
-  setActiveTheme(themeId: string): Promise<{ success: boolean; cssContent: string }>;
-  deleteTheme(themeId: string): Promise<boolean>;
-  importThemeFromDialog(): Promise<InstalledTheme | null>;
-  fetchStoreCatalog(forceRefresh?: boolean): Promise<StoreCatalogResponse>;
-  installFromStore(themeId: string): Promise<InstalledTheme>;
-  onDownloadProgress(listener: (event: ThemeDownloadProgress) => void): () => void;
-  onThemeChanged(listener: (event: ThemeChangedEvent) => void): () => void;
   testFilterImage(): Promise<RuleSandboxResult | null>;
   previewAnalysis(scope: AnalysisScope, engine?: string): Promise<AnalysisScopePreview>;
   createAnalysisJob(scope: AnalysisScope, engine?: string): Promise<AnalysisJob>;
@@ -477,30 +463,6 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("preferences:library:open-storage-directory") as Promise<boolean>,
   migrateStorage: () =>
     ipcRenderer.invoke("preferences:library:migrate-storage") as Promise<StorageMigrationResult>,
-  getInstalledThemes: () =>
-    ipcRenderer.invoke("themes:installed") as Promise<InstalledTheme[]>,
-  getActiveTheme: () =>
-    ipcRenderer.invoke("themes:active") as Promise<ActiveTheme>,
-  setActiveTheme: (themeId) =>
-    ipcRenderer.invoke("themes:set-active", themeId) as Promise<{ success: boolean; cssContent: string }>,
-  deleteTheme: (themeId) =>
-    ipcRenderer.invoke("themes:delete", themeId) as Promise<boolean>,
-  importThemeFromDialog: () =>
-    ipcRenderer.invoke("themes:import") as Promise<InstalledTheme | null>,
-  fetchStoreCatalog: (forceRefresh = false) =>
-    ipcRenderer.invoke("themes:store-catalog", forceRefresh) as Promise<StoreCatalogResponse>,
-  installFromStore: (themeId) =>
-    ipcRenderer.invoke("themes:store-install", themeId) as Promise<InstalledTheme>,
-  onDownloadProgress: (listener) => {
-    const wrapped = (_event: Electron.IpcRendererEvent, data: ThemeDownloadProgress) => listener(data);
-    ipcRenderer.on("themes:download-progress", wrapped);
-    return () => ipcRenderer.removeListener("themes:download-progress", wrapped);
-  },
-  onThemeChanged: (listener) => {
-    const wrapped = (_event: Electron.IpcRendererEvent, data: ThemeChangedEvent) => listener(data);
-    ipcRenderer.on("themes:changed", wrapped);
-    return () => ipcRenderer.removeListener("themes:changed", wrapped);
-  },
   testFilterImage: () =>
     ipcRenderer.invoke("filters:test-image") as Promise<RuleSandboxResult | null>,
   previewAnalysis: (scope, engine) =>

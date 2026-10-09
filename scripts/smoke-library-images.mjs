@@ -125,10 +125,13 @@ try {
         excludedCollectionIds: savedView.excludedCollectionIds,
         limit: 60
       });
-      const installedThemes = await window.sanctuary.getInstalledThemes();
-      const activatedTheme = await window.sanctuary.setActiveTheme("builtin.hollow-zero");
-      const activeTheme = await window.sanctuary.getActiveTheme();
-      await window.sanctuary.setActiveTheme("default");
+      const appearance = await window.sanctuary.getAppearancePreferences();
+      await window.sanctuary.updateAppearancePreferences({ ...appearance, colorScheme: "dark" });
+      const darkApplied = matchMedia("(prefers-color-scheme: dark)").matches;
+      const savedScheme = (await window.sanctuary.getAppearancePreferences()).colorScheme;
+      await window.sanctuary.updateAppearancePreferences({ ...appearance, colorScheme: "light" });
+      const lightApplied = !matchMedia("(prefers-color-scheme: dark)").matches;
+      await window.sanctuary.updateAppearancePreferences({ ...appearance, colorScheme: "system" });
       return {
         cardCount: document.querySelectorAll("[data-work-tile]").length,
         complete: image.complete,
@@ -137,9 +140,9 @@ try {
         savedViewCount: (await window.sanctuary.listSavedCollectionViews()).length,
         combinationTotal: combination.total,
         combinationTitles: combination.items.map((item) => item.title),
-        installedThemeIds: installedThemes.map((theme) => theme.id),
-        activatedThemeHasCss: activatedTheme.cssContent.includes("--ds-primary"),
-        activeThemeId: activeTheme.themeId
+        darkApplied,
+        lightApplied,
+        savedScheme
       };
     })()`);
     const failures = [];
@@ -150,11 +153,8 @@ try {
     if (result.combinationTotal !== 1 || result.combinationTitles[0] !== "A and B fixture") {
       failures.push("AND collection query was lost across the renderer IPC boundary");
     }
-    if (!result.installedThemeIds.includes("default") || !result.installedThemeIds.includes("builtin.hollow-zero")) {
-      failures.push("bundled themes were not discovered through IPC");
-    }
-    if (!result.activatedThemeHasCss || result.activeThemeId !== "builtin.hollow-zero") {
-      failures.push("active theme CSS did not cross the renderer IPC boundary");
+    if (!result.darkApplied || !result.lightApplied || result.savedScheme !== "dark") {
+      failures.push("color scheme preference did not reach the window");
     }
     console.log(JSON.stringify({ ...result, status: failures.length ? "failed" : "passed", failures }, null, 2));
     if (failures.length) process.exitCode = 1;

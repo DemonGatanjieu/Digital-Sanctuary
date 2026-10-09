@@ -22,7 +22,6 @@
 /* Flatten the legacy settings cards: one quiet surface, no glow or lift. */
 .library-preferences-card,
 .storage-preference-card,
-.theme-settings-container,
 .user-profile-card,
 .settings-disclosure,
 .typography-settings,
@@ -34,7 +33,31 @@
   background: var(--ds-bg-card);
   box-shadow: none;
 }
-.theme-card { border-width: 1px; border-radius: var(--ds-radius-md); box-shadow: none; }
-.theme-card:hover { transform: none; box-shadow: none; }
-.theme-card.active { border-color: var(--ds-primary); box-shadow: 0 0 0 1px var(--ds-primary); }
 .settings-disclosure-toggle { color: var(--ds-text-heading); }
+
+/* Appearance: one card of label / control rows. */
+.appearance-settings-card {
+  display: grid;
+  margin-bottom: 16px;
+  padding: 0 16px;
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-bg-card);
+  box-shadow: none;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 12px 0;
+  border-top: 1px solid var(--ds-border-subtle);
+}
+.settings-row:first-child { border-top: 0; }
+.settings-row > span { display: grid; gap: 4px; min-width: 0; }
+.settings-row strong { color: var(--ds-text-heading); font-size: var(--ds-font-14); font-weight: var(--ds-weight-semibold); }
+.settings-row small { color: var(--ds-text-secondary); font-size: var(--ds-font-12); }
+.settings-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--ds-primary); }
+.user-avatar-setting-row { padding: 4px 0; }
+

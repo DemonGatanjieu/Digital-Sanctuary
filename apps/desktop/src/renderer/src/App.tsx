@@ -253,14 +253,6 @@ export function App() {
     navigationState.current.activeView === "explore" || JSON.stringify(current.download) !== JSON.stringify(next.download) ? next : current)), []);
 
   useEffect(() => {
-    // 动态主题热注入
-    window.sanctuary.getActiveTheme()
-      .then((active) => applyThemeCss(active.cssContent))
-      .catch(showError);
-
-    const unsubTheme = window.sanctuary.onThemeChanged((event) => {
-      applyThemeCss(event.cssContent);
-    });
     const unsubInspector = window.sanctuary.onExploreOpenInspector((data) => {
       setProtectionOpen(false);
       setInspectorTarget(data);
@@ -296,7 +288,6 @@ export function App() {
       .catch(showError);
 
     return () => {
-      unsubTheme();
       unsubInspector();
     };
   }, []);
@@ -568,7 +559,7 @@ export function App() {
     { id: "creation", label: "打开创作", description: "聊图、写设定与提示词", shortcut: "Ctrl 3", keywords: ["对话", "写作"], onSelect: () => setActiveView("inspiration") },
     { id: "settings", label: "打开设置", description: "管理图库与存储", shortcut: "Ctrl 4", onSelect: () => openSettings("library") },
     { id: "models", label: "本地模型", description: "安装或切换识别、画评与创作模型", keywords: ["安装", "AI"], onSelect: () => openSettings("models") },
-    { id: "appearance", label: "外观与显示", description: "主题、字体与显示性能", keywords: ["换肤", "流畅", "省电"], onSelect: () => openSettings("appearance") }
+    { id: "appearance", label: "外观与显示", description: "配色、字体与显示档位", keywords: ["深色", "浅色", "省电"], onSelect: () => openSettings("appearance") }
   ];
 
   return (
@@ -818,14 +809,6 @@ export function App() {
       }} onError={showError} />}
     </div>
   );
-}
-
-function applyThemeCss(cssContent: string): void {
-  const style =
-    document.querySelector<HTMLStyleElement>("#ds-dynamic-theme") ??
-    document.head.appendChild(document.createElement("style"));
-  style.id = "ds-dynamic-theme";
-  style.textContent = cssContent;
 }
 
 function waitForRendererIdle(): Promise<void> {

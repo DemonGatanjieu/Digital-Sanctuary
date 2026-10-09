@@ -131,9 +131,6 @@ import { registerGalleryBannerIpc } from "./gallery-banner-ipc.js";
 import { SemanticClient, SemanticVectorStore, developmentSemanticRuntime, installedSemanticRuntime } from "./semantic-client.js";
 import { registerWorkInformationIpc } from "./work-information-ipc.js";
 import { registerSavedWorkFilterIpc } from "./saved-work-filter-ipc.js";
-import { ThemeManagerService } from "./theme/theme-manager.js";
-import { ThemeStoreService } from "./theme/theme-store.js";
-import { registerThemeIpc } from "./theme/theme-ipc.js";
 import { VisionSecretStore } from "./vision/vision-secret-store.js";
 import { ExternalVisionService } from "./vision/external-vision-service.js";
 import { FontService } from "./typography/font-service.js";
@@ -166,8 +163,6 @@ protocol.registerSchemesAsPrivileged([
 
 let database: LibraryDatabase | undefined;
 let vision: VisionClient | undefined;
-let themeManager: ThemeManagerService | undefined;
-let themeStore: ThemeStoreService | undefined;
 let externalVisionService: ExternalVisionService | undefined;
 let fontService: FontService | undefined;
 let comfyUiService: ComfyUiService | undefined;
@@ -265,6 +260,7 @@ if (!hasSingleInstanceLock) {
     installIpcSenderGuard(ipcMain, () => mainWindow?.webContents);
     const userDataPath = app.getPath("userData");
     database = new LibraryDatabase(join(userDataPath, "library.db"));
+    nativeTheme.themeSource = database.getPreference<AppearancePreferences>("appearance")?.colorScheme ?? "system";
     database.recoverInterruptedAnalysisJobs();
     database.recoverInterruptedComfyUiJobs();
     comfyUiService = new ComfyUiService(
@@ -315,24 +311,6 @@ if (!hasSingleInstanceLock) {
     void vision.initialize().catch((error: unknown) => {
       console.error("[vision] startup failed", error);
     });
-    themeManager = new ThemeManagerService({
-      bundledThemesPath: app.isPackaged
-        ? join(process.resourcesPath, "themes")
-        : resolve(moduleDirectory, "../../resources/themes"),
-      userThemesPath: join(userDataPath, "themes"),
-      readActiveThemeId: () => database?.getPreference<string>("active_theme_id") ?? "default",
-      writeActiveThemeId: (themeId) => database?.setPreference("active_theme_id", themeId),
-    });
-    const themeRepository = parseThemeRepository(process.env.SANCTUARY_THEME_REPOSITORY);
-    themeStore = new ThemeStoreService({
-      manager: themeManager,
-      cachePath: join(userDataPath, "theme-store-cache.json"),
-      ...(themeRepository ? { owner: themeRepository.owner, repository: themeRepository.repository } : {}),
-      ...(process.env.SANCTUARY_THEME_REF ? { ref: process.env.SANCTUARY_THEME_REF } : {}),
-      ...(process.env.SANCTUARY_THEME_GITHUB_TOKEN
-        ? { githubToken: process.env.SANCTUARY_THEME_GITHUB_TOKEN }
-        : {}),
-    });
     externalVisionService = new ExternalVisionService(
       new VisionSecretStore(join(userDataPath, "secrets")),
       {
@@ -377,7 +355,7 @@ function createWindow(): void {
     ...(savedState ? { x: savedState.x, y: savedState.y } : {}),
     minWidth: 900,
     minHeight: 620,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? "#131315" : "#f6f6f7",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#131312" : "#f7f6f3",
     title: "纯净领域",
     webPreferences: {
       preload: join(moduleDirectory, "../preload/index.cjs"),
@@ -463,6 +441,7 @@ function parseCollectionDraft(value: unknown): { name: string; description: stri
 function parseAppearancePreferences(value: unknown): AppearancePreferences | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<AppearancePreferences>;
+  if (candidate.colorScheme !== undefined && !["system", "light", "dark"].includes(candidate.colorScheme)) return null;
   if (
     candidate.displayProfile !== "quality" &&
     candidate.displayProfile !== "balanced" &&
@@ -472,6 +451,7 @@ function parseAppearancePreferences(value: unknown): AppearancePreferences | nul
     return null;
   }
   return {
+    colorScheme: candidate.colorScheme ?? "system",
     displayProfile: candidate.displayProfile,
     reducedMotion: candidate.reducedMotion,
     ambientArtwork: candidate.ambientArtwork,
@@ -639,7 +619,7 @@ function localImageUrl(imagePath: string): string {
 }
 
 function registerIpc(): void {
-  if (!database || !vision || !themeManager || !themeStore || !comfyUiService || !modelCenter) throw new Error("Application services are unavailable");
+  if (!database || !vision || !comfyUiService || !modelCenter) throw new Error("Application services are unavailable");
   registerAnalysisIpc(ipcMain, database, vision, analysisJobScheduler, externalVisionService, localArtCriticService,
     () => buildElementFilterRules(database!.listElementFilterSettings(), customElementGroups(), adaptiveThresholdOverrides()));
   registerInspirationIpc(ipcMain, database, localArtCriticService, () => mainWindow);
@@ -742,14 +722,6 @@ function registerIpc(): void {
   });
   registerSavedWorkFilterIpc(ipcMain, database);
   ipcMain.handle("tasks:analysis", () => database?.listAnalysisTaskSummaries() ?? []);
-  registerThemeIpc({
-    ipc: ipcMain,
-    dialog,
-    manager: themeManager,
-    store: themeStore,
-    emitThemeChanged: (event) => mainWindow?.webContents.send("themes:changed", event),
-    emitDownloadProgress: (event) => mainWindow?.webContents.send("themes:download-progress", event),
-  });
   registerLibraryReadIpc(ipcMain, database, join(app.getPath("userData"), "thumbnails"), encodeLocalThumbnail);
   registerGalleryDirectoryIpc(ipcMain, database);
   ipcMain.handle("library:create-backup", async (): Promise<string | null> => {
@@ -1780,6 +1752,7 @@ function registerIpc(): void {
     const preferences = parseAppearancePreferences(value);
     if (!database || !preferences) throw new Error("Invalid appearance preferences");
     database.setPreference("appearance", preferences);
+    nativeTheme.themeSource = preferences.colorScheme ?? "system";
     return preferences;
   });
   ipcMain.handle("preferences:library:get", (): LibraryPreferences => libraryPreferences());
@@ -3092,12 +3065,6 @@ async function classifyFailClosed(
       error: error instanceof Error ? error.message : "Vision engine failed"
     };
   }
-}
-
-function parseThemeRepository(value: string | undefined): { owner: string; repository: string } | null {
-  if (!value) return null;
-  const match = /^([A-Za-z0-9_.-]{1,100})\/([A-Za-z0-9_.-]{1,100})$/.exec(value.trim());
-  return match?.[1] && match[2] ? { owner: match[1], repository: match[2] } : null;
 }
 
 function resolveVisionProcess(runtimeModel?: ResolvedRuntimeModel | null): VisionProcessOptions {

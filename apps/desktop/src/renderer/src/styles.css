@@ -23,7 +23,6 @@
 @import "./styles/display-profiles.css" layer(legacy);
 @import "./styles/responsive.css" layer(legacy);
 @import "./styles/saved-views.css" layer(legacy);
-@import "./styles/themes.css" layer(legacy);
 @import "./styles/vision-radar.css" layer(legacy);
 @import "./styles/prompt-bridge.css" layer(legacy);
 @import "./styles/typography-settings.css" layer(legacy);
