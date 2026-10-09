@@ -13,6 +13,7 @@ import { DEFAULT_INSPIRATION_SETTINGS } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
+import { SendToComfyDialog } from "./SendToComfyDialog";
 import { InspirationGalleryPicker, InspirationMessageTimeline, ModelSettingControl, formatTime, imageUrlFor, messageOf, modelHint } from "./InspirationParts";
 
 const PRESETS: Array<{ id: InspirationPresetId; label: string; hint: string; starter: string; writing?: true }> = [
@@ -42,6 +43,13 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   const [error, setError] = useState("");
   const [galleryPickerOpen, setGalleryPickerOpen] = useState(false);
   const [models, setModels] = useState<InstalledModelView[]>([]);
+  // ComfyUI readiness mirrors the 读图 prompt panel: enabled and at least one imported workflow.
+  const [comfyReady, setComfyReady] = useState(false);
+  const [comfyDraft, setComfyDraft] = useState<{ prompt: string; source: InspirationSourceWork } | null>(null);
+  useEffect(() => {
+    void Promise.all([window.sanctuary.getComfyUiConfig(), window.sanctuary.listComfyUiTemplates()])
+      .then(([config, templates]) => setComfyReady(config.enabled && templates.length > 0)).catch(() => setComfyReady(false));
+  }, []);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [defaultModelId, setDefaultModelId] = useState("");
   const [modelId, setModelId] = useState("");
@@ -387,6 +395,10 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
               outputBusy={Boolean(outputBusy)}
               onCopyReply={(messageId) => void outputConversation("reply", messageId)}
               onSaveReply={(messageId) => void outputConversation("save", messageId)}
+              onImageReply={comfyReady && referenceSources[0] ? (messageId) => {
+                const reply = selected?.messages.find((message) => message.id === messageId);
+                if (reply) setComfyDraft({ prompt: reply.content, source: referenceSources[0]! });
+              } : undefined}
             />
           </div>
           {error && <AppNotice tone="error">{error}</AppNotice>}
@@ -455,6 +467,8 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
           </details>
         </aside>
       </div>
+      {comfyDraft && <SendToComfyDialog source={comfyDraft.source} prompt={comfyDraft.prompt} onClose={() => setComfyDraft(null)}
+        onQueued={() => setOutputNotice("已交给 ComfyUI；完成后结果会回到图库")} />}
       {galleryPickerOpen && (
         <InspirationGalleryPicker
           onClose={() => setGalleryPickerOpen(false)}

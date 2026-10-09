@@ -143,3 +143,10 @@
 
 .inspiration-writing-presets { margin-top: 4px; }
 .inspiration-writing-presets > summary { padding: 8px 13px; color: var(--ds-text-secondary); font-size: var(--ds-font-13); cursor: pointer; }
+
+.send-to-comfy-dialog { width: min(560px, calc(100vw - 32px)); display: grid; gap: 12px; }
+.send-to-comfy-dialog p { margin: 0; color: var(--ds-text-secondary); font-size: var(--ds-font-13); }
+.send-to-comfy-dialog label { display: grid; gap: 4px; font-size: var(--ds-font-13); }
+.send-to-comfy-dialog :is(select, textarea) { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); background: var(--ds-bg-card-subtle); color: var(--ds-text-heading); font: inherit; }
+.send-to-comfy-dialog textarea { resize: vertical; }
+.send-to-comfy-dialog footer { display: flex; justify-content: flex-end; gap: 8px; }

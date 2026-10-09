@@ -5,7 +5,7 @@ import { DialogOverlay } from "./DialogOverlay";
 import { Button } from "./Button";
 
 /** Pieces of the creation page that do not hold its conversation state. */
-export function InspirationMessageTimeline({ messages, pendingUserMessage, thinking, models = [], outputBusy = false, onCopyReply, onSaveReply }: {
+export function InspirationMessageTimeline({ messages, pendingUserMessage, thinking, models = [], outputBusy = false, onCopyReply, onSaveReply, onImageReply }: {
   messages: InspirationMessage[];
   pendingUserMessage: string | null;
   thinking: boolean;
@@ -13,6 +13,8 @@ export function InspirationMessageTimeline({ messages, pendingUserMessage, think
   outputBusy?: boolean;
   onCopyReply?: (messageId: string) => void;
   onSaveReply?: (messageId: string) => void;
+  /** Present when local ComfyUI is ready and the conversation has a reference picture. */
+  onImageReply?: ((messageId: string) => void) | undefined;
 }) {
   return (
     <>
@@ -28,6 +30,7 @@ export function InspirationMessageTimeline({ messages, pendingUserMessage, think
               <div>
                 {onCopyReply && <Button variant="ghost" size="small" disabled={outputBusy} onClick={() => onCopyReply(message.id)}>复制回答</Button>}
                 {onSaveReply && <Button variant="ghost" size="small" disabled={outputBusy} onClick={() => onSaveReply(message.id)}>保存 Markdown</Button>}
+                {onImageReply && <Button variant="ghost" size="small" disabled={outputBusy} onClick={() => onImageReply(message.id)}>拿去出图</Button>}
               </div>
             </footer>
           )}

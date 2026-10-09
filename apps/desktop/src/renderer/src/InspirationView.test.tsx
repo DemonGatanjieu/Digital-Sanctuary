@@ -69,4 +69,10 @@ describe("InspirationMessageTimeline", () => {
     expect(markup.match(/disabled=""/g)).toHaveLength(2);
     expect(markup).toContain("正在认真想……");
   });
+  it("offers 拿去出图 on replies only when ComfyUI and a reference picture are ready", () => {
+    const without = renderToStaticMarkup(<InspirationMessageTimeline messages={history} pendingUserMessage={null} thinking={false} onCopyReply={() => {}} />);
+    expect(without).not.toContain("拿去出图");
+    const ready = renderToStaticMarkup(<InspirationMessageTimeline messages={history} pendingUserMessage={null} thinking={false} onCopyReply={() => {}} onImageReply={() => {}} />);
+    expect(ready).toContain("拿去出图");
+  });
 });
