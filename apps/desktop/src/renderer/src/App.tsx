@@ -204,7 +204,7 @@ export function App() {
   }), [openQuickActions]);
   useEffect(() => {
     if (!pendingSearchFocus || quickActionsOpen || activeView !== "gallery" || galleryMode !== "flat") return;
-    const input = document.querySelector<HTMLInputElement>(".work-search input");
+    const input = document.querySelector<HTMLInputElement>(".gallery-search-field input");
     if (input) { input.focus(); input.select(); setPendingSearchFocus(false); }
   }, [activeView, galleryMode, quickActionsOpen, workLoading, pendingSearchFocus]);
   useEffect(() => {
@@ -214,7 +214,7 @@ export function App() {
       if (key === "k") { event.preventDefault(); openQuickActions(); }
       else if (key === "o" && !busy) { event.preventDefault(); void importImages(); }
       else if (key === "f" && activeView === "gallery" && galleryMode === "flat") {
-        const input = document.querySelector<HTMLInputElement>(".work-search input");
+        const input = document.querySelector<HTMLInputElement>(".gallery-search-field input");
         if (input) { event.preventDefault(); input.focus(); input.select(); }
       } else if (["0", "1", "2", "3", "4"].includes(key)) {
         event.preventDefault();

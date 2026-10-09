@@ -872,6 +872,33 @@ export class LibraryDatabase {
     return result.changes > 0;
   }
 
+  /** Readable image assets whose pixel size was never recorded (mostly local imports). */
+  listAssetsMissingDimensions(limit = 100): Pick<WorkAssetRecord, "id" | "path">[] {
+    const safeLimit = Math.max(1, Math.min(1000, Math.trunc(limit) || 100));
+    return this.#database
+      .prepare(
+        `SELECT id, path FROM assets
+          WHERE media_type = 'image' AND file_state = 'available'
+            AND (width IS NULL OR height IS NULL)
+          ORDER BY created_at, id
+          LIMIT ?`
+      )
+      .all(safeLimit) as unknown as Pick<WorkAssetRecord, "id" | "path">[];
+  }
+
+  /** Records pixel size only where it is unknown; never overwrites a size from the source platform. */
+  fillAssetDimensions(assetId: string, width: number, height: number): boolean {
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) return false;
+    const result = this.#database
+      .prepare(
+        `UPDATE assets
+            SET width = COALESCE(width, ?), height = COALESCE(height, ?), updated_at = ?
+          WHERE id = ? AND (width IS NULL OR height IS NULL)`
+      )
+      .run(width, height, new Date().toISOString(), assetId);
+    return result.changes > 0;
+  }
+
   addWorkToCollection(workId: string, collectionId: string): void {
     this.#database
       .prepare(

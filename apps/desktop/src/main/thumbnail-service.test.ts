@@ -109,4 +109,18 @@ describe("thumbnail service", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
+
+  it("records image sizes from headers once thumbnails are caught up, without overwriting known sizes", async () => {
+    const filled = new Map<string, [number, number]>();
+    const store: ThumbnailStore = {
+      listAssetsNeedingThumbnails: () => [],
+      updateAssetThumbnail: () => true,
+      listAssetsMissingDimensions: () => [{ id: "a", path: "a.png" }, { id: "b", path: "broken.png" }],
+      fillAssetDimensions: (id, width, height) => { filled.set(id, [width, height]); return true; }
+    };
+    const readSize = vi.fn(async (path: string) => path === "a.png" ? { width: 600, height: 900 } : null);
+    const result = await generateThumbnailBatch(store, tmpdir(), async () => undefined, 6, readSize);
+    expect(result).toMatchObject({ attempted: 0, measured: 1 });
+    expect([...filled]).toEqual([["a", [600, 900]]]);
+  });
 });

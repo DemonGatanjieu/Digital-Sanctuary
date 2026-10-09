@@ -1,7 +1,7 @@
 import { open } from "node:fs/promises";
 
-/** Bounded header probe before decoding clipboard bitmaps; unknown formats use original-file export. */
-export function clipboardImageSize(bytes: Buffer): {width:number;height:number} | null {
+/** Bounded header probe (PNG, GIF, WebP, JPEG) that reads pixel dimensions without decoding the image. */
+export function imageHeaderSize(bytes: Buffer): {width:number;height:number} | null {
   let width=0,height=0;
   if(bytes.length>=24&&bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))){width=bytes.readUInt32BE(16);height=bytes.readUInt32BE(20);}
   else if(bytes.length>=10&&/^GIF8[79]a/.test(bytes.toString("ascii",0,6))){width=bytes.readUInt16LE(6);height=bytes.readUInt16LE(8);}
@@ -26,8 +26,8 @@ export function clipboardImageSize(bytes: Buffer): {width:number;height:number} 
   }
   return width>0&&height>0?{width,height}:null;
 }
-export async function readClipboardImageSize(path:string) {
+export async function readImageHeaderSize(path:string, maxBytes=1024*1024) {
   const file=await open(path,"r");
-  try{const bytes=Buffer.alloc(1024*1024);const {bytesRead}=await file.read(bytes,0,bytes.length,0);return clipboardImageSize(bytes.subarray(0,bytesRead));}
+  try{const bytes=Buffer.alloc(maxBytes);const {bytesRead}=await file.read(bytes,0,bytes.length,0);return imageHeaderSize(bytes.subarray(0,bytesRead));}
   finally{await file.close();}
 }

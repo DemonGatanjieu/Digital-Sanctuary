@@ -31,6 +31,7 @@ const paths = {
   info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5.5M12 7.75v.5" /></>,
   remove: <><path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13" /></>,
   check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
+  refresh: <><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" /><path d="M19.5 4.5v4h-4" /></>,
   home: <><path d="m4 11 8-6.5 8 6.5" /><path d="M6 9.5V20h12V9.5" /></>,
   zoomIn: <><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.4-4.4M11 8v6M8 11h6" /></>,
   zoomOut: <><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.4-4.4M8 11h6" /></>,

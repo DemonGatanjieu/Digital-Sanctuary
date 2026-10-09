@@ -65,14 +65,15 @@ try {
       await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
       const suffix = `${width}-${scheme}`;
       await nav("home"); await shot(`home-${suffix}`);
-      await nav("gallery"); await waitFor("document.querySelectorAll('img[src^=\"sanctuary-image\"]').length>4", 20000).catch(() => {});
+      await nav("gallery"); await imagesSettled();
       await settle(); await shot(`gallery-${suffix}`);
       if (width === 1280) {
-        await cdp.evaluate("document.querySelector('main').scrollTop=600"); await settle(); await shot(`gallery-scrolled-${suffix}`);
-        await cdp.evaluate("document.querySelector('main').scrollTop=0");
+        await cdp.evaluate("document.querySelector('main').scrollTop=600"); await imagesSettled(); await shot(`gallery-scrolled-${suffix}`);
+        await cdp.evaluate("document.querySelector('main').scrollTop=0"); await imagesSettled();
+        await galleryInteractions(suffix);
         if (await openFirstWork()) { await settle(400); await shot(`viewer-${suffix}`); await key("Escape"); await settle(); }
-        if (await clickFirst(["[data-scope='collections']", "button"], "相册")) { await settle(); await shot(`albums-${suffix}`); }
-        if (await clickFirst(["[data-scope='author-work']", "button"], "画师")) { await settle(); await shot(`artists-${suffix}`); }
+        if (await clickFirst(["[data-scope='collections']", "button"], "相册")) { await imagesSettled(); await shot(`albums-${suffix}`); }
+        if (await clickFirst(["[data-scope='author-work']", "button"], "画师")) { await imagesSettled(); await shot(`artists-${suffix}`); }
         await clickFirst(["[data-scope='flat']", "button"], "全部作品") || await clickFirst(["button"], "作品");
       }
       await nav("organize"); await shot(`organize-${suffix}`);
@@ -107,6 +108,31 @@ async function openFirstWork() {
 }
 async function clickFirst(selectors, text) {
   return cdp.evaluate(`(()=>{for(const s of ${JSON.stringify(selectors)}){const e=Array.from(document.querySelectorAll(s)).find(n=>n.textContent.trim()===${JSON.stringify(text)}&&!n.disabled&&n.offsetParent!==null);if(e){e.click();return true}}return false})()`);
+}
+// Hover, context menu, filter menu and batch selection on the redesigned grid (skipped on the old DOM).
+async function galleryInteractions(suffix) {
+  const box = await cdp.evaluate(`(()=>{const e=document.querySelectorAll('[data-work-tile] .work-tile-image')[1];if(!e)return null;const r=e.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`);
+  if (!box) return;
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x, y: box.y });
+  await settle(200); await shot(`gallery-hover-${suffix}`);
+  await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: box.x, y: box.y, button: "right", clickCount: 1 });
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: box.x, y: box.y, button: "right", clickCount: 1 });
+  await settle(200); await shot(`gallery-context-menu-${suffix}`);
+  await key("Escape"); await settle(100);
+  await cdp.evaluate("document.querySelector('[data-gallery-filter]')?.click()"); await settle(200); await shot(`gallery-filter-menu-${suffix}`);
+  await key("Escape"); await settle(100);
+  await cdp.evaluate("[...document.querySelectorAll('.work-tile-check')].slice(0,3).forEach(b=>b.click())"); await settle(250);
+  await shot(`gallery-selecting-${suffix}`);
+  await cdp.evaluate("document.querySelector('.work-selection-bar [aria-label=\"退出选择\"]')?.click()"); await settle(100);
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 2, y: 2 });
+}
+
+// Every image tile visible in the viewport has decoded (or the wait gives up and the shot shows what is there).
+async function imagesSettled(timeout = 15000) {
+  const visibleLoaded = `(()=>{const imgs=[...document.querySelectorAll('main img')].filter(i=>{const r=i.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight&&r.width>0});
+    return imgs.length>0&&imgs.every(i=>i.complete&&i.naturalWidth>0)})()`;
+  await waitFor(visibleLoaded, timeout).catch(() => console.error("[snapshots] images still loading at capture"));
+  await settle(150);
 }
 async function settle(ms = 250) { await cdp.evaluate(`new Promise(done=>setTimeout(done,${ms}))`); }
 async function waitFor(expression, timeout = 15000) { const start = Date.now(); while (Date.now() - start < timeout) { if (await cdp.evaluate(expression)) return; await new Promise((done) => setTimeout(done, 100)); } throw new Error(`Timed out: ${expression}`); }

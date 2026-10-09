@@ -52,6 +52,7 @@
   --ds-text-secondary: #6b6b74;
   --ds-text-muted: #9d9da6;
   --ds-text-inverse: #ffffff;
+  --ds-on-accent: #ffffff;
   --ds-border-light: #e3e3e7;
   --ds-border-subtle: #ececef;
   --ds-border-glass: var(--ds-border-light);
@@ -127,6 +128,7 @@
     --ds-text-secondary: #a3a3ad;
     --ds-text-muted: #74747e;
     --ds-text-inverse: #131315;
+    --ds-on-accent: #0c111b;
     --ds-border-light: #2e2e34;
     --ds-border-subtle: #242429;
 

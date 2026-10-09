@@ -1,7 +1,7 @@
 import type { BrowserWindow, IpcMain } from "electron";
 import type { LibraryDatabase } from "@sanctuary/database";
 import { open } from "node:fs/promises";
-import { clipboardImageSize } from "./clipboard-image-size.js";
+import { imageHeaderSize } from "./image-header-size.js";
 
 const KEY = "library.banner.v1";
 const MAX_BYTES = 32 * 1024 * 1024;
@@ -54,7 +54,7 @@ export class GalleryBannerService {
         if (after.size !== info.size || after.mtimeMs !== info.mtimeMs) throw new Error("图片正在变化，请重新选择");
         bytes = buffer;
       } finally { await file.close(); }
-      const size = clipboardImageSize(bytes.subarray(0, 1024 * 1024));
+      const size = imageHeaderSize(bytes.subarray(0, 1024 * 1024));
       if (!size) throw new Error("请选择 JPG、PNG、WebP 或 GIF 图片");
       if (size.width * size.height > 32_000_000) throw new Error("图片尺寸过大，请选择小于 3,200 万像素的图片");
       const encoded = await this.host.encode(bytes);

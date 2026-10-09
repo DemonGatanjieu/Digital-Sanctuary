@@ -149,6 +149,27 @@ describe("LibraryDatabase", () => {
     database.close();
   });
 
+  it("fills unknown asset dimensions once and keeps recorded ones", () => {
+    const directory = mkdtempSync(join(tmpdir(), "sanctuary-dimensions-"));
+    const imagePath = join(directory, "local.png");
+    writeFileSync(imagePath, "image-placeholder");
+    const database = new LibraryDatabase(":memory:");
+    try {
+      database.importArtwork(imagePath);
+      const [missing] = database.listAssetsMissingDimensions(10);
+      expect(missing?.path).toBe(imagePath);
+      expect(database.fillAssetDimensions(missing!.id, 0, 10)).toBe(false);
+      expect(database.fillAssetDimensions(missing!.id, 800, 1200)).toBe(true);
+      expect(database.fillAssetDimensions(missing!.id, 1, 1)).toBe(false);
+      expect(database.listAssetsMissingDimensions(10)).toEqual([]);
+      const asset = database.listWorks()[0]?.assets[0];
+      expect([asset?.width, asset?.height]).toEqual([800, 1200]);
+    } finally {
+      database.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("queues available image assets for persistent thumbnail generation", () => {
     const directory = mkdtempSync(join(tmpdir(), "sanctuary-thumbnails-"));
     const imagePath = join(directory, "cover.png");

@@ -5,11 +5,7 @@
 @import "./styles/main-content.css" layer(legacy);
 @import "./styles/home.css" layer(legacy);
 @import "./styles/components.css" layer(legacy);
-@import "./styles/summary.css" layer(legacy);
 @import "./styles/empty-states.css" layer(legacy);
-@import "./styles/ambient-hero.css" layer(legacy);
-@import "./styles/library-controls.css" layer(legacy);
-@import "./styles/work-cards.css" layer(legacy);
 @import "./styles/lightbox.css" layer(legacy);
 @import "./styles/legacy-gallery.css" layer(legacy);
 @import "./styles/authors.css" layer(legacy);
@@ -41,3 +37,4 @@
 @import "./styles/foundation.css" layer(foundation);
 @import "./styles/ui.css" layer(components);
 @import "./styles/app-shell.css" layer(views);
+@import "./styles/gallery.css" layer(views);

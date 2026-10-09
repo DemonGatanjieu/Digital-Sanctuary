@@ -1,36 +1,23 @@
-import { GallerySearchBar } from "./GallerySearchBar";
-import type { GalleryPictureSearch } from "./useGalleryPictureSearch";
-import { pictureSearchScopeKey } from "./gallery-picture-search";
-import { ArtworkToolsMenu } from "./ArtworkToolsMenu";
-import { WorkInformationDrawer } from "./WorkInformationDrawer";
-import { DragImageButton, ExportImagesButton } from "./ImageOutputActions";
-import { RenameWorkDialog } from "./RenameWorkDialog";
-import { GalleryBanner } from "./GalleryBanner";
-import { SavedWorkFilters } from "./SavedWorkFilters";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import type {
-  AppearancePreferences,
-  CollectionRecord,
-  VisionEvaluationResult,
-  WorkListItem,
-  WorkDeletionPreview,
-  WorkQuery,
-  WorkQueryResult,
-  WorkRecord,
-  GenerationProvenance
-} from "@sanctuary/domain";
-import { DialogOverlay } from "./DialogOverlay";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import type { CollectionRecord, WorkDeletionPreview, WorkListItem, WorkQuery, WorkQueryResult, WorkRecord } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
-import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
-import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
-import { useCinemaViewer } from "./useCinemaViewer";
-import { SegmentedControl } from "./SegmentedControl";
-import { applyWorkPreset, getWorkPreset, workEmptyMessage, type WorkSortSnapshot } from "./work-presets";
-import { initialWorkPageIndex, isReadableWorkAsset } from "./work-reading";
-import { useWorkReading } from "./useWorkReading";
+import { DialogOverlay } from "./DialogOverlay";
+import { GallerySearchField, GallerySearchStatus } from "./GallerySearchBar";
+import { Icon } from "./Icon";
+import { ExportImagesButton } from "./ImageOutputActions";
+import { MenuItem, Popover, type PopoverAnchor } from "./Popover";
+import { RenameWorkDialog } from "./RenameWorkDialog";
+import { FilterChips, FilterMenuButton, SortMenuButton } from "./WorkFilters";
+import { WorkContextMenu, WorkTile, type WorkTileHandlers } from "./WorkGrid";
+import { WorkLightbox } from "./WorkLightbox";
+import { pictureSearchScopeKey } from "./gallery-picture-search";
+import type { GalleryPictureSearch } from "./useGalleryPictureSearch";
+import { workFilterChips } from "./work-filters";
+import { getWorkPreset, workEmptyMessage, type WorkSortSnapshot } from "./work-presets";
 
+const EMPTY_RESULT: WorkQueryResult = { items: [], total: 0, totalPages: 0, offset: 0, limit: 60, hasMore: false };
+type Notice = { message: string; undo?: () => Promise<void> };
 
 export function WorkLibrary({
   pictureSearch,
@@ -38,8 +25,10 @@ export function WorkLibrary({
   query,
   normalSort,
   collections,
-  appearance,
   loading: normalLoading,
+  scopeTabs,
+  importing,
+  onImport,
   onQueryChange,
   onLoadMore: loadMoreWorks,
   onAssignCollection,
@@ -53,8 +42,10 @@ export function WorkLibrary({
   query: WorkQuery;
   normalSort: WorkSortSnapshot;
   collections: CollectionRecord[];
-  appearance: AppearancePreferences;
   loading: boolean;
+  scopeTabs: ReactNode;
+  importing: boolean;
+  onImport: () => void;
   onQueryChange: (query: WorkQuery) => void;
   onLoadMore: () => void;
   onAssignCollection: (workId: string, collectionId: string) => Promise<void>;
@@ -63,73 +54,62 @@ export function WorkLibrary({
   onOpenInspiration: (workId: string, pageIndex: number) => void;
   onError: (error: unknown) => void;
 }) {
-  const searchingPictures=Boolean(pictureSearch?.mode==="picture"&&(pictureSearch.snapshot||pictureSearch.pending||pictureSearch.error));
-  const stalePictureScope=Boolean(pictureSearch?.snapshot&&pictureSearchScopeKey(pictureSearch.snapshot.progress.galleryQuery??{})!==pictureSearchScopeKey(query));
-  const result: WorkQueryResult=searchingPictures?(stalePictureScope?{items:[],total:0,totalPages:0,offset:0,limit:60,hasMore:false}:pictureSearch?.snapshot?.result??{items:[],total:0,totalPages:0,offset:0,limit:60,hasMore:false}):normalResult;
-  const loading=searchingPictures?Boolean(pictureSearch?.pending||pictureSearch?.running&&!stalePictureScope):normalLoading;
-  const onLoadMore=searchingPictures?()=>void pictureSearch?.loadMore():loadMoreWorks;
-  const onLibraryChanged=async()=>{await libraryChanged();if(searchingPictures)await pictureSearch?.refresh();};
-  const [selectedAssetId,setSelectedAssetId]=useState<string|undefined>();
-  useEffect(()=>{
-    if(query.search&&pictureSearch?.mode==="picture"){pictureSearch.setMode("name");pictureSearch.setDraft(query.search);}
-  },[query.search]);
-  const [selectedWork, setSelectedWork] = useState<WorkRecord | null>(null);
+  // Picture search swaps in its own result set while keeping the gallery filters as its scope.
+  const searchingPictures = Boolean(pictureSearch?.mode === "picture" && (pictureSearch.snapshot || pictureSearch.pending || pictureSearch.error));
+  const stalePictureScope = Boolean(pictureSearch?.snapshot && pictureSearchScopeKey(pictureSearch.snapshot.progress.galleryQuery ?? {}) !== pictureSearchScopeKey(query));
+  const result: WorkQueryResult = searchingPictures ? (stalePictureScope ? EMPTY_RESULT : pictureSearch?.snapshot?.result ?? EMPTY_RESULT) : normalResult;
+  const loading = searchingPictures ? Boolean(pictureSearch?.pending || (pictureSearch?.running && !stalePictureScope)) : normalLoading;
+  const onLoadMore = searchingPictures ? () => void pictureSearch?.loadMore() : loadMoreWorks;
+  const onLibraryChanged = async () => { await libraryChanged(); if (searchingPictures) await pictureSearch?.refresh(); };
+  const searchSession = `${searchingPictures}|${pictureSearch?.snapshot?.progress.id}|${pictureSearch?.relevance}|${stalePictureScope}`;
+
+  useEffect(() => {
+    if (query.search && pictureSearch?.mode === "picture") { pictureSearch.setMode("name"); pictureSearch.setDraft(query.search); }
+  }, [query.search]);
+
+  const [selectedWork, setSelectedWork] = useState<{ work: WorkRecord; assetId?: string } | null>(null);
   const [renamingWork, setRenamingWork] = useState<{ id: string; title: string } | null>(null);
   const [openingWorkId, setOpeningWorkId] = useState("");
+  const [busyWorkId, setBusyWorkId] = useState("");
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deletionPreview, setDeletionPreview] = useState<WorkDeletionPreview | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [notice, setNotice] = useState<{ message: string; undo?: () => Promise<void> } | null>(null);
-  const preset = getWorkPreset(query);
-  const emptyMessage = workEmptyMessage(query);
-  const showAllWorks = () => onQueryChange({ ...normalSort, offset: 0, ...(query.limit ? { limit: query.limit } : {}) });
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [menu, setMenu] = useState<{ work: WorkListItem; anchor: PopoverAnchor } | null>(null);
+  const [albumMenu, setAlbumMenu] = useState<HTMLElement | null>(null);
   const activeCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
-  const isCombinationFilter = Boolean(
-    (query.collectionIds && query.collectionIds.length > 0) ||
-    (query.excludedCollectionIds && query.excludedCollectionIds.length > 0)
-  );
-
-  const combinationSummary = useMemo(() => {
-    if (!isCombinationFilter) return "";
-    const incNames = (query.collectionIds ?? []).map(
-      (id) => collections.find((c) => c.id === id)?.name ?? "未知分类"
-    );
-    const excNames = (query.excludedCollectionIds ?? []).map(
-      (id) => collections.find((c) => c.id === id)?.name ?? "未知分类"
-    );
-    const op = query.collectionMatchMode === "all" ? " + " : " | ";
-    let str = "";
-    if (incNames.length > 0) str += incNames.join(op);
-    else str += "全库作品";
-    if (excNames.length > 0) str += " - " + excNames.join(" - ");
-    return str;
-  }, [isCombinationFilter, query.collectionIds, query.excludedCollectionIds, query.collectionMatchMode, collections]);
-
-  const featuredWork = normalResult.items[0] ?? null;
+  const preset = getWorkPreset(query);
+  const artistName = query.artistId ? normalResult.items.find((item) => item.artistId === query.artistId)?.artistName : null;
+  const chips = useMemo(() => workFilterChips(query, collections, normalSort, artistName), [query, collections, normalSort, artistName]);
   const lastSelectedWorkId = useRef<string | null>(null);
-  useEffect(()=>{setSelectedIds(new Set());setSelecting(false);lastSelectedWorkId.current=null;},[searchingPictures,pictureSearch?.snapshot?.progress.id,pictureSearch?.relevance,stalePictureScope]);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const openRequestRef = useRef(0);
-  useEffect(()=>{openRequestRef.current+=1;setOpeningWorkId("");},[searchingPictures,pictureSearch?.snapshot?.progress.id,pictureSearch?.relevance,stalePictureScope]);
+
+  useEffect(() => { exitSelection(); openRequestRef.current += 1; setOpeningWorkId(""); }, [searchSession]);
   useEffect(() => () => { openRequestRef.current += 1; }, []);
+  useEffect(() => {
+    if (!notice || notice.undo) return;
+    const timer = window.setTimeout(() => setNotice(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   useEffect(() => {
     const sentinel = loadMoreRef.current;
     if (!sentinel || !result.hasMore || loading || !("IntersectionObserver" in window)) return;
     let requested = false;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!requested && entries.some((entry) => entry.isIntersecting)) {
-          requested = true;
-          onLoadMore();
-        }
-      },
-      { rootMargin: "700px 0px", threshold: 0 }
-    );
+    const observer = new IntersectionObserver((entries) => {
+      if (!requested && entries.some((entry) => entry.isIntersecting)) { requested = true; onLoadMore(); }
+    }, { rootMargin: "900px 0px", threshold: 0 });
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [loading, onLoadMore, result.hasMore, result.items.length]);
+
+  function exitSelection() {
+    setSelectedIds(new Set());
+    setSelecting(false);
+    lastSelectedWorkId.current = null;
+  }
 
   async function openWork(item: WorkListItem) {
     const request = ++openRequestRef.current;
@@ -137,9 +117,8 @@ export function WorkLibrary({
     try {
       const work = await window.sanctuary.getWork(item.id);
       if (request !== openRequestRef.current) return;
-      if (!work) throw new Error("作品记录不存在，可能已经被移出画廊。");
-      setSelectedAssetId(item.matchedPage!==undefined?item.coverAsset?.id:undefined);
-      setSelectedWork(work);
+      if (!work) throw new Error("作品记录不存在，可能已经被移出图库。");
+      setSelectedWork({ work, ...(item.matchedPage !== undefined && item.coverAsset ? { assetId: item.coverAsset.id } : {}) });
     } catch (error) {
       if (request === openRequestRef.current) onError(error);
     } finally {
@@ -148,46 +127,39 @@ export function WorkLibrary({
   }
 
   function toggleSelection(workId: string, shiftKey = false) {
+    setSelecting(true);
     setSelectedIds((current) => {
       const next = new Set(current);
-      const anchorId = lastSelectedWorkId.current;
-      const anchorIndex = anchorId ? result.items.findIndex((work) => work.id === anchorId) : -1;
+      const anchorIndex = lastSelectedWorkId.current ? result.items.findIndex((work) => work.id === lastSelectedWorkId.current) : -1;
       const targetIndex = result.items.findIndex((work) => work.id === workId);
       if (shiftKey && anchorIndex >= 0 && targetIndex >= 0) {
         for (let index = Math.min(anchorIndex, targetIndex); index <= Math.max(anchorIndex, targetIndex); index += 1) {
           const id = result.items[index]?.id;
           if (id) next.add(id);
         }
-      } else {
-        next.has(workId) ? next.delete(workId) : next.add(workId);
-      }
+      } else if (next.has(workId)) next.delete(workId);
+      else next.add(workId);
       lastSelectedWorkId.current = workId;
       return next;
     });
   }
 
-  async function previewDeletion() {
-    if (selectedIds.size === 0) return;
-    try {
-      setDeletionPreview(await window.sanctuary.previewWorkDeletion([...selectedIds]));
-    } catch (error) {
-      onError(error);
-    }
+  async function previewDeletion(ids: string[]) {
+    if (!ids.length) return;
+    try { setDeletionPreview(await window.sanctuary.previewWorkDeletion(ids)); } catch (error) { onError(error); }
   }
 
   async function confirmDeletion() {
     if (!deletionPreview) return;
     setDeleting(true);
     try {
-      const result = await window.sanctuary.confirmWorkDeletion(deletionPreview.token);
+      const outcome = await window.sanctuary.confirmWorkDeletion(deletionPreview.token);
       setDeletionPreview(null);
-      setSelectedIds(new Set());
-      setSelecting(false);
-      lastSelectedWorkId.current = null;
+      exitSelection();
       await onLibraryChanged();
-      setNotice({ message: result.failures.length > 0
-        ? `已处理 ${result.completedWorkIds.length} 个作品，${result.failures.length} 个失败。`
-        : `已处理 ${result.completedWorkIds.length} 个作品。托管文件已进入系统回收站。` });
+      setNotice({ message: outcome.failures.length > 0
+        ? `已移出 ${outcome.completedWorkIds.length} 件，${outcome.failures.length} 件失败。`
+        : `已移出 ${outcome.completedWorkIds.length} 件。图库保存的文件已进入回收站。` });
     } catch (error) {
       onError(error);
     } finally {
@@ -195,682 +167,213 @@ export function WorkLibrary({
     }
   }
 
-  // Stable delegates let existing cards skip page appends/status updates while always seeing current handlers and selection state.
-  const handleOpenWork = useStableWorkCallback((work: WorkListItem, shiftKey: boolean) => {
-    if (selecting) toggleSelection(work.id, shiftKey);
-    else void openWork(work);
-  });
-  const handleToggleSelection = useStableWorkCallback((workId: string, shiftKey: boolean) => toggleSelection(workId, shiftKey));
-  const handleAssignWork = useStableWorkCallback(async (work: WorkListItem, collectionId: string) => {
-    await onAssignCollection(work.id, collectionId);
-    const collectionName = collections.find((item) => item.id === collectionId)?.name ?? "相册";
-    setNotice({
-      message: `已把《${work.title}》加入相册“${collectionName}”。`,
-      undo: async () => {
-        await window.sanctuary.removeWorkFromCollection(work.id, collectionId);
-        await onLibraryChanged();
-      }
-    });
-  });
-  const handleFavoriteWork = useStableWorkCallback(async (work: WorkListItem) => {
+  /** One mutation per work at a time; a returned notice may carry an undo. */
+  async function mutateWork(work: WorkListItem, operation: () => Promise<Notice | void>) {
+    if (busyWorkId) return;
+    setBusyWorkId(work.id);
+    try { const next = await operation(); if (next) setNotice(next); }
+    catch (error) { onError(error); }
+    finally { setBusyWorkId(""); }
+  }
+  const favorite = (work: WorkListItem) => mutateWork(work, async () => {
     const next = !work.favorite;
     await window.sanctuary.updateWorkFavorite([work.id], next);
     await onLibraryChanged();
-    setNotice({
-      message: next ? `已喜欢《${work.title}》。` : `已取消喜欢《${work.title}》。`,
-      undo: async () => {
-        await window.sanctuary.updateWorkFavorite([work.id], !next);
-        await onLibraryChanged();
-      }
-    });
+    return { message: next ? `已喜欢《${work.title}》` : `已取消喜欢《${work.title}》`,
+      undo: async () => { await window.sanctuary.updateWorkFavorite([work.id], !next); await onLibraryChanged(); } };
   });
-  const handleRemoveFromCollection = useStableWorkCallback(async (work: WorkListItem) => {
-    if (!activeCollection) return;
+  const addToAlbum = (work: WorkListItem, collectionId: string) => mutateWork(work, async () => {
+    await onAssignCollection(work.id, collectionId);
+    const name = collections.find((item) => item.id === collectionId)?.name ?? "相册";
+    return { message: `已把《${work.title}》加入“${name}”`,
+      undo: async () => { await window.sanctuary.removeWorkFromCollection(work.id, collectionId); await onLibraryChanged(); } };
+  });
+  const removeFromAlbum = (work: WorkListItem) => activeCollection && mutateWork(work, async () => {
     await window.sanctuary.removeWorkFromCollection(work.id, activeCollection.id);
     await onLibraryChanged();
-    setNotice({
-      message: `已把《${work.title}》移出相册“${activeCollection.name}”。`,
-      undo: async () => {
-        await window.sanctuary.addWorkToCollection(work.id, activeCollection.id);
-        await onLibraryChanged();
-      }
-    });
+    return { message: `已把《${work.title}》移出“${activeCollection.name}”`,
+      undo: async () => { await window.sanctuary.addWorkToCollection(work.id, activeCollection.id); await onLibraryChanged(); } };
   });
-  const handleMutationError = useStableWorkCallback((error: unknown) => onError(error));
-  const handleRenameWork = useStableWorkCallback((work: WorkListItem) => setRenamingWork({ id: work.id, title: work.title }));
-  const handleCopyWork = useStableWorkCallback(async (work: WorkListItem) => {
-    if (!work.coverAsset) return;
-    await window.sanctuary.useImage({ workId: work.id, assetId: work.coverAsset.id }, "copy");
-    setNotice({ message: work.pageCount > 1 ? "图片已复制，可以粘贴使用。全部页面可在选择作品后复制原图。" : "图片已复制，可以粘贴使用。" });
+  const useCover = (work: WorkListItem, action: "copy" | "reveal") => work.coverAsset && mutateWork(work, async () => {
+    await window.sanctuary.useImage({ workId: work.id, assetId: work.coverAsset!.id }, action);
+    if (action === "copy") return { message: work.pageCount > 1 && work.matchedPage === undefined ? "已复制封面。复制全部页面请先选择作品。" : "图片已复制，可以粘贴使用" };
   });
+
+  // Tiles are memoized; route events through a ref so appending a page does not re-render existing tiles.
+  const latest = useRef({ selecting, toggleSelection, openWork, favorite, onError });
+  useLayoutEffect(() => { latest.current = { selecting, toggleSelection, openWork, favorite, onError }; });
+  const handlers = useMemo<WorkTileHandlers>(() => ({
+    onOpen: (work: WorkListItem, event: MouseEvent) => {
+      const current = latest.current;
+      if (current.selecting || event.ctrlKey || event.metaKey) current.toggleSelection(work.id, event.shiftKey);
+      else void current.openWork(work);
+    },
+    onToggleSelection: (workId, shiftKey) => latest.current.toggleSelection(workId, shiftKey),
+    onFavorite: (work) => void latest.current.favorite(work),
+    onContextMenu: (work, anchor) => setMenu({ work, anchor }),
+    onDragError: (error) => latest.current.onError(error)
+  }), []);
+
+  const selectedList = [...selectedIds];
+  const allLoadedSelected = result.items.length > 0 && result.items.every((work) => selectedIds.has(work.id));
+  const empty = result.items.length === 0 && !loading;
+  const emptyMessage = workEmptyMessage(query);
 
   return (
     <>
-      {pictureSearch&&<GallerySearchBar search={pictureSearch} query={query} onQueryChange={onQueryChange}/>}
-      <GalleryBanner featured={featuredWork} appearance={appearance} searching={Boolean(query.search)||searchingPictures} heading={activeCollection ? "相册精选" : preset === "recent" ? "最近浏览" : preset === "favorites" ? "喜欢的作品" : "作品精选"} onOpen={work => void openWork(work)} />
-      <div className="work-preset-row">
-        <SegmentedControl
-          label="常用筛选"
-          value={preset}
-          options={[
-            { value: "all", label: "全部" },
-            { value: "favorites", label: "喜欢" },
-            { value: "recent", label: "最近浏览", title: "按最近看过的时间排列，打开作品继续上次读到的页" },
-            { value: "uncollected", label: "未分相册" }
-          ]}
-          onChange={(next) => onQueryChange(applyWorkPreset(query, next, normalSort))}
-        />
-        {preset === "recent" && <small>按最近浏览排列 · 自动记住读到的页</small>}
-        <SavedWorkFilters query={query} collections={collections} onApply={onQueryChange} />
-      </div>
-
-      <section className={`work-library-controls ${pictureSearch?"work-library-filters":""}`} aria-label="画廊搜索与排序">
-        {!pictureSearch&&(<label className="work-search">
-          <span>⌕</span>
-          <input
-            type="search"
-            value={query.search ?? ""}
-            placeholder="搜索标题、作者或 Pixiv ID"
-            onChange={(event) => onQueryChange({ ...query, search: event.target.value, offset: 0 })}
-          />
-        </label>)}
-        <select aria-label="保存方式" value={query.ownership ?? ""} onChange={event => {
-          const { ownership: _ownership, ...rest } = query;
-          onQueryChange({ ...rest, ...(event.target.value ? { ownership: event.target.value as NonNullable<WorkQuery["ownership"]> } : {}), offset: 0 });
-        }}>
-          <option value="">全部保存方式</option><option value="managed">图库保存</option><option value="external">外部引用</option>
-        </select>
-        <select
-          aria-label="作品类型"
-          value={query.workType ?? ""}
-          onChange={(event) => {
-            const { workType: _currentWorkType, ...withoutWorkType } = query;
-            onQueryChange(event.target.value
-              ? {
-                  ...withoutWorkType,
-                  workType: event.target.value as NonNullable<WorkQuery["workType"]>,
-                  offset: 0
-                }
-              : { ...withoutWorkType, offset: 0 });
-          }}
-        >
-          <option value="">全部类型</option>
-          <option value="illustration">插画</option>
-          <option value="manga">漫画</option>
-          <option value="ugoira">动图</option>
-          <option value="local">本地导入</option>
-          <option value="unknown">待补充</option>
-        </select>
-        <select
-          aria-label="排序字段"
-          value={searchingPictures?"similarity":query.sortBy ?? "savedAt"}
-          disabled={preset === "recent"||searchingPictures}
-          onChange={(event) => onQueryChange({
-            ...query,
-            sortBy: event.target.value as NonNullable<WorkQuery["sortBy"]>,
-            offset: 0
-          })}
-        >
-          {searchingPictures&&<option value="similarity">画面相似程度</option>}
-          <option value="savedAt">本地保存时间</option>
-          {preset === "recent" && <option value="lastViewedAt">最近浏览时间</option>}
-          <option value="publishedAt">Pixiv 发布时间</option>
-          <option value="title">标题</option>
-          <option value="artist">作者</option>
-          <option value="pageCount">页数</option>
-          <option value="byteLength">文件大小</option>
-        </select>
-        <button
-          type="button"
-          className="work-sort-direction"
-          disabled={preset === "recent"||searchingPictures}
-          title={query.direction === "asc" ? "当前升序" : "当前降序"}
-          onClick={() => onQueryChange({
-            ...query,
-            direction: query.direction === "asc" ? "desc" : "asc",
-            offset: 0
-          })}
-        >
-          {query.direction === "asc" ? "升序 ↑" : "降序 ↓"}
-        </button>
-        <button
-          type="button"
-          className={`work-select-toggle ${selecting ? "active" : ""}`}
-          disabled={searchingPictures&&Boolean(pictureSearch?.running)}
-          onClick={() => {
-            setSelecting((value) => !value);
-            setSelectedIds(new Set());
-            lastSelectedWorkId.current = null;
-          }}
-        >
-          {selecting ? "退出选择" : "选择"}
-        </button>
-      </section>
-
-      {activeCollection && (
-        <section className="work-collection-context">
-          <div><span>当前分类</span><strong>{activeCollection.name}</strong>{activeCollection.description && <small>{activeCollection.description}</small>}</div>
-          <button type="button" onClick={showAllWorks}>查看全部作品</button>
-        </section>
-      )}
-
-      {isCombinationFilter && (
-        <section className="work-collection-context work-combination-context">
-          <div>
-            <span>当前组合</span>
-            <strong>{combinationSummary}</strong>
-            <small className="combo-mode-label">
-              {query.collectionMatchMode === "all" ? "全部满足 (AND)" : "任意满足 (OR)"}
-            </small>
+      <header className="gallery-toolbar">
+        <div className="gallery-toolbar-row">
+          {scopeTabs}
+          {pictureSearch ? <GallerySearchField search={pictureSearch} query={query} onQueryChange={onQueryChange} /> : (
+            <label className="ui-search gallery-search-field"><Icon name="search" size={16} />
+              <input type="search" aria-label="搜索图库" value={query.search ?? ""} placeholder="搜索标题、画师或 Pixiv ID"
+                onChange={(event) => onQueryChange({ ...query, search: event.target.value, offset: 0 })} /></label>
+          )}
+          <div className="gallery-toolbar-actions">
+            <FilterMenuButton query={query} collections={collections} normalSort={normalSort} activeCount={chips.length} onQueryChange={onQueryChange} />
+            <SortMenuButton query={query} onQueryChange={onQueryChange}
+              disabledReason={searchingPictures ? "相似度" : preset === "recent" ? "浏览时间" : undefined} />
+            <button type="button" className="ui-tool-button" aria-label={selecting ? "完成选择" : "选择作品"} aria-pressed={selecting} disabled={searchingPictures && Boolean(pictureSearch?.running)}
+              onClick={() => selecting ? exitSelection() : setSelecting(true)}>
+              <Icon name="select" size={16} /><span>{selecting ? "完成" : "选择"}</span>
+            </button>
+            <Button variant="primary" busy={importing} busyLabel="正在导入…" onClick={onImport}><Icon name="plus" size={16} />导入</Button>
           </div>
-          <button type="button" onClick={showAllWorks}>查看全部作品</button>
-        </section>
-      )}
+        </div>
+        {pictureSearch && <GallerySearchStatus search={pictureSearch} query={query} />}
+        <FilterChips chips={chips} query={query} normalSort={normalSort} onQueryChange={onQueryChange} />
+      </header>
 
-      <div className="work-result-note">
-        <span>{result.total} 个作品 · {searchingPictures?`${result.totalPages} 张${pictureSearch?.relevance==="all"?"候选":"匹配"}图片 · 每件显示最匹配页`:`${result.totalPages} 页`}{query.ownership ? ` · ${query.ownership === "managed" ? "图库保存" : "外部引用"}` : ""}</span>
+      <div className="work-result-meta">
+        <span>{result.total} 件{searchingPictures ? ` · ${result.totalPages} 张${pictureSearch?.relevance === "all" ? "候选" : "匹配"}图片` : result.totalPages > result.total ? ` · ${result.totalPages} 页` : ""}</span>
         {loading && <span className="work-querying">正在更新…</span>}
       </div>
 
-      {result.items.length === 0 && !loading ? (
-        <section className="empty-state compact-empty">
-          <p className="eyebrow">NO MATCHES</p>
-          <h2>{searchingPictures?stalePictureScope?"按当前范围重新找图":pictureSearch?.error||pictureSearch?.snapshot?.progress.error?"找图暂未完成":pictureSearch?.snapshot?.progress.phase==="cancelled"?"已停止找图":pictureSearch?.snapshot?.relevance.hiddenWorks?"暂时没有较相关的图片":"当前范围没有可用的搜索结果":emptyMessage.title}</h2>
-          <p>{searchingPictures?!stalePictureScope&&pictureSearch?.snapshot?.relevance.hiddenWorks?"可以换一种画面描述，或点上方“显示更多”查看相关性较低的结果，无需重新分析。":"在上方输入中文画面描述后点“找图”。首次建立索引较慢，已完成的索引会保留。":emptyMessage.description}</p>
+      {empty ? (
+        <section className="gallery-empty">
+          <h2>{searchingPictures ? (stalePictureScope ? "按当前范围重新找图" : pictureSearch?.error || pictureSearch?.snapshot?.progress.error ? "找图暂未完成"
+            : pictureSearch?.snapshot?.progress.phase === "cancelled" ? "已停止找图" : pictureSearch?.snapshot?.relevance.hiddenWorks ? "没有较相关的图片" : "没有可用的搜索结果") : emptyMessage.title}</h2>
+          <p>{searchingPictures ? (!stalePictureScope && pictureSearch?.snapshot?.relevance.hiddenWorks ? "换一种描述，或在上方显示弱相关结果。" : "在搜索框描述画面后按回车。") : emptyMessage.description}</p>
+          {chips.length > 0 && <Button onClick={() => onQueryChange(chips.reduce((next, chip) => chip.clear(next), query))}>清除筛选</Button>}
         </section>
       ) : (
-        <section className="work-library-grid" aria-busy={loading}>
+        <section className="work-grid" aria-busy={loading} aria-label="作品">
           {result.items.map((work) => (
-            <WorkCard
-              key={work.id}
-              work={work}
-              collections={collections}
-              opening={openingWorkId === work.id}
-              selecting={selecting}
-              selected={selectedIds.has(work.id)}
-              onOpen={handleOpenWork}
-              onToggleSelection={handleToggleSelection}
-              onAssign={handleAssignWork}
-              onFavorite={handleFavoriteWork}
-              onRemoveFromCollection={activeCollection ? handleRemoveFromCollection : null}
-              onMutationError={handleMutationError}
-              onRename={handleRenameWork}
-              onCopy={handleCopyWork}
-            />
+            <WorkTile key={work.id} work={work} selecting={selecting} selected={selectedIds.has(work.id)}
+              opening={openingWorkId === work.id} busy={busyWorkId === work.id} handlers={handlers} />
           ))}
         </section>
       )}
 
-      {renamingWork && <RenameWorkDialog key={renamingWork.id} work={renamingWork} onClose={() => setRenamingWork(null)} onSaved={async title => {
-        setNotice({ message: `图库名称已改为《${title}》。` });
-        try { await onLibraryChanged(); } catch { throw new Error("名称已保存，列表刷新失败。请稍后重新进入图库查看。"); }
-      }} />}
-
       {result.hasMore && (
         <div className="work-load-more" ref={loadMoreRef}>
-          <Button busy={loading} busyLabel="正在读取…" onClick={onLoadMore}>
-            继续加载（已显示 {result.items.length} / {result.total}）
-          </Button>
+          <Button variant="ghost" busy={loading} busyLabel="正在读取…" onClick={onLoadMore}>继续加载（{result.items.length}/{result.total}）</Button>
         </div>
       )}
 
+      {menu && (
+        <WorkContextMenu work={menu.work} anchor={menu.anchor} collections={collections} activeCollectionName={activeCollection?.name}
+          onClose={() => setMenu(null)}
+          actions={{
+            open: () => void openWork(menu.work),
+            favorite: () => void favorite(menu.work),
+            addToAlbum: (collectionId) => void addToAlbum(menu.work, collectionId),
+            removeFromAlbum: activeCollection ? () => void removeFromAlbum(menu.work) : undefined,
+            copy: () => void useCover(menu.work, "copy"),
+            reveal: () => void useCover(menu.work, "reveal"),
+            rename: () => setRenamingWork({ id: menu.work.id, title: menu.work.title }),
+            select: () => toggleSelection(menu.work.id),
+            remove: () => void previewDeletion([menu.work.id])
+          }} />
+      )}
+
       {selecting && (
-        <section className="work-selection-bar" aria-live="polite">
-          <div><strong>已选择 {selectedIds.size} 个作品</strong><span>批量操作以作品为单位，包含其全部页面。</span></div>
-          <ExportImagesButton targets={[...selectedIds].map(workId=>({workId}))} />
-          <select
-            value=""
-            disabled={selectedIds.size === 0 || collections.length === 0}
-            onChange={async (event) => {
-              const collectionId = event.target.value;
-              if (!collectionId) return;
-              const albumName = collections.find((c) => c.id === collectionId)?.name ?? "相册";
-              try {
-                await Promise.all([...selectedIds].map((workId) =>
-                  window.sanctuary.addWorkToCollection(workId, collectionId)
-                ));
-                await onLibraryChanged();
-                const affectedIds = [...selectedIds];
-                setNotice({
-                  message: `已把 ${affectedIds.length} 个作品批量加入相册《${albumName}》。`,
-                  undo: async () => {
-                    await Promise.all(affectedIds.map((workId) =>
-                      window.sanctuary.removeWorkFromCollection(workId, collectionId)
-                    ));
-                    await onLibraryChanged();
-                  }
-                });
-              } catch (error) {
-                onError(error);
-              }
-            }}
-          >
-            <option value="">加入相册…</option>
-            {collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
-          </select>
-          <button
-            type="button"
-            className="work-favorite-selected"
-            disabled={!result.items.some((work) => selectedIds.has(work.id) && !work.favorite)}
+        <section className="work-selection-bar" aria-live="polite" aria-label="批量操作">
+          <strong>已选 {selectedIds.size} 件</strong>
+          <button type="button" className="ui-tool-button" disabled={!result.items.length}
+            onClick={() => setSelectedIds(allLoadedSelected ? new Set() : new Set(result.items.map((work) => work.id)))}>
+            {allLoadedSelected ? "取消全选" : "全选已加载"}
+          </button>
+          <span className="work-selection-divider" />
+          <button type="button" className="ui-tool-button" disabled={!result.items.some((work) => selectedIds.has(work.id) && !work.favorite)}
             onClick={async () => {
-              const affectedIds = result.items.filter((work) => selectedIds.has(work.id) && !work.favorite).map((work) => work.id);
-              if (!affectedIds.length) return;
+              const ids = result.items.filter((work) => selectedIds.has(work.id) && !work.favorite).map((work) => work.id);
               try {
-                await window.sanctuary.updateWorkFavorite(affectedIds, true);
-                await onLibraryChanged();
-                setNotice({
-                  message: `已喜欢 ${affectedIds.length} 个作品。`,
-                  undo: async () => {
-                    await window.sanctuary.updateWorkFavorite(affectedIds, false);
-                    await onLibraryChanged();
-                  }
-                });
-              } catch (error) {
-                onError(error);
-              }
-            }}
-          >
-            ♡ 喜欢
-          </button>
-          <button type="button" className="work-analyze-selected" disabled={selectedIds.size === 0} onClick={() => onAnalyzeWorks([...selectedIds])}>
-            推荐相册分类…
-          </button>
-          <button type="button" className="work-delete-button" disabled={selectedIds.size === 0} onClick={() => void previewDeletion()}>
-            移出画廊…
-          </button>
+                await window.sanctuary.updateWorkFavorite(ids, true); await onLibraryChanged();
+                setNotice({ message: `已喜欢 ${ids.length} 件`, undo: async () => { await window.sanctuary.updateWorkFavorite(ids, false); await onLibraryChanged(); } });
+              } catch (error) { onError(error); }
+            }}><Icon name="heart" size={16} /><span>喜欢</span></button>
+          <button type="button" className="ui-tool-button" aria-haspopup="menu" aria-expanded={Boolean(albumMenu)} disabled={!selectedIds.size || !collections.length}
+            onClick={(event) => setAlbumMenu(albumMenu ? null : event.currentTarget)}><Icon name="album" size={16} /><span>加入相册</span></button>
+          <ExportImagesButton targets={selectedList.map((workId) => ({ workId }))} label="复制原图到…" disabled={!selectedIds.size} />
+          <button type="button" className="ui-tool-button" disabled={!selectedIds.size} onClick={() => onAnalyzeWorks(selectedList)}><Icon name="organize" size={16} /><span>整理建议</span></button>
+          <button type="button" className="ui-tool-button work-selection-danger" disabled={!selectedIds.size} onClick={() => void previewDeletion(selectedList)}><Icon name="remove" size={16} /><span>移出图库</span></button>
+          <span className="work-selection-divider" />
+          <button type="button" className="ui-icon-button" aria-label="退出选择" title="退出选择" onClick={exitSelection}><Icon name="close" size={16} /></button>
         </section>
+      )}
+      {albumMenu && (
+        <Popover anchor={albumMenu} label="加入相册" onClose={() => setAlbumMenu(null)}>
+          {collections.map((collection) => <MenuItem key={collection.id} icon="album" label={collection.name} onSelect={async () => {
+            setAlbumMenu(null);
+            const ids = [...selectedIds];
+            try {
+              await Promise.all(ids.map((workId) => window.sanctuary.addWorkToCollection(workId, collection.id)));
+              await onLibraryChanged();
+              setNotice({ message: `已把 ${ids.length} 件加入“${collection.name}”`,
+                undo: async () => { await Promise.all(ids.map((workId) => window.sanctuary.removeWorkFromCollection(workId, collection.id))); await onLibraryChanged(); } });
+            } catch (error) { onError(error); }
+          }} />)}
+        </Popover>
       )}
 
       {notice && (
-        <AppNotice
-          tone="success"
-          className="work-operation-notice"
-          actionLabel={notice.undo ? "撤销" : undefined}
-          onAction={notice.undo ? async () => {
-            try {
-              await notice.undo?.();
-              setNotice(null);
-            } catch (error) {
-              onError(error);
-            }
-          } : undefined}
-          onDismiss={() => setNotice(null)}
-        >
-          {notice.message}
-        </AppNotice>
+        <div className="ui-toast-region">
+          <AppNotice tone="success" actionLabel={notice.undo ? "撤销" : undefined} onDismiss={() => setNotice(null)}
+            onAction={notice.undo ? async () => { try { await notice.undo?.(); setNotice(null); } catch (error) { onError(error); } } : undefined}>
+            {notice.message}
+          </AppNotice>
+        </div>
       )}
 
+      {renamingWork && <RenameWorkDialog key={renamingWork.id} work={renamingWork} onClose={() => setRenamingWork(null)} onSaved={async (title) => {
+        setNotice({ message: `已改名为《${title}》` });
+        try { await onLibraryChanged(); } catch { throw new Error("名称已保存，列表刷新失败。请稍后重新进入图库查看。"); }
+      }} />}
+
       {selectedWork && (
-        <WorkLightbox work={selectedWork} {...(selectedAssetId?{initialAssetId:selectedAssetId}:{})} onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} onOpenInspiration={onOpenInspiration} onError={onError} />
+        <WorkLightbox work={selectedWork.work} {...(selectedWork.assetId ? { initialAssetId: selectedWork.assetId } : {})}
+          onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} onOpenInspiration={onOpenInspiration} onError={onError} />
       )}
-      {deletionPreview && (
-        <DialogOverlay busy={deleting} onClose={() => setDeletionPreview(null)}>
-          <section className="dialog-surface work-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="work-delete-title">
-            <p className="eyebrow">DELETE PREVIEW</p>
-            <h2 id="work-delete-title">确认处理 {deletionPreview.items.length} 个作品？</h2>
-            <div className="work-delete-summary">
-              <div><strong>{deletionPreview.managedWorkCount}</strong><span>托管作品</span><small>文件移至 Windows 回收站</small></div>
-              <div><strong>{deletionPreview.externalWorkCount}</strong><span>外部导入</span><small>只移除索引，不碰原文件</small></div>
-              <div><strong>{deletionPreview.fileCount}</strong><span>图片文件</span><small>{formatBytes(deletionPreview.byteLength)}</small></div>
-            </div>
-            <div className="work-delete-list">
-              {deletionPreview.items.slice(0, 6).map((item) => (
-                <div key={item.id}><span>{item.title}</span><small>{item.ownership === "managed" ? "移至回收站" : "仅移除索引"} · {item.fileCount} 页</small></div>
-              ))}
-              {deletionPreview.items.length > 6 && <p>以及另外 {deletionPreview.items.length - 6} 个作品</p>}
-            </div>
-            <p className="work-delete-warning">不会永久删除托管文件；需要恢复时可前往 Windows 回收站。</p>
-            <footer>
-              <Button disabled={deleting} onClick={() => setDeletionPreview(null)}>取消</Button>
-              <Button variant="danger" busy={deleting} busyLabel="正在处理…" onClick={() => void confirmDeletion()}>确认处理</Button>
-            </footer>
-          </section>
-        </DialogOverlay>
-      )}
+
+      {deletionPreview && <WorkDeleteDialog preview={deletionPreview} deleting={deleting} onCancel={() => setDeletionPreview(null)} onConfirm={() => void confirmDeletion()} />}
     </>
   );
 }
 
-const WorkCard = memo(function WorkCard({
-  work,
-  collections,
-  opening,
-  selecting,
-  selected,
-  onOpen,
-  onToggleSelection,
-  onFavorite,
-  onRemoveFromCollection,
-  onAssign,
-  onRename,
-  onCopy,
-  onMutationError
-}: {
-  work: WorkListItem;
-  collections: CollectionRecord[];
-  opening: boolean;
-  selecting: boolean;
-  selected: boolean;
-  onOpen: (work: WorkListItem, shiftKey: boolean) => void;
-  onToggleSelection: (workId: string, shiftKey: boolean) => void;
-  onFavorite: (work: WorkListItem) => Promise<void>;
-  onRemoveFromCollection: ((work: WorkListItem) => Promise<void>) | null;
-  onAssign: (work: WorkListItem, collectionId: string) => Promise<void>;
-  onRename: (work: WorkListItem) => void;
-  onCopy: (work: WorkListItem) => Promise<void>;
-  onMutationError: (error: unknown) => void;
-}) {
-  const [mutating, setMutating] = useState<"assign" | "favorite" | "remove" | "copy" | null>(null);
-  const mutationRef = useRef(false);
-  const assigning = mutating === "assign";
-  async function mutate(action: "assign" | "favorite" | "remove" | "copy", operation: () => Promise<void>) {
-    if (mutationRef.current) return;
-    mutationRef.current = true;
-    setMutating(action);
-    try { await operation(); }
-    catch (error) { onMutationError(error); }
-    finally { mutationRef.current = false; setMutating(null); }
-  }
-  const coverPath = work.coverAsset?.thumbnailPath ?? work.coverAsset?.path ?? "";
+function WorkDeleteDialog({ preview, deleting, onCancel, onConfirm }: { preview: WorkDeletionPreview; deleting: boolean; onCancel: () => void; onConfirm: () => void }) {
   return (
-    <article className={`work-library-card ${selected ? "selected" : ""}`} data-multi-page={work.pageCount > 1 ? "true" : undefined}>
-      {selecting && (
-        <button type="button" className="work-card-check" aria-label={selected ? `取消选择 ${work.title}` : `选择 ${work.title}`} onClick={(event) => onToggleSelection(work.id, event.shiftKey)}>
-          {selected ? "✓" : ""}
-        </button>
-      )}
-      <button className="work-cover-button" type="button" disabled={opening} onClick={(event) => onOpen(work, event.shiftKey)}>
-        {coverPath ? (
-          <LazyWorkImage path={coverPath} />
-        ) : (
-          <span className="work-cover-missing">◇<small>封面待生成</small></span>
-        )}
-        {work.pageCount > 1 && <span className="work-page-badge">{work.matchedPage!==undefined?`匹配第 ${work.matchedPage+1} 页 / ${work.pageCount}`:`▱ ${work.pageCount}`}</span>}
-        {opening && <span className="work-opening">正在打开…</span>}
-      </button>
-      {!selecting && (
-        <button type="button" className={`work-card-favorite ${work.favorite ? "active" : ""}`} aria-label={work.favorite ? `取消喜欢 ${work.title}` : `喜欢 ${work.title}`} disabled={mutating !== null} aria-busy={mutating === "favorite"} onClick={() => void mutate("favorite", () => onFavorite(work))}>
-          {work.favorite ? "♥" : "♡"}
-        </button>
-      )}
-      <div className="work-card-copy">
-        <div className="work-card-title-row"><strong title={work.title}>{work.title}</strong>{!selecting && <Button size="small" variant="ghost" aria-label={`改名 ${work.title}`} onClick={() => onRename(work)}>改名</Button>}</div>
-        <div className="work-card-meta"><span title={work.artistName ?? "本地作品"}>{work.artistName ?? "本地作品"}</span>
-          <small className="work-ownership-label" title={work.ownership === "managed" ? "由图库保存和管理原图" : "引用原位置；移动或删除原文件会影响使用"}>{work.ownership === "managed" ? "图库保存" : "外部引用"}</small></div>
-        {!selecting && work.coverAsset?.mediaType === "image" && <div className="work-card-use-actions">
-          <Button size="small" variant="ghost" busy={mutating === "copy"} disabled={mutating !== null} onClick={() => void mutate("copy", () => onCopy(work))}>{work.matchedPage!==undefined?"复制此页":work.pageCount > 1 ? "复制封面" : "复制图片"}</Button>
-          <DragImageButton target={{ workId: work.id, assetId: work.coverAsset.id }} label={work.matchedPage!==undefined?"拖出此页":work.pageCount > 1 ? "拖出封面" : "拖出图片"} disabled={mutating !== null} onError={onMutationError} />
-        </div>}
-        <div className="work-card-foot">
-          <time dateTime={work.savedAt}>{formatDate(work.savedAt)}</time>
-          <select
-            value=""
-            aria-label={`把《${work.title}》加入相册`}
-            disabled={mutating !== null || collections.length === 0}
-            onChange={(event) => {
-              const collectionId = event.target.value;
-              if (collectionId) void mutate("assign", () => onAssign(work, collectionId));
-            }}
-          >
-            <option value="">{assigning ? "正在加入…" : "加入相册…"}</option>
-            {collections.map((collection) => (
-              <option key={collection.id} value={collection.id}>
-                {work.collectionIds.includes(collection.id) ? "✓ " : ""}{collection.name}
-              </option>
-            ))}
-          </select>
+    <DialogOverlay busy={deleting} onClose={onCancel}>
+      <section className="dialog-surface work-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="work-delete-title">
+        <h2 id="work-delete-title">移出 {preview.items.length} 件作品？</h2>
+        <div className="work-delete-summary">
+          <div><strong>{preview.managedWorkCount}</strong><span>图库保存</span><small>文件移至回收站</small></div>
+          <div><strong>{preview.externalWorkCount}</strong><span>外部引用</span><small>只移除记录，不动原文件</small></div>
+          <div><strong>{preview.fileCount}</strong><span>图片文件</span><small>{formatBytes(preview.byteLength)}</small></div>
         </div>
-        {onRemoveFromCollection && <button type="button" className="work-remove-from-collection" disabled={mutating !== null} aria-busy={mutating === "remove"} onClick={() => void mutate("remove", () => onRemoveFromCollection(work))}>移出当前相册</button>}
-      </div>
-    </article>
+        <div className="work-delete-list">
+          {preview.items.slice(0, 6).map((item) => (
+            <div key={item.id}><span>{item.title}</span><small>{item.ownership === "managed" ? "移至回收站" : "仅移除记录"} · {item.fileCount} 页</small></div>
+          ))}
+          {preview.items.length > 6 && <p>以及另外 {preview.items.length - 6} 件</p>}
+        </div>
+        <footer>
+          <Button disabled={deleting} onClick={onCancel}>取消</Button>
+          <Button variant="danger" busy={deleting} busyLabel="正在移出…" onClick={onConfirm}>移出</Button>
+        </footer>
+      </section>
+    </DialogOverlay>
   );
-});
-
-function useStableWorkCallback<Args extends unknown[], Result>(callback: (...args: Args) => Result): (...args: Args) => Result {
-  const latest = useRef(callback);
-  useLayoutEffect(() => { latest.current = callback; });
-  return useCallback((...args: Args) => latest.current(...args), []);
-}
-
-function LazyWorkImage({ path }: { path: string }) {
-  const imageRef = useRef<HTMLImageElement>(null);
-  const [load, setLoad] = useState(false);
-  useEffect(() => {
-    const image = imageRef.current;
-    if (!image || load) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      setLoad(true);
-      observer.disconnect();
-    }, { rootMargin: "700px 0px" });
-    observer.observe(image);
-    return () => observer.disconnect();
-  }, [load]);
-  return (
-    <img
-      ref={imageRef}
-      src={load ? workImageUrl(path) : undefined}
-      alt=""
-      loading="lazy"
-      decoding="async"
-      draggable={false}
-    />
-  );
-}
-
-export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpenInspiration, onError }: { work: WorkRecord; initialAssetId?: string; onClose: () => void; onGenerated: () => Promise<void> | void; onOpenInspiration: (workId: string, pageIndex: number) => void; onError: (error: unknown) => void }) {
-  const [displayTitle, setDisplayTitle] = useState(work.title);
-  useEffect(() => setDisplayTitle(work.title), [work.id, work.title]);
-  const [pageIndex, setPageIndex] = useState(() => initialWorkPageIndex(work, initialAssetId));
-  const [showRadar, setShowRadar] = useState(false);
-  const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
-  const [provenance, setProvenance] = useState<GenerationProvenance | null>(null);
-  const [showProvenance, setShowProvenance] = useState(false);
-  const [showInspector, setShowInspector] = useState(false);
-  const [showInformation, setShowInformation] = useState(false);
-  const page = work.assets[pageIndex];
-  const interactionSuspended = showInspector || showRadar || showProvenance || showInformation;
-  const viewerPages = useMemo(() => work.assets.map((asset) => ({ url: workImageUrl(asset.path), width: asset.width, height: asset.height, byteLength: asset.byteLength })), [work.assets]);
-  const viewer = useCinemaViewer({
-    imageKey: page?.id ?? work.id, pages: viewerPages, pageIndex, onPageChange: setPageIndex, onClose,
-    interactionSuspended,
-    onDismissOverlay: showInspector ? undefined : showInformation ? () => setShowInformation(false) : showRadar ? () => setShowRadar(false) : showProvenance ? () => setShowProvenance(false) : undefined
-  });
-  const { zoom, nativeMode, isPanning, hudVisible, imageLoaded, imageFailed, resetHudTimer } = viewer;
-  useWorkReading({ workId: work.id, assetId: page && isReadableWorkAsset(page) ? page.id : null, imageLoaded, onSaved: onGenerated, onError });
-
-  useEffect(() => {
-    let active = true;
-    setEvaluations([]);
-    setProvenance(null);
-    if (window.sanctuary?.listVisionEvaluationsForWork) {
-      window.sanctuary.listVisionEvaluationsForWork(work.id).then((values) => { if (active) setEvaluations(values); }).catch(() => {});
-    }
-    void window.sanctuary.getGenerationProvenance(work.id).then((value) => { if (active) setProvenance(value); }).catch(() => {});
-    return () => { active = false; };
-  }, [work.id]);
-
-  if (!page) return null;
-
-  return createPortal(
-    <div
-      ref={viewer.theaterRef}
-      className={`cinema-lightbox-theater ${hudVisible ? "hud-visible" : "hud-hidden"}`}
-      role="dialog"
-      aria-modal="true"
-      aria-label={displayTitle}
-      data-display-profile={viewer.displayProfile}
-      data-reduced-motion={viewer.reducedMotion}
-      onMouseMove={resetHudTimer}
-      onFocusCapture={resetHudTimer}
-      tabIndex={-1}
-    >
-      <header className="cinema-hud-island">
-        <div className="cinema-heading-group">
-          <strong>{displayTitle}</strong>
-          <small>{work.artistName ?? "本地作品"} {work.assets.length > 1 ? `· 第 ${pageIndex + 1}/${work.assets.length} 页` : ""}</small>
-        </div>
-
-        <div className="cinema-controls-group">
-          <div className="zoom-capsule">
-            <button type="button" title="缩小 (-)" onClick={() => viewer.changeZoom(zoom - 0.25)}>-</button>
-            <button type="button" className="zoom-readout" title="原始像素比例 · 点击自适应全貌 (0)" onClick={viewer.resetZoom}>{viewer.zoomPercent}%</button>
-            <button type="button" title="放大 (+)" onClick={() => viewer.changeZoom(zoom + 0.25)}>+</button>
-          </div>
-          <button type="button" className={`cinema-btn-fit ${zoom === 1 ? "active" : ""}`} title="自适应 / 原始像素 (每像素对应 1 CSS px；双击或按 1)" onClick={viewer.toggleNativeZoom}>
-            {nativeMode ? "自适应全貌" : "1:1 原图"}
-          </button>
-          <ArtworkToolsMenu>
-          <button type="button" className="cinema-btn-fit" onClick={() => { setShowInformation(true); setShowRadar(false); setShowInspector(false); setShowProvenance(false); }}>作品信息与相册</button>
-          <button
-            type="button"
-            className={`cinema-btn-fit ${showRadar ? "active" : ""}`}
-            title="切换 AI 视觉雷达图画像"
-            onClick={() => { setShowRadar((v) => !v); setShowInformation(false); setShowInspector(false); setShowProvenance(false); }}
-          >
-            ✦ 雷达画像
-          </button>
-          <button
-            type="button"
-            className={`cinema-btn-fit ${showInspector ? "active" : ""}`}
-            title="查看当前页 WD 标签并打开提示词调音台"
-            onClick={() => { setShowInspector((value) => !value); setShowInformation(false); setShowRadar(false); setShowProvenance(false); }}
-          >
-            ◇ 元素透视
-          </button>
-          <button
-            type="button"
-            className="cinema-btn-fit"
-            title="把当前图片带到本地灵感台"
-            onClick={() => { onClose(); onOpenInspiration(work.id, pageIndex); }}
-          >
-            ✦ 一起创作
-          </button>
-          </ArtworkToolsMenu>
-          {provenance && (
-            <button type="button" className={`cinema-btn-fit ${showProvenance ? "active" : ""}`} title="查看 ComfyUI 生成来源" onClick={() => { setShowProvenance((value) => !value); setShowRadar(false); setShowInspector(false); }}>
-              ✦ 生成来源
-            </button>
-          )}
-          <button type="button" className="cinema-btn-close" aria-label="关闭大图" title="关闭大图 (Esc)" onClick={onClose}>✕</button>
-        </div>
-      </header>
-
-      {showRadar && (
-        <aside className="cinema-radar-drawer" role="complementary" aria-label="画作多维视觉雷达图">
-          <div className="radar-drawer-header">
-            <h3>多维视觉画像</h3>
-            <button type="button" className="radar-drawer-close" onClick={() => setShowRadar(false)} aria-label="关闭雷达图">✕</button>
-          </div>
-          <RadarEvaluationPanel
-            workId={work.id}
-            evaluations={evaluations}
-            onEvaluationsChange={setEvaluations}
-          />
-        </aside>
-      )}
-      {showInformation && <WorkInformationDrawer workId={work.id} pageIndex={page.pageIndex} onClose={() => setShowInformation(false)}
-        onInspector={() => { setShowInformation(false); setShowInspector(true); }} onRadar={() => { setShowInformation(false); setShowRadar(true); }}
-        onInspiration={() => { onClose(); onOpenInspiration(work.id, pageIndex); }} onChanged={onGenerated} onRenamed={(renamed) => setDisplayTitle(renamed.title)} />}
-
-      {showProvenance && provenance && (
-        <aside className="cinema-radar-drawer generation-provenance-drawer" role="complementary" aria-label="生成来源与工作流摘要">
-          <div className="radar-drawer-header">
-            <h3>ComfyUI 生成来源</h3>
-            <button type="button" className="radar-drawer-close" onClick={() => setShowProvenance(false)} aria-label="关闭来源信息">✕</button>
-          </div>
-          <div className="generation-provenance-content">
-            <p><strong>工作流</strong><span>{provenance.templateName}</span></p>
-            <p><strong>来源作品</strong><span>{provenance.sourceWorkId}</span></p>
-            <p><strong>正向提示词</strong><code>{provenance.positivePrompt || "（空）"}</code></p>
-            <p><strong>负向提示词</strong><code>{provenance.negativePrompt || "（空）"}</code></p>
-            <p><strong>工作流摘要</strong><code>{JSON.stringify(provenance.workflowSummary, null, 2)}</code></p>
-          </div>
-        </aside>
-      )}
-
-      {showInspector && (
-        <ElementInspectorDrawer
-          target={{ workId: work.id, title: displayTitle, pageIndex }}
-          onClose={() => setShowInspector(false)}
-          onGenerated={onGenerated}
-        />
-      )}
-
-      <div
-        ref={viewer.stageRef}
-        className={`cinema-stage-viewport ${isPanning ? "panning" : ""}`}
-        onPointerDown={viewer.handlePointerDown}
-        onPointerMove={viewer.handlePointerMove}
-        onPointerUp={viewer.handlePointerUp}
-        onPointerCancel={viewer.handlePointerUp}
-        onLostPointerCapture={viewer.handlePointerUp}
-        onDoubleClick={viewer.handleDoubleClick}
-      >
-        {!imageLoaded && !imageFailed && <div className="cinema-loading-spinner" role="status" aria-label="正在读取原图" />}
-        {imageFailed && <div className="cinema-load-error" role="alert">原图读取失败，请检查本地文件是否存在。</div>}
-        <img
-          ref={viewer.imageRef}
-          key={page.id}
-          src={workImageUrl(page.path)}
-          alt={displayTitle}
-          className="cinema-image-entity"
-          aria-busy={!imageLoaded}
-          hidden={imageFailed}
-          style={{
-            cursor: zoom > 1 ? (isPanning ? "grabbing" : "grab") : "zoom-in"
-          }}
-          decoding="async"
-          draggable={false}
-          onLoad={viewer.onImageLoad}
-          onError={viewer.onImageError}
-        />
-      </div>
-
-      {pageIndex > 0 && (
-        <button type="button" className="cinema-nav-arrow prev" aria-label="上一页" disabled={interactionSuspended} onClick={() => setPageIndex((v) => v - 1)}>‹</button>
-      )}
-      {pageIndex < work.assets.length - 1 && (
-        <button type="button" className="cinema-nav-arrow next" aria-label="下一页" disabled={interactionSuspended} onClick={() => setPageIndex((v) => v + 1)}>›</button>
-      )}
-
-      {work.assets.length > 1 && (
-        <div className="cinema-bottom-filmstrip">
-          <div className="filmstrip-track">
-            {work.assets.map((asset, idx) => (
-              <button
-                key={asset.id}
-                type="button"
-                className={`filmstrip-thumb-btn ${idx === pageIndex ? "active" : ""}`}
-                title={`第 ${idx + 1} 页`}
-                aria-label={`第 ${idx + 1} 页`}
-                aria-current={idx === pageIndex ? "page" : undefined}
-                disabled={interactionSuspended}
-                onClick={() => setPageIndex(idx)}
-              >
-                <img src={workImageUrl(asset.thumbnailPath ?? asset.path)} alt="" loading="lazy" decoding="async" />
-                <span className="thumb-page-badge">{idx + 1}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>,
-    document.body
-  );
-}
-
-function workImageUrl(path: string): string {
-  return `sanctuary-image://local/${encodeURIComponent(path)}`;
-}
-
-const workDateFormatter = new Intl.DateTimeFormat("zh-CN", { year: "numeric", month: "short", day: "numeric" });
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.valueOf())
-    ? "时间未知"
-    : workDateFormatter.format(date);
 }
 
 function formatBytes(value: number): string {

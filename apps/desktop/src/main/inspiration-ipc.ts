@@ -18,7 +18,7 @@ import {
 } from "@sanctuary/domain";
 import type { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 import { prepareVisionImage } from "./vision/vision-image-preprocessor.js";
-import { readClipboardImageSize } from "./clipboard-image-size.js";
+import { readImageHeaderSize } from "./image-header-size.js";
 import { createInspirationOutputHost, inspirationMarkdown, inspirationMarkdownFileName, type InspirationOutputHost } from "./inspiration-export.js";
 
 const STORE_KEY = "local_inspiration_conversations_v1";
@@ -155,7 +155,7 @@ async function generateReply(
       if (!asset) throw new Error(`参考图《${source.title}》已经不可用，请重新选择参考图`);
       const info = await stat(asset.path).catch(() => { throw new Error(`无法读取参考图《${source.title}》，请检查原文件位置和读取权限`); });
       if (info.size > 32 * 1024 * 1024) throw new Error(`参考图《${source.title}》超过 32 MB，请选择较小的图片进行讨论`);
-      const dimensions = await readClipboardImageSize(asset.path).catch(() => { throw new Error(`参考图《${source.title}》已变化或无法读取，请重新选择`); });
+      const dimensions = await readImageHeaderSize(asset.path).catch(() => { throw new Error(`参考图《${source.title}》已变化或无法读取，请重新选择`); });
       if (!dimensions) throw new Error(`参考图《${source.title}》暂不能读图，请转换成 PNG、JPG 或 WebP 后导入`);
       if (dimensions.width * dimensions.height > 32_000_000) throw new Error(`参考图《${source.title}》尺寸过大，请缩小后再讨论`);
       prepared.push(await prepareVisionImage(asset.path, { maxLongEdge: sources.length > 1 ? 560 : 1344 }));

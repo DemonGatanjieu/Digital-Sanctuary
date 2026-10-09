@@ -15,13 +15,14 @@ import type {
   WorkRecord
 } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
+import { Icon } from "./Icon";
 import { AuthorBrowserCard, AuthorDetailPage } from "./AuthorGallery";
 import { Button } from "./Button";
 import { CollectionCard, CollectionDetailPage, SavedCollectionViewCard } from "./CollectionGallery";
 import { DialogOverlay } from "./DialogOverlay";
 import { SavedCollectionViewEditor } from "./SavedCollectionViewEditor";
-import { SegmentedControl } from "./SegmentedControl";
-import { WorkLibrary, WorkLightbox } from "./WorkLibrary";
+import { WorkLibrary } from "./WorkLibrary";
+import { WorkLightbox } from "./WorkLightbox";
 import { authorDetailFromSummary, directoryScopeWorkQuery, galleryScopeKey, savedViewWorkQuery } from "./gallery-model";
 import { hasWorkFilters, type WorkSortSnapshot } from "./work-presets";
 import type { GalleryDetailScope, GalleryDetailSession, GalleryDetailSessionPatch } from "./gallery-detail-session";
@@ -192,6 +193,15 @@ export function GalleryView({
     onModeChange("flat");
   };
 
+  const scopeTabs = (
+    <nav className="gallery-scope" aria-label="浏览方式">
+      {([["flat", "作品"], ["collections", "相册"], ["author-work", "画师"]] as const).map(([value, label]) => (
+        <button key={value} type="button" data-scope={value} aria-current={mode === value ? "page" : undefined}
+          onClick={() => value === "flat" ? showAllWorks() : onModeChange(value)}>{label}</button>
+      ))}
+    </nav>
+  );
+
   useEffect(() => {
     closeLightbox();
     return () => { openGeneration.current += 1; };
@@ -199,63 +209,39 @@ export function GalleryView({
 
   return (
     <>
-      <header className="topbar gallery-heading">
-        <div>
-          <p className="eyebrow">LOCAL-FIRST LIBRARY</p>
-          <h1>图库</h1>
-          <p className="page-description">保存喜欢的作品，按作品、相册或画师浏览。</p>
-        </div>
-        <div className="header-actions">
-          <SegmentedControl
-            label="画廊布局"
-            value={mode}
-            options={[
-              { value: "flat", label: "全部作品" },
-              { value: "collections", label: "相册" },
-              { value: "author-work", label: "画师" }
-            ]}
-            onChange={(nextMode) => nextMode === "flat" ? showAllWorks() : onModeChange(nextMode)}
-          />
-          {mode === "author-work" && (
-            <div className="avatar-repair-control">
-              <Button busy={repairingAvatars} busyLabel="正在补全头像…" disabled={!artistSummaries.some((author) => author.artist)} onClick={onRepairArtistAvatars}>
-                {missingAvatarCount > 0 ? `补全画师头像 (${missingAvatarCount})` : "重新检查头像"}
-              </Button>
-              {avatarRepairMessage && <small>{avatarRepairMessage}</small>}
+      {mode !== "flat" && (
+        <header className="gallery-toolbar">
+          <div className="gallery-toolbar-row">
+            {scopeTabs}
+            <div className="gallery-toolbar-actions">
+              {mode === "author-work" && (
+                <>
+                  {avatarRepairMessage && <small className="gallery-toolbar-note">{avatarRepairMessage}</small>}
+                  {missingAvatarCount > 0 && <Button variant="ghost" busy={repairingAvatars} busyLabel="正在补全头像…" onClick={onRepairArtistAvatars}>补全头像（{missingAvatarCount}）</Button>}
+                </>
+              )}
+              {mode === "collections" && <Button variant="ghost" onClick={() => setIsCreatingSavedView(true)}>新建组合</Button>}
+              {mode === "collections" && <Button variant="primary" onClick={onCreateCollection}><Icon name="plus" size={16} />新建相册</Button>}
+              <button type="button" className="ui-icon-button" aria-label="刷新目录" title="刷新目录" disabled={directoryLoading} onClick={onRetryDirectory}><Icon name="refresh" size={16} /></button>
             </div>
-          )}
-          {mode === "collections" && (
-            <Button onClick={() => setIsCreatingSavedView(true)}>新建相册组合</Button>
-          )}
-          {mode === "collections" && <Button onClick={onCreateCollection}>新建相册</Button>}
-          {mode !== "flat" && <Button busy={directoryLoading} busyLabel="正在读取目录…" onClick={onRetryDirectory}>刷新目录</Button>}
-          <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在导入…">导入图片</Button>
-        </div>
-      </header>
+          </div>
+        </header>
+      )}
 
       {error && <AppNotice tone="error">{error}</AppNotice>}
-      {openingArtworkId && <AppNotice tone="info"><span>正在读取作品…</span><Button size="small" onClick={cancelOpeningArtwork}>取消读取</Button></AppNotice>}
-
-      <section className="summary-row">
-        <article><span>作品</span><strong>{workResult.total}</strong></article>
-        <article><span>图片页</span><strong>{workResult.totalPages}</strong></article>
-        <article><span>画师</span><strong>{artistCount}</strong></article>
-        <article><span>相册</span><strong>{collections.length}</strong></article>
-      </section>
+      {openingArtworkId && <AppNotice tone="info"><span>正在读取作品…</span><Button size="small" onClick={cancelOpeningArtwork}>取消</Button></AppNotice>}
 
       {(mode === "collections" && directoryLoading && collectionSummaries.length === 0) ||
        (mode === "author-work" && directoryLoading && artistSummaries.length === 0) ||
        (mode === "flat" && workLoading && !hasWorkFilters(workQuery) && workResult.total === 0) ? (
         <section className="library-loading" role="status">正在读取图库…</section>
       ) : mode === "flat" && workResult.total === 0 && !hasWorkFilters(workQuery) ? (
-        <section className="empty-state">
-          <div className="empty-orbit"><span>✦</span></div>
-          <p className="eyebrow">YOUR FIRST ARTWORK</p>
-          <h2>从一张真正喜欢的图片开始</h2>
-          <p>导入本地图片，或去 Pixiv 保存作品。导入的图片保留在原位置，之后可随时整理到相册。</p>
-          <div className="library-start-actions">
-            <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在导入…">导入本地图片</Button>
-            <Button onClick={onOpenExplore}>去 Pixiv 找作品</Button>
+        <section className="gallery-empty gallery-empty--first">
+          <h2>图库还是空的</h2>
+          <p>导入本地图片，或去探索页保存喜欢的作品。原图保留在原位置。</p>
+          <div className="gallery-empty-actions">
+            <Button variant="primary" onClick={onImport} busy={busy} busyLabel="正在导入…"><Icon name="plus" size={16} />导入图片</Button>
+            <Button onClick={onOpenExplore}>去探索</Button>
           </div>
         </section>
       ) : mode === "collections" ? (
@@ -363,8 +349,10 @@ export function GalleryView({
           query={workQuery}
           normalSort={normalSort}
           collections={collections}
-          appearance={appearance}
           loading={workLoading}
+          scopeTabs={scopeTabs}
+          importing={busy}
+          onImport={onImport}
           onQueryChange={onWorkQueryChange}
           onLoadMore={onLoadMoreWorks}
           onAssignCollection={onAssignWorkCollection}

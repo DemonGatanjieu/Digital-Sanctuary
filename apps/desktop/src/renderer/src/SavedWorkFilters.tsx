@@ -4,8 +4,7 @@ import { savedFilterQuery } from "../../shared/saved-work-filter";
 import { Button } from "./Button";
 import { DialogOverlay } from "./DialogOverlay";
 
-export function SavedWorkFilters({ query, collections, onApply }: { query: WorkQuery; collections: CollectionRecord[]; onApply: (query: WorkQuery) => void }) {
-  const [open, setOpen] = useState(false);
+export function SavedWorkFiltersDialog({ query, collections, onApply, onClose }: { query: WorkQuery; collections: CollectionRecord[]; onApply: (query: WorkQuery) => void; onClose: () => void }) {
   const [saved, setSaved] = useState<SavedWorkFilter[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -35,25 +34,24 @@ export function SavedWorkFilters({ query, collections, onApply }: { query: WorkQ
     finally { setBusy(false); }
   }
   return <>
-    <Button size="small" variant="ghost" data-saved-filters="open" onClick={() => setOpen(true)}>保存 / 恢复筛选{saved.length ? `（${saved.length}）` : ""}</Button>
-    {open && <DialogOverlay busy={busy} onClose={() => setOpen(false)}>
+    <DialogOverlay busy={busy} onClose={onClose}>
       <section className="dialog-surface saved-work-filters-dialog" role="dialog" aria-modal="true" aria-labelledby="saved-work-filters-title">
-        <header><h2 id="saved-work-filters-title">常用筛选</h2><Button disabled={busy} size="small" onClick={() => setOpen(false)}>关闭</Button></header>
+        <header><h2 id="saved-work-filters-title">常用筛选</h2><Button disabled={busy} size="small" onClick={onClose}>关闭</Button></header>
         <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
           <h3>保存当前条件</h3><p>{describeWorkFilter(savedFilterQuery(query), collections)}</p>
           <label>筛选名称<input aria-label="筛选名称" maxLength={80} value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：喜欢的背景参考" /></label>
           <Button type="submit" variant="primary" size="small" disabled={!name.trim() || loading || saved.length >= 30} busy={busy}>保存筛选</Button>
         </form>
         {error && <p role="alert">{error}<Button disabled={busy} size="small" onClick={() => setRevision((value) => value + 1)}>重新读取</Button></p>}
-        <p className="muted">筛选保存条件和排序，结果随图库更新。最多 30 个，不复制或移动作品。</p>
+        <p className="muted">保存条件和排序，结果随图库更新。最多 30 个。</p>
         {loading ? <p role="status">正在读取…</p> : saved.length === 0 ? <p>还没有保存的筛选。为上面的当前条件起个名字即可。</p> :
           <ul className="saved-work-filter-list">{saved.map((entry) => <li key={entry.id}>
             <div><strong>{entry.name}</strong><p>{describeWorkFilter(entry.query, collections)}</p></div>
-            <div className="saved-work-filter-actions"><Button size="small" disabled={busy} data-filter-apply={entry.id} onClick={() => { onApply({ ...entry.query, offset: 0, limit: query.limit ?? 60 }); setOpen(false); }}>使用</Button>
+            <div className="saved-work-filter-actions"><Button size="small" disabled={busy} data-filter-apply={entry.id} onClick={() => { onApply({ ...entry.query, offset: 0, limit: query.limit ?? 60 }); onClose(); }}>使用</Button>
               <Button size="small" variant="ghost" disabled={busy} aria-label={`删除筛选 ${entry.name}`} onClick={() => void remove(entry.id)}>删除</Button></div>
           </li>)}</ul>}
       </section>
-    </DialogOverlay>}
+    </DialogOverlay>
   </>;
 }
 

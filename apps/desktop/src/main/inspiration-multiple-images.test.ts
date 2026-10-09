@@ -5,7 +5,7 @@ import type { InspirationConversation, WorkRecord } from "@sanctuary/domain";
 import type { LocalArtCriticService } from "./vision/local-art-critic-service.js";
 const prep = vi.hoisted(() => ({ prepare: vi.fn(), stat: vi.fn(), dimensions: vi.fn() }));
 vi.mock("node:fs/promises", async importOriginal => ({...await importOriginal<object>(), stat: prep.stat}));
-vi.mock("./clipboard-image-size.js", () => ({readClipboardImageSize:prep.dimensions}));
+vi.mock("./image-header-size.js", () => ({readImageHeaderSize:prep.dimensions}));
 vi.mock("./vision/vision-image-preprocessor.js", () => ({ prepareVisionImage: prep.prepare }));
 import { registerInspirationIpc } from "./inspiration-ipc.js";
 afterEach(()=>vi.resetAllMocks());

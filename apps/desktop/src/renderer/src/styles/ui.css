@@ -13,13 +13,13 @@
 .ui-button--small { min-height: 28px; padding: 0 10px; border-radius: var(--ds-radius-sm); font-size: var(--ds-font-12); }
 .ui-button--icon { width: var(--ds-control-sm); min-width: var(--ds-control-sm); height: var(--ds-control-sm); border-radius: var(--ds-radius-md); }
 
-.ui-button--primary { border: 1px solid var(--ds-primary); color: #fff; background: var(--ds-primary); box-shadow: none; }
+.ui-button--primary { border: 1px solid var(--ds-primary); color: var(--ds-on-accent); background: var(--ds-primary); box-shadow: none; font-weight: var(--ds-weight-semibold); }
 .ui-button--primary:hover:not(:disabled) { transform: none; border-color: var(--ds-primary-hover); background: var(--ds-primary-hover); box-shadow: none; }
 .ui-button--secondary { border: 1px solid var(--ds-border-light); color: var(--ds-text-body); background: var(--ds-bg-card); box-shadow: none; }
 .ui-button--secondary:hover:not(:disabled) { transform: none; border-color: var(--ds-border-light); color: var(--ds-text-heading); background: var(--ds-bg-card-subtle); box-shadow: none; }
 .ui-button--ghost { border: 1px solid transparent; color: var(--ds-text-secondary); background: transparent; }
 .ui-button--ghost:hover:not(:disabled) { color: var(--ds-text-heading); background: var(--ds-bg-hover); }
-.ui-button--danger { border: 1px solid var(--ds-danger); color: #fff; background: var(--ds-danger); box-shadow: none; }
+.ui-button--danger { border: 1px solid var(--ds-danger); color: var(--ds-on-accent); background: var(--ds-danger); box-shadow: none; }
 .ui-button--danger:hover:not(:disabled) { transform: none; background: var(--ds-danger-hover); box-shadow: none; }
 .ui-button--danger-soft { border: 1px solid var(--ds-danger-border); color: var(--ds-danger-text); background: transparent; }
 .ui-button--danger-soft:hover:not(:disabled) { background: var(--ds-danger-light); }
@@ -61,7 +61,7 @@
 }
 .ui-tool-button:hover:not(:disabled) { color: var(--ds-text-heading); background: var(--ds-bg-hover); }
 .ui-tool-button[aria-pressed="true"], .ui-tool-button[aria-expanded="true"] { color: var(--ds-text-heading); background: var(--ds-bg-active); }
-.ui-tool-button .ui-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; color: #fff; background: var(--ds-primary); font-size: 11px; line-height: 18px; text-align: center; }
+.ui-tool-button .ui-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; color: var(--ds-on-accent); background: var(--ds-primary); font-size: 11px; line-height: 18px; text-align: center; }
 
 /* Segmented control: underline-free pill group */
 .ui-segmented { gap: 2px; padding: 2px; border: 0; border-radius: var(--ds-radius-md); background: var(--ds-bg-hover); }

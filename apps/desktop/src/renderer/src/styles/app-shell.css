@@ -82,7 +82,7 @@
   padding: 0 4px;
   border: 2px solid var(--ds-bg-sidebar);
   border-radius: 8px;
-  color: #fff;
+  color: var(--ds-on-accent);
   background: var(--ds-primary);
   font-size: 10px;
   font-weight: var(--ds-weight-semibold);
@@ -125,7 +125,7 @@ h1 { font-size: var(--ds-font-24); font-weight: var(--ds-weight-semibold); lette
   padding: 0 12px;
   border: 1px solid var(--ds-primary);
   border-radius: var(--ds-radius-md);
-  color: #fff;
+  color: var(--ds-on-accent);
   background: var(--ds-primary);
   font: inherit;
   font-size: var(--ds-font-13);

@@ -4,7 +4,7 @@ import type { ImageWorkbenchService } from "./image-workbench-service.js";
 import { ImageOutputService, type ImageOutputHost } from "./image-output-service.js";
 import type { SemanticClient } from "./semantic-client.js";
 import { stat } from "node:fs/promises";
-import { readClipboardImageSize } from "./clipboard-image-size.js";
+import { readImageHeaderSize } from "./image-header-size.js";
 
 export function createImageOutputHost(getWindow: () => BrowserWindow | null): ImageOutputHost {
   return {
@@ -16,7 +16,7 @@ export function createImageOutputHost(getWindow: () => BrowserWindow | null): Im
     },
     async copyImage(path) {
       if((await stat(path)).size>32*1024*1024)throw new Error("这张图片超过 32 MB，请使用复制原图到文件夹");
-      const size=await readClipboardImageSize(path);
+      const size=await readImageHeaderSize(path);
       if(!size)throw new Error("这个格式暂不能直接粘贴，请使用复制原图到文件夹");
       if(size.width*size.height>32_000_000)throw new Error("这张图片过大，请使用复制原图到文件夹");
       const {nativeImage,clipboard}=await import("electron");
