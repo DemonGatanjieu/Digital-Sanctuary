@@ -42,10 +42,10 @@ export const GallerySearchField = forwardRef<HTMLInputElement, { search: Gallery
           onChange={(event) => picture ? search.setDraft(event.target.value) : onQueryChange({ ...query, search: event.target.value, offset: 0 })}
         />
         {hasState && <button type="button" className="ui-icon-button gallery-search-clear" aria-label="清除搜索" disabled={search.pending} onClick={clear}><Icon name="close" size={14} /></button>}
-        <button type="button" className="gallery-search-mode" aria-label={picture ? "当前按画面搜索，点击改为按名称搜索" : "当前按名称搜索，点击改为按画面搜索"}
+        {search.available && <button type="button" className="gallery-search-mode" aria-label={picture ? "当前按画面搜索，点击改为按名称搜索" : "当前按名称搜索，点击改为按画面搜索"}
           title="切换搜索方式" onClick={switchMode}>
           {picture ? "按画面" : "按名称"}
-        </button>
+        </button>}
       </form>
     );
   }

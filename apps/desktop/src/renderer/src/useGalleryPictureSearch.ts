@@ -12,6 +12,13 @@ export function useGalleryPictureSearch(query: WorkQuery, visible: boolean) {
   },setState);
   const controller=controllerRef.current;
   const running=pictureSearchRunning(state.snapshot);
+  // Installs without the offline picture model search by name only, so typing never ends in a setup error.
+  const [available,setAvailable]=useState(true);
+  useEffect(()=>{
+    let live=true;
+    void window.sanctuary.semanticAvailability().then(status=>{if(live&&!status.available){setAvailable(false);controller.mode("name");}}).catch(()=>{});
+    return()=>{live=false;};
+  },[controller]);
   useEffect(()=>{
     if(!visible||!state.snapshot)return;
     void controller.refresh();
@@ -19,7 +26,7 @@ export function useGalleryPictureSearch(query: WorkQuery, visible: boolean) {
     const timer=window.setInterval(()=>void controller.refresh(),750);
     return()=>window.clearInterval(timer);
   },[visible,state.snapshot?.progress.id,running,controller]);
-  return { ...state, running, setDraft:(value:string)=>controller.draft(value),setMode:(mode:PictureSearchState["mode"])=>controller.mode(mode),
+  return { ...state, running, available, setDraft:(value:string)=>controller.draft(value),setMode:(mode:PictureSearchState["mode"])=>controller.mode(mode),
     search:()=>controller.search(query),cancel:()=>controller.cancel(),clear:()=>controller.clear(),loadMore:()=>controller.refresh(true),refresh:()=>controller.refresh(),
     setRelevance:(relevance:PictureSearchState["relevance"])=>controller.setRelevance(relevance) };
 }
