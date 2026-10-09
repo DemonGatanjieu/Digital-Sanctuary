@@ -47,7 +47,6 @@ pnpm-debug.log*
 *.key
 .codex/
 .agents/
-AGENTS.md
 GEMINI.md
 .idea/
 .vscode/
