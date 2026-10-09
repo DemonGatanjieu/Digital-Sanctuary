@@ -18,7 +18,6 @@
 @import "./styles/explore.css" layer(legacy);
 @import "./styles/settings.css" layer(legacy);
 @import "./styles/analysis.css" layer(legacy);
-@import "./styles/image-workbench.css" layer(legacy);
 @import "./styles/model-center.css" layer(legacy);
 @import "./styles/display-profiles.css" layer(legacy);
 @import "./styles/responsive.css" layer(legacy);

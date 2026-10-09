@@ -1,11 +1,10 @@
 import { Button } from "./Button";
 import { ArtworkBackgroundControls, useArtworkBackground } from "./ArtworkBackgroundControls";
 
-export type HomeDestination = "gallery" | "explore" | "organize" | "inspiration";
+export type HomeDestination = "gallery" | "explore" | "inspiration";
 export const HOME_TASKS: { id: HomeDestination; title: string; description: string; symbol: string }[] = [
-  { id: "gallery", title: "看看我的收藏", description: "浏览作品、翻相册，继续上次阅读。", symbol: "▧" },
+  { id: "gallery", title: "看看我的收藏", description: "浏览、搜索作品，按元素筛选，继续上次阅读。", symbol: "▧" },
   { id: "explore", title: "发现新的作品", description: "浏览图片网站，保存喜欢的图；Pixiv 支持元素保护。", symbol: "◈" },
-  { id: "organize", title: "找图与整理", description: "从图库或文件夹找图，选择后复制使用或导入。", symbol: "▤" },
   { id: "inspiration", title: "找灵感，写点东西", description: "聊图、写故事、整理设定与提示词。", symbol: "✦" }
 ];
 

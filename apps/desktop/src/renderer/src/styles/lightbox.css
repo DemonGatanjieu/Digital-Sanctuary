@@ -943,13 +943,7 @@
   opacity: 0.75;
 }
 
-.inspector-tag-pill.selected {
-  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%) !important;
-  border-color: rgba(255, 255, 255, 0.4) !important;
-  color: #fff !important;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
-  transform: translateY(-1px);
-}
+
 
 .inspector-tag-name {
   letter-spacing: 0.01em;
@@ -983,10 +977,7 @@
   color: #cbd5e1;
 }
 
-.inspector-tag-pill.selected .inspector-tag-conf {
-  background: rgba(255, 255, 255, 0.25);
-  color: #fff;
-}
+
 
 .inspector-tag-check {
   display: inline-flex;
@@ -1002,10 +993,7 @@
   transition: all 0.15s ease;
 }
 
-.inspector-tag-pill.selected .inspector-tag-check {
-  background: #fff;
-  color: #1d4ed8;
-}
+
 
 .inspector-no-tags {
   width: 100%;

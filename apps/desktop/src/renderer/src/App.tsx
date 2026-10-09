@@ -38,7 +38,6 @@ const ImportImagesDialog = lazy(() => import("./ImportImagesDialog").then((modul
 const TaskCenter = lazy(() => import("./TaskCenter").then((module) => ({ default: module.TaskCenter })));
 const HomeView = lazy(() => import("./HomeView").then((module) => ({ default: module.HomeView })));
 const ExploreProtectionPanel = lazy(() => import("./ExploreProtectionPanel").then((module) => ({ default: module.ExploreProtectionPanel })));
-const AnalysisView = lazy(() => import("./AnalysisView").then((module) => ({ default: module.AnalysisView })));
 const InspirationView = lazy(() => import("./InspirationView").then((module) => ({ default: module.InspirationView })));
 const CollectionEditor = lazy(() => import("./CollectionEditor").then((module) => ({ default: module.CollectionEditor })));
 const BookmarkDownloadDialog = lazy(() => import("./BookmarkDownloadDialog").then((module) => ({ default: module.BookmarkDownloadDialog })));
@@ -62,7 +61,6 @@ export function App() {
   const [thumbnailActivity, setThumbnailActivity] = useState<ThumbnailActivity>(INITIAL_THUMBNAIL_ACTIVITY);
   const [tasksOpen, setTasksOpen] = useState(false);
   const analysisTasks = useAnalysisTasks(tasksOpen);
-  const [workbenchSource,setWorkbenchSource]=useState<"library"|"folder"|null>(null);
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   const [protectionOpen, setProtectionOpen] = useState(false);
   const [protectionBusy, setProtectionBusy] = useState(false);
@@ -137,11 +135,7 @@ export function App() {
     }
     setGalleryModeState(next);
   }, [rememberGalleryPosition]);
-  const [analysisWorkIds, setAnalysisWorkIds] = useState<string[]>([]);
-  const [analysisTaskId, setAnalysisTaskId] = useState<string | null>(null);
   const [inspectorTarget, setInspectorTarget] = useState<ElementInspectorTarget | null>(null);
-  const [discussionImportId, setDiscussionImportId] = useState<string | null>(null);
-  const [discussionBusy, setDiscussionBusy] = useState(false);
   const [inspirationLaunch, setInspirationLaunch] = useState<{ workId: string; pageIndex: number; sources?: Array<{workId:string;pageIndex:number}> } | null>(null);
   const showError = useCallback((caught: unknown) => {
     setError(caught instanceof Error ? caught.message : "发生未知错误");
@@ -554,7 +548,6 @@ export function App() {
     } },
     { id: "import", label: "导入本地图片", description: "将图片加入图库", shortcut: "Ctrl O", disabled: busy, disabledReason: "正在导入，请稍候", keywords: ["添加", "文件"], onSelect: importImages },
     { id: "albums", label: "浏览相册", description: "管理相册与组合视图", keywords: ["分类", "画集"], onSelect: () => { setActiveView("gallery"); void changeGalleryMode("collections"); } },
-    { id: "organize", label: "找图与整理", description: "从图库或文件夹找图，复制、导入或加入相册", keywords: ["分析", "标签", "分类"], onSelect: () => { setAnalysisWorkIds([]); setActiveView("organize"); } },
     { id: "explore", label: "打开探索", description: "浏览 Pixiv 并保存作品", shortcut: "Ctrl 2", keywords: ["下载", "收藏"], onSelect: () => setActiveView("explore") },
     { id: "protection", label: "浏览保护", description: "在探索调整拦截内容与识别模型", keywords: ["规则", "过滤", "阈值"], onSelect: openProtection },
     { id: "creation", label: "打开创作", description: "聊图、写设定与提示词", shortcut: "Ctrl 3", keywords: ["对话", "写作"], onSelect: () => setActiveView("inspiration") },
@@ -595,7 +588,6 @@ export function App() {
           <HomeView workCount={workResult.total} importing={busy} onImport={importImages}
             onSelect={(destination: HomeDestination) => {
               if (destination === "gallery") { void openGallery(); return; }
-              if (destination === "organize") setAnalysisWorkIds([]);
               setActiveView(destination);
             }} />
           </>
@@ -646,12 +638,8 @@ export function App() {
             onWorkQueryChange={setWorkQuery}
             onLoadMoreWorks={() => void loadMoreWorks()}
             onWorkLibraryChanged={() => refreshLibrary()}
-            onAnalyzeWorks={(workIds) => {
-              setAnalysisWorkIds(workIds);
-              setActiveView("organize");
-            }}
-            onOpenInspiration={(workId, pageIndex) => {
-              setInspirationLaunch({ workId, pageIndex });
+            onOpenInspiration={(workId, pageIndex, sources) => {
+              setInspirationLaunch({ workId, pageIndex, ...(sources && sources.length > 1 ? { sources } : {}) });
               setActiveView("inspiration");
             }}
             onOpenPixivArtist={(artistId) => {
@@ -662,31 +650,6 @@ export function App() {
                   setActiveView("gallery");
                   showError(caught);
                 });
-            }}
-            onError={showError}
-          />
-        ) : activeView === "organize" ? (
-          <AnalysisView
-            initialWorkbenchSource={workbenchSource}
-            onWorkbenchOpened={()=>setWorkbenchSource(null)}
-            onImportPrepared={(batch,discuss) => { localImport.adopt(batch); setDiscussionImportId(discuss ? batch.id : null); }}
-            onDiscuss={async targets => {
-              const sources = await window.sanctuary.prepareInspirationTargets(targets);
-              if (!sources[0]) throw new Error("请选择参考图");
-              setInspirationLaunch({...sources[0], sources}); setActiveView("inspiration");
-            }}
-            initialJobId={analysisTaskId}
-            onJobOpened={() => setAnalysisTaskId(null)}
-            collections={collections}
-            artists={artists}
-            selectedWorkIds={analysisWorkIds}
-            status={status}
-            error={error}
-            onApplied={refreshLibrary}
-            onOpenProtection={openProtection}
-            onRulesChanged={async () => {
-              const [settings, groups] = await Promise.all([window.sanctuary.listFilterSettings(), window.sanctuary.listCustomElementGroups()]);
-              setFilterSettings(settings); setCustomElementGroups(groups);
             }}
             onError={showError}
           />
@@ -762,21 +725,14 @@ export function App() {
       <Suspense fallback={null}>
       {tasksOpen && <TaskCenter batch={localImport.batch} download={exploreState.download} thumbnails={thumbnailActivity}
         jobs={analysisTasks.jobs} images={analysisTasks.images} loading={analysisTasks.loading} error={analysisTasks.error} onRefresh={analysisTasks.refresh}
-        onImageTask={(source,gallerySearch)=>{if(gallerySearch){setTasksOpen(false);setGalleryMode("flat");setActiveView("gallery");return;}setTasksOpen(false);setAnalysisWorkIds([]);setAnalysisTaskId(null);setWorkbenchSource(source);setActiveView("organize");}}
+        onImageTask={()=>{setTasksOpen(false);setGalleryMode("flat");setActiveView("gallery");}}
         onImport={() => { setTasksOpen(false); localImport.show(); }}
         onExplore={() => { setTasksOpen(false); nativeFocusPending.current = true; setActiveView("explore"); }}
-        onOrganize={(id) => { setTasksOpen(false); setAnalysisWorkIds([]); setAnalysisTaskId(id); setActiveView("organize"); }}
+        onOpenGallery={() => { setTasksOpen(false); void openGallery(); }}
         onOpenStorage={() => window.sanctuary.openStorageDirectory()} onRetryThumbnails={() => setThumbnailRevision((value) => value + 1)}
         onClose={() => { setTasksOpen(false); if (navigationState.current.activeView === "explore") nativeFocusPending.current = true; }} />}
       {localImport.open && localImport.batch && <ImportImagesDialog key={localImport.batch.id} batch={localImport.batch} collections={collections}
-        busy={localImport.commandBusy || discussionBusy} error={localImport.error} onCommand={localImport.command} onClose={localImport.close}
-        onDiscuss={discussionImportId === localImport.batch.id ? () => {
-          if(discussionBusy)return;setDiscussionBusy(true);
-          void window.sanctuary.importInspirationSources(localImport.batch!.id).then(sources => {
-            if(!sources[0])throw new Error("没有成功导入的图片");
-            setInspirationLaunch({...sources[0],sources});setDiscussionImportId(null);localImport.close();setActiveView("inspiration");
-          }).catch(showError).finally(()=>setDiscussionBusy(false));
-        } : undefined} />}
+        busy={localImport.commandBusy} error={localImport.error} onCommand={localImport.command} onClose={localImport.close} />}
       {inspectorTarget && (
         <ElementInspectorDrawer
           target={inspectorTarget}

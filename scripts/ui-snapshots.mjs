@@ -100,7 +100,6 @@ try {
         }
         await clickFirst(["[data-scope='flat']", "button"], "全部作品") || await clickFirst(["button"], "作品");
       }
-      await nav("organize"); await shot(`organize-${suffix}`);
       if (width === 1280) {
         await nav("inspiration"); await shot(`creation-${suffix}`);
         await nav("settings"); await shot(`settings-${suffix}`);

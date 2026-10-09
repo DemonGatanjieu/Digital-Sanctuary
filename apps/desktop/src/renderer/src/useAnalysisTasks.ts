@@ -14,7 +14,7 @@ export function useAnalysisTasks(open: boolean) {
       try {
         const [next, imageTasks] = await Promise.all([window.sanctuary.listAnalysisTaskSummaries(), window.sanctuary.listImageTaskSummaries()]);
         if (active) { setJobs((current) => JSON.stringify(current) === JSON.stringify(next) ? current : next);setImages(current=>JSON.stringify(current)===JSON.stringify(imageTasks)?current:imageTasks); setError(""); }
-      } catch { if (active) setError("读取任务失败，可重新读取或到整理台查看"); }
+      } catch { if (active) setError("读取任务失败，请重新读取"); }
       finally {
         if (active) { setLoading(false); timer = window.setTimeout(() => void poll(), open ? 1500 : 5000); }
       }

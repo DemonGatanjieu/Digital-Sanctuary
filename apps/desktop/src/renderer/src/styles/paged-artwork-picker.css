@@ -75,7 +75,7 @@
 }
 .paged-picker-artwork:hover:not(:disabled),
 .paged-picker-artwork:focus-visible { border-color: var(--ds-primary-border); outline: none; }
-.paged-picker-artwork.selected { border-color: var(--ds-primary); background: var(--ds-primary-subtle); }
+
 .paged-picker-artwork:disabled { cursor: default; opacity: .55; }
 .paged-picker-thumbnail { position: relative; display: block; width: 100%; aspect-ratio: 1; overflow: hidden; border-radius: var(--ds-radius-sm); }
 .paged-picker-thumbnail img { width: 100%; height: 100%; object-fit: cover; }

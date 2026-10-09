@@ -137,120 +137,35 @@
   font-size: 10px;
 }
 
-.appearance-profile-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 20px;
-}
 
-.appearance-profile-options button {
-  display: grid;
-  grid-template-columns: 22px 1fr;
-  grid-template-rows: auto auto;
-  gap: 2px 8px;
-  min-height: 88px;
-  padding: 14px 16px;
-  border: 1px solid var(--ds-border-light);
-  border-radius: var(--ds-radius-lg);
-  color: var(--ds-text-body);
-  background: var(--ds-bg-card-subtle);
-  cursor: pointer;
-  text-align: left;
-  transition: all var(--ds-transition-fast);
-}
 
-.appearance-profile-options button:hover {
-  border-color: var(--ds-primary-border);
-  background: #ffffff;
-  transform: translateY(-1.5px);
-  box-shadow: var(--ds-shadow-sm);
-}
 
-.appearance-profile-options button.active {
-  border-color: var(--ds-primary);
-  background: var(--ds-primary-subtle);
-  box-shadow: 0 4px 14px var(--ds-primary-glow);
-}
 
-.appearance-profile-options button > span {
-  grid-row: 1 / 3;
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border: 1px solid var(--ds-border-light);
-  border-radius: 50%;
-  color: #fff;
-  background: #ffffff;
-  font-size: 11px;
-  font-weight: 800;
-}
 
-.appearance-profile-options button.active > span {
-  border-color: var(--ds-primary);
-  background: var(--ds-primary);
-}
 
-.appearance-profile-options strong {
-  font-size: 13.5px;
-  font-weight: 700;
-}
 
-.appearance-profile-options small {
-  color: var(--ds-text-secondary);
-  font-size: 9.5px;
-  line-height: 1.45;
-}
 
-.appearance-toggle-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 14px;
-}
 
-.appearance-toggle-row > label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  min-height: 68px;
-  padding: 12px 18px;
-  border: 1px solid var(--ds-border-light);
-  border-radius: var(--ds-radius-lg);
-  background: #ffffff;
-  cursor: pointer;
-  transition: border-color var(--ds-transition-fast);
-}
 
-.appearance-toggle-row > label:hover {
-  border-color: var(--ds-primary-border);
-}
 
-.appearance-toggle-row label > span {
-  display: grid;
-  gap: 3px;
-}
 
-.appearance-toggle-row strong {
-  color: var(--ds-text-heading);
-  font-size: 12px;
-  font-weight: 650;
-}
 
-.appearance-toggle-row small {
-  color: var(--ds-text-muted);
-  font-size: 9.5px;
-  line-height: 1.4;
-}
 
-.appearance-toggle-row input {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  accent-color: var(--ds-primary);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

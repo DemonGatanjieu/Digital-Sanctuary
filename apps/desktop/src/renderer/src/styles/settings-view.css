@@ -1,4 +1,4 @@
-/* Views: settings and organize — compact headers, flat sections. */
+/* Views: settings — compact headers, flat sections. */
 
 .view-header-note { color: var(--ds-text-secondary); font-size: var(--ds-font-12); }
 
@@ -24,9 +24,7 @@
 .storage-preference-card,
 .user-profile-card,
 .settings-disclosure,
-.model-center-page .model-card,
-.analysis-panel,
-.studio-panel {
+.model-center-page .model-card {
   border: 1px solid var(--ds-border-subtle);
   border-radius: var(--ds-radius-lg);
   background: var(--ds-bg-card);

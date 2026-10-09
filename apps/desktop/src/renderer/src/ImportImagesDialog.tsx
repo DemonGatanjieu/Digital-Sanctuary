@@ -4,10 +4,9 @@ import { Button } from "./Button";
 import { DialogOverlay } from "./DialogOverlay";
 
 const labels = { pending: "等待导入", imported: "已新增", existing: "已在图库", duplicate: "已复用相同图片", failed: "失败", cancelled: "未导入" };
-export function ImportImagesDialog({ batch, collections, busy, error, onCommand, onClose, onDiscuss }: {
+export function ImportImagesDialog({ batch, collections, busy, error, onCommand, onClose }: {
   batch: LocalImportBatch; collections: CollectionRecord[]; busy: boolean; error: string;
   onCommand: (action: "start" | "cancel" | "retry", options?: LocalImportOptions) => Promise<void>; onClose: () => void;
-  onDiscuss?: (() => void) | undefined;
 }) {
   const [collectionId, setCollectionId] = useState(batch.collectionId ?? "");
   const [duplicatePolicy, setDuplicatePolicy] = useState<LocalImportOptions["duplicatePolicy"]>(batch.duplicatePolicy);
@@ -49,7 +48,6 @@ export function ImportImagesDialog({ batch, collections, busy, error, onCommand,
       </details>
       {error && <p role="alert" className="import-item-error">{error}</p>}
       <footer>
-        {onDiscuss && !ready && !running && <Button variant="primary" busy={busy} disabled={!batch.items.some(item => item.artworkId)} onClick={onDiscuss}>讨论已导入图片（{count("imported") + count("existing") + count("duplicate")} 张）</Button>}
         <Button disabled={busy} onClick={onClose}>{running ? "继续浏览" : ready ? "取消" : "完成"}</Button>
         {ready && <Button variant="primary" busy={busy} data-import-action="start" onClick={() => void onCommand("start", { collectionId: collectionId || null, duplicatePolicy, storageMode })}>开始导入</Button>}
         {running && <Button disabled={busy || batch.cancelRequested} onClick={() => void onCommand("cancel")}>{batch.cancelRequested ? "正在停止…" : "停止导入"}</Button>}

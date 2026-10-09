@@ -158,7 +158,7 @@ try {
     }
 
     await click('[data-nav="home"]');
-    await waitFor("document.querySelectorAll('.home-task-card').length === 4");
+    await waitFor("document.querySelectorAll('.home-task-card').length === 3");
     // Production delegated feedback must work with nested labels and keyboard-style clicks,
     // cancel repeats, preserve layout and respect preferences even for body portals.
     for (const preference of [
@@ -197,40 +197,23 @@ try {
     await cdp.evaluate("for (const element of [document.querySelector('.app-shell'),document.body]) { element.dataset.displayProfile='balanced'; element.dataset.reducedMotion='false'; }");
     checks.push({name:'finite-button-feedback-repeat-layout-and-portal-motion-preferences'});
     assert.deepEqual(await cdp.evaluate("Array.from(document.querySelectorAll('.app-rail [data-nav]')).map(el => el.dataset.nav)"),
-      ["home", "gallery", "organize", "explore", "inspiration", "settings"]);
+      ["home", "gallery", "explore", "inspiration", "settings"]);
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 720, deviceScaleFactor: 1, mobile: false });
     await checkLayout("home-1280", true);
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 900, height: 620, deviceScaleFactor: 1, mobile: false });
     await checkLayout("home-900", true);
-    await click('[data-nav="organize"]');
-    await waitFor("document.querySelector('.image-workbench-controls')?.innerText.includes('默认使用探索的元素规则')");
-    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.studio-root input[type=range]'))"),false);
-    assert.equal(await cdp.evaluate("Boolean(document.querySelector('[aria-label=\"整理方式\"]'))"),false);
-    assert.equal(await cdp.evaluate("Boolean(document.querySelector('[aria-label=\"需要包含标签\"]'))"),false);
-    await waitFor("document.querySelectorAll('.workbench-image-grid article').length===1");
-    assert.equal((await cdp.evaluate("window.sanctuary.currentWorkbench('library')")).query,undefined);
-    assert.equal(await cdp.evaluate("(async()=>(await window.sanctuary.listAnalysisJobs()).length)()"),0);
-    await checkLayout("organize-unified-request-900",true);
-    assert.ok(await cdp.evaluate("document.querySelector('.workbench-request button[type=submit]').getBoundingClientRect().bottom<=innerHeight"));
-    await click('.workbench-image-grid input');
-    await click('[data-disclosure=workbench-removal] .settings-disclosure-toggle');
-    await click('[data-disclosure=workbench-removal] .settings-disclosure-content button');
-    await waitFor("Boolean(document.querySelector('.work-delete-dialog'))");
-    assert.ok(await cdp.evaluate("document.querySelector('.work-delete-dialog').textContent.includes('外部引用只移除索引')"));
-    await click('.work-delete-dialog footer button:first-child');
-    assert.ok(await cdp.evaluate("window.sanctuary.getWork('fixture-work')"));
+    await click('[data-nav="gallery"]');
     const storedRules=await cdp.evaluate("window.sanctuary.listFilterSettings()");
-    await click('[data-disclosure=workbench-elements] .settings-disclosure-toggle');
-    await click('.workbench-elements button');
+    await click('[data-gallery-filter]');
+    await cdp.evaluate("Array.from(document.querySelectorAll('.ui-popover [role^=menuitem]')).find(e=>e.textContent.includes('选择元素')).click()");
+    await waitFor("Boolean(document.querySelector('.element-filter-dialog'))");
+    await checkLayout("element-filter-900",true);
+    assert.ok(await cdp.evaluate("document.querySelector('.element-filter-dialog footer button[type=submit]').getBoundingClientRect().bottom<=innerHeight"));
+    await click('.element-filter-grid button');
+    await cdp.evaluate("Array.from(document.querySelectorAll('.element-filter-dialog footer button')).find(b=>b.textContent.includes('取消')).click()");
     assert.deepEqual(await cdp.evaluate("window.sanctuary.listFilterSettings()"),storedRules);
-    await fill('[aria-label="整理范围"]','collection');
-    await waitFor("document.querySelectorAll('.workbench-image-grid article').length===0");
-    assert.equal(await cdp.evaluate("document.querySelector('.workbench-result-actions')!==null"),false);
-    await cdp.evaluate("Array.from(document.querySelectorAll('.organize-source-tools button')).find(b=>b.textContent.includes('相册建议与任务记录')).click()");
-    await click('.album-suggestions-actions button');
-    await waitFor("document.querySelector('.album-suggestions-actions').textContent.includes('0 张图片')");
     assert.equal(await cdp.evaluate("(async()=>(await window.sanctuary.listAnalysisJobs()).length)()"),0);
-    checks.push({name:'unified-organizing-preview-no-mode-picker-local-conditions-stale-scope-and-safe-removal-preview'});
+    checks.push({name:'element-filter-dialog-fits-the-small-window-and-leaves-explore-rules-alone'});
     await click('[data-nav="explore"]');
     await waitFor("Boolean(document.querySelector('.explore-workspace'))");
     await click('[data-nav="inspiration"]');
@@ -319,16 +302,15 @@ try {
 
     await click('[aria-label="选择作品"]');
     await click(".work-tile-check");
-    await cdp.evaluate("[...document.querySelectorAll('.work-selection-bar button')].find(b=>b.textContent.includes('整理建议')).click()");
-    await waitFor("Boolean(document.querySelector('.album-suggestions'))");
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"整理范围\"]').value"), "selected");
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"整理范围\"] option:checked').textContent.includes('1 件')"), true);
-    assert.equal(await cdp.evaluate("document.querySelector('.app-rail [aria-current=\"page\"]').dataset.nav"), "organize");
+    await cdp.evaluate("[...document.querySelectorAll('.work-selection-bar button')].find(b=>b.textContent.includes('拿去创作')).click()");
+    // Without a creation model the page shows its setup state; the two-picture launch is covered by smoke-discovery-workflow.
+    await waitFor("Boolean(document.querySelector('.inspiration-view'))");
+    assert.equal(await cdp.evaluate("document.querySelector('.app-rail [aria-current=\"page\"]').dataset.nav"), "inspiration");
     assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.listAnalysisJobs()).length)()"), 0);
-    checks.push({ name: "selection-opens-suggestions-without-running-analysis" });
+    checks.push({ name: "selection-takes-pictures-to-creation-without-running-analysis" });
 
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 900, height: 620, deviceScaleFactor: 1, mobile: false });
-    await checkLayout("organize-900", true);
+    await checkLayout("creation-from-selection-900", true);
     await click('[data-nav="settings"]');
     const categories = [
       ["library", ".storage-preference-card"], ["appearance", ".appearance-settings-card"],
@@ -395,9 +377,9 @@ try {
       await checkLayout(`task-center-${theme}-900`, true);
       await checkButtonContrast('.task-center-dialog .ui-button--secondary');
       await key('Escape', 'Escape');
-      await click('[data-nav="organize"]');
-      await waitFor("document.querySelector('.studio-root')?.textContent.includes('默认使用探索的元素规则')");
-      await checkLayout(`organize-${theme}-900`, true);
+      await click('[data-nav="inspiration"]');
+      await waitFor("Boolean(document.querySelector('.inspiration-view'))");
+      await checkLayout(`creation-${theme}-900`, true);
       await click('[data-nav="settings"]');
       await waitFor("Boolean(document.querySelector('.settings-panel:not([hidden]) .appearance-settings-card'))");
     }
@@ -779,10 +761,9 @@ try {
     await waitFor(`document.querySelector('[data-task-id="${taskJob.id}"]')?.textContent.includes('已停止')`);
     assert.equal(await cdp.evaluate(`(async()=> (await window.sanctuary.listAnalysisJobs()).find(j=>j.id==='${taskJob.id}').status)()`), 'cancelled');
     await checkLayout('task-center-download-and-cancelled-analysis-900', true);
-    await cdp.evaluate(`Array.from(document.querySelectorAll('[data-task-id="${taskJob.id}"] button')).find(b=>b.textContent.includes('到整理台')).click()`);
-    await waitFor(`Boolean(document.getElementById('analysis-job-${taskJob.id}'))`);
-    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.album-suggestions'))"), true);
-    checks.push({name:'task-center-global-download-progress-queued-cancellation-and-exact-organizer-return'});
+    await cdp.evaluate(`Array.from(document.querySelectorAll('[data-task-id="${taskJob.id}"] button')).find(b=>b.textContent.includes('回到图库')).click()`);
+    await waitFor("document.querySelector('.app-rail [aria-current=\"page\"]')?.dataset.nav === 'gallery' && !document.querySelector('.task-center-dialog')");
+    checks.push({name:'task-center-global-download-progress-queued-cancellation-and-gallery-return'});
     console.log(JSON.stringify({ status: "passed", checkCount:checks.length, checks, screenshots: outputDir }, null, 2));
   } finally { cdp.close(); }
 } catch (error) {

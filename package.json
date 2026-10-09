@@ -29,7 +29,6 @@
     "smoke:installer": "node scripts/smoke-installer.mjs",
     "smoke:vision-bundle": "node scripts/smoke-vision-bundle.mjs",
     "smoke:local-critic": "node scripts/smoke-local-art-critic.mjs",
-    "smoke:image-workbench": "node scripts/smoke-image-workbench.mjs",
     "smoke:discovery": "node scripts/smoke-discovery-workflow.mjs",
     "smoke:gallery-search": "node scripts/smoke-gallery-search.mjs",
     "smoke:gallery-actions": "node scripts/smoke-gallery-actions.mjs",

@@ -1,6 +1,6 @@
 # EmbeddingGemma 2 本地找图运行时
 
-图库搜索框的“按画面”和整理页的描述找图，都用它按画面内容排序。独立 CPU 进程按需加载，闲置 60 秒释放；WD 仍负责明确元素和探索保护。
+图库搜索框的“按画面”用它按画面内容排序。独立 CPU 进程按需加载，闲置 60 秒释放；WD 仍负责明确元素和探索保护。
 
 - 官方模型：[`google/embeddinggemma-2`](https://huggingface.co/google/embeddinggemma-2/tree/914f7f89142e33e77833254d9c9b90c3cef7303b)，Apache-2.0，约 7.4 亿参数；应用只加载文字和图像编码器（438,760,448 参数）。
 - 固定 revision：`914f7f89142e33e77833254d9c9b90c3cef7303b`，15 个文件约 1.53 GB。
@@ -66,14 +66,14 @@ transformers 按名字动态加载模型类，PyInstaller 看不到。`build_bun
 
 `userData/semantic-index.db` 缓存原图 SHA-256 与模型/预处理版本对应的 768 维单位向量，最多 10,000 条；原图或版本变化重新编码，不在缓存里保存路径。普通查找只加载图文模型；附加明确元素条件才同时复用 WD 队列。
 
-真实应用链路验收（隔离图库、合成图片、原生选择框替身，实际模型/IPC/剪贴板）：
+真实应用链路验收（隔离图库、合成图片，实际模型 / IPC）：
 
 ```powershell
 npm.cmd run build
-npm.cmd run smoke:image-workbench
+npm.cmd run smoke:gallery-search
 ```
 
-先运行上面的独立探针生成 `.tmp/semantic-smoke` 三张测试图。烟测覆盖中文排序、内容索引复用、文件夹未自动入库、所选导入、同名原图复制、逐页入册及任务中心返航；不访问实际用户图库。结果与限制见[工作台验收](../../docs/reviews/2026-10-08-image-workbench.md)。
+先运行上面的独立探针生成 `.tmp/semantic-smoke` 三张测试图。烟测覆盖中文排序、首次加载可停止、内容索引复用、相关性门槛与“显示更多”、筛选变化后重新查找、名称搜索切换，以及 900 宽小窗口与深色模式。
 
 ## 重建环境
 

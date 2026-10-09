@@ -76,7 +76,6 @@ export function GalleryView({
   onWorkQueryChange,
   onLoadMoreWorks,
   onWorkLibraryChanged,
-  onAnalyzeWorks,
   onOpenInspiration,
   onOpenPixivArtist,
   onError
@@ -126,8 +125,7 @@ export function GalleryView({
   onWorkQueryChange: (query: WorkQuery) => void;
   onLoadMoreWorks: () => void;
   onWorkLibraryChanged: () => Promise<void>;
-  onAnalyzeWorks: (workIds: string[]) => void;
-  onOpenInspiration: (workId: string, pageIndex: number) => void;
+  onOpenInspiration: (workId: string, pageIndex: number, sources?: Array<{ workId: string; pageIndex: number }>) => void;
   onOpenPixivArtist: (artistId: string) => void;
   onError: (error: unknown) => void;
 }) {
@@ -319,7 +317,6 @@ export function GalleryView({
           onLoadMore={onLoadMoreWorks}
           onAssignCollection={onAssignWorkCollection}
           onLibraryChanged={onWorkLibraryChanged}
-          onAnalyzeWorks={onAnalyzeWorks}
           onOpenInspiration={onOpenInspiration}
           onError={onError}
         />

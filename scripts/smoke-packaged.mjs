@@ -73,17 +73,17 @@ try {
       const pictureSearchToggle = Boolean(document.querySelector(".gallery-search-mode"));
 
       const navigationStarted = Date.now();
-      while (!document.querySelector('[data-nav="organize"]') && Date.now() - navigationStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
-      const organize = document.querySelector('[data-nav="organize"]');
-      organize?.click();
+      while (!document.querySelector('[data-nav="inspiration"]') && Date.now() - navigationStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
+      const creation = document.querySelector('[data-nav="inspiration"]');
+      creation?.click();
       const analysisStarted = Date.now();
-      while (!document.querySelector(".studio-root") && Date.now() - analysisStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
+      while (!document.querySelector(".inspiration-view") && Date.now() - analysisStarted < 5000) await new Promise((resolve) => setTimeout(resolve, 25));
       return {
         title: document.title,
         searchPlaceholder,
         pictureSearchToggle,
         appStatus,
-        analysisReady: Boolean(document.querySelector(".studio-root")),
+        creationReady: Boolean(document.querySelector(".inspiration-view")),
         activeNavigation: document.querySelector(".app-rail [aria-current='page']")?.textContent.trim() ?? ""
       };
     })()`);
@@ -93,8 +93,8 @@ try {
     if (state.appStatus.visionEngine !== "wd-swinv2-tagger-v3") failures.push("packaged app did not select WD Tagger");
     if (!state.appStatus.visionReady || state.appStatus.visionState !== "ready") failures.push("packaged WD Tagger did not become ready");
     if (!state.searchPlaceholder.includes("Pixiv ID") || state.pictureSearchToggle) failures.push("gallery search did not fall back to names");
-    if (!state.analysisReady) failures.push("analysis center did not render");
-    if (state.activeNavigation !== "整理") failures.push("navigation accessibility state is missing");
+    if (!state.creationReady) failures.push("creation view did not render");
+    if (state.activeNavigation !== "创作") failures.push("navigation accessibility state is missing");
     console.log(JSON.stringify({ executable, visionRuntimeMb: Math.round(visionStat.size / 1024 / 1024 * 10) / 10, modelMb: Math.round(modelStat.size / 1024 / 1024), ...state, status: failures.length ? "failed" : "passed", failures }, null, 2));
     if (failures.length) process.exitCode = 1;
     assert.equal(failures.length, 0, failures.join("; "));

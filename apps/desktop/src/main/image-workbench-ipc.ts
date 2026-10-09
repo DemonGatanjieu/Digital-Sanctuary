@@ -30,7 +30,7 @@ export function createImageOutputHost(getWindow: () => BrowserWindow | null): Im
   };
 }
 export function registerImageWorkbenchIpc(ipc: Pick<IpcMain,"handle">, workbench: ImageWorkbenchService,
-  output: ImageOutputService, semantic: SemanticClient, chooseFolder: () => Promise<string|null>,
+  output: ImageOutputService, semantic: SemanticClient,
   resolveQuery: (query: WorkQuery) => WorkQuery = (query) => query) {
   ipc.handle("images:export",(e,value: unknown)=>output.start(e.sender.id,value));
   ipc.handle("images:export-get",(e,id: unknown)=>output.get(e.sender.id,id));
@@ -38,12 +38,6 @@ export function registerImageWorkbenchIpc(ipc: Pick<IpcMain,"handle">, workbench
   ipc.handle("images:export-cancel",(e,id: unknown)=>output.cancel(e.sender.id,id));
   ipc.handle("images:export-retry",(e,id: unknown)=>output.retry(e.sender.id,id));
   ipc.handle("images:use",(e,target: unknown,action: unknown)=>output.use(e.sender.id,target,action));
-  let choosing=false;
-  ipc.handle("workbench:folder",async(e,recursive: unknown)=>{
-    if(typeof recursive!=="boolean")throw new Error("文件夹选项无效");
-    if(choosing)throw new Error("请先完成当前文件夹选择");choosing=true;
-    try {const path=await chooseFolder();return path?workbench.chooseFolder(e.sender.id,path,recursive):null;} finally{choosing=false;}
-  });
   ipc.handle("gallery:search-pictures",(e,text: unknown,query: unknown)=>{
     if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
     return workbench.searchGallery(e.sender.id,text,resolveQuery(parseWorkQuery(query)));
@@ -56,17 +50,7 @@ export function registerImageWorkbenchIpc(ipc: Pick<IpcMain,"handle">, workbench
     if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在图库中搜索");
     return workbench.currentGallery(e.sender.id);
   });
-  ipc.handle("workbench:library",(e,scope: unknown)=>workbench.chooseLibrary(e.sender.id,scope));
-  ipc.handle("workbench:run-library",(e,scope: unknown,query: unknown)=>{
-    if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在整理页操作");
-    return workbench.runLibrary(e.sender.id,scope,query);
-  });
-  ipc.handle("workbench:current",(e,source: unknown)=>workbench.current(e.sender.id,source));
-  ipc.handle("workbench:get",(e,id: unknown,offset: unknown,filter: unknown)=>workbench.get(e.sender.id,id,offset,filter));
-  ipc.handle("workbench:start",(e,id: unknown,query: unknown)=>workbench.start(e.sender.id,id,query));
   ipc.handle("workbench:cancel",(e,id: unknown)=>workbench.cancel(e.sender.id,id));
-  ipc.handle("workbench:import",(e,id: unknown,ids: unknown)=>workbench.prepareImport(e.sender.id,id,ids));
-  ipc.handle("workbench:assign",(e,id: unknown,ids: unknown,collectionId: unknown)=>workbench.assign(e.sender.id,id,ids,collectionId));
   ipc.handle("workbench:semantic-status",()=>semantic.availability());
   ipc.handle("tasks:images",e=>[...workbench.tasks(e.sender.id),...output.tasks(e.sender.id)]);
 }

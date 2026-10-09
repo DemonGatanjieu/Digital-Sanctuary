@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_LIBRARY_PREFERENCES } from "@sanctuary/domain";
 import { AppSidebar, type AppStatus } from "./AppSidebar";
-import { AnalysisView } from "./AnalysisView";
 import { initialExploreState } from "./ExploreView";
 import { SettingsView } from "./SettingsView";
 import { restoreDefaultDownloadLocation, type SettingsSection } from "./app-navigation";
@@ -23,18 +22,18 @@ function settingsMarkup(section: SettingsSection) {
 
 function sidebarMarkup(status: AppStatus | null = null, exploreState = initialExploreState) {
   return renderToStaticMarkup(
-    <AppSidebar activeView="organize" exploreState={exploreState}
+    <AppSidebar activeView="inspiration" exploreState={exploreState}
       appearance={appearance} status={status} onOpenGallery={ignore} onViewChange={ignore}
       onOpenSettings={ignore} />
   );
 }
 
 describe("task-based navigation", () => {
-  it("gives organizing its own rail entry and keeps home behind the brand mark", () => {
+  it("lists the main views on the rail and keeps home behind the brand mark", () => {
     const markup = sidebarMarkup();
     expect([...markup.matchAll(/data-nav="([^"]+)"/g)].map((match) => match[1]))
-      .toEqual(["home", "gallery", "organize", "explore", "inspiration", "settings"]);
-    expect(markup).toMatch(/data-nav="organize" aria-current="page"/);
+      .toEqual(["home", "gallery", "explore", "inspiration", "settings"]);
+    expect(markup).toMatch(/data-nav="inspiration" aria-current="page"/);
     expect(markup).not.toContain("显示性能档位");
   });
 
@@ -86,13 +85,5 @@ describe("task-based navigation", () => {
       gridDensity: "compact" as const, downloadDirectory: "F:\\Art" };
     expect(restoreDefaultDownloadLocation(preferences)).toEqual({ ...preferences, downloadDirectory: null });
     expect(preferences.downloadDirectory).toBe("F:\\Art");
-  });
-
-  it("opens classification suggestions for the selected works without starting analysis", () => {
-    const markup = renderToStaticMarkup(<AnalysisView collections={[]} artists={[]} selectedWorkIds={["work-1"]}
-      status={null} error="" onApplied={resolve} onError={ignore} onOpenProtection={ignore} onImportPrepared={ignore} />);
-    expect(markup).toContain("相册建议与任务记录");
-    expect(markup).toContain("图库已选 · 1 件");
-    expect(markup).not.toContain("排查配置与条件");
   });
 });

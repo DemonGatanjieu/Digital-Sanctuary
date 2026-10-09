@@ -7,8 +7,8 @@
   main { padding: 28px 32px 48px; }
   
   
-  .appearance-profile-options { grid-template-columns: 1fr; }
-  .appearance-toggle-row { grid-template-columns: 1fr; }
+  
+  
   .library-preferences-card { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .custom-rule-builder { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .custom-rule-builder > div { grid-column: 1 / -1; }

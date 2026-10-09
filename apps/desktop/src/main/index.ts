@@ -582,14 +582,6 @@ async function deleteConfirmedWorks(workIds: readonly string[]): Promise<WorkDel
 
 function registerImageProtocol(): void {
   protocol.handle("sanctuary-image", async (request) => {
-    if (new URL(request.url).hostname === "workbench") {
-      const path = await imageWorkbench?.preview(request.url);
-      if (!path) return new Response("Not found", { status: 404 });
-      try {
-        const preview = await nativeImage.createThumbnailFromPath(path, { width: 384, height: 384 });
-        return preview.isEmpty() ? new Response("Not found", { status: 404 }) : new Response(new Uint8Array(preview.toPNG()), { headers: { "Content-Type": "image/png", "Cache-Control": "no-store" } });
-      } catch { return new Response("Not found", { status: 404 }); }
-    }
     const rawPath = decodeURIComponent(new URL(request.url).pathname.slice(1));
     const imagePath = resolve(rawPath);
     const isArtwork =
@@ -671,48 +663,13 @@ function registerIpc(): void {
   const localImporter = registerLocalImportIpc(ipcMain, database, dialog, () => join(pixivGalleryDirectory(), "Imports"));
   semanticVectors = new SemanticVectorStore(join(app.getPath("userData"), "semantic-index.db"));
   const resolveWorkQuery = (query: WorkQuery) => withElementMatch(query, vision?.engine ?? null, elementRules);
-  imageWorkbench = new ImageWorkbenchService(database, {
-    ready: () => Boolean(vision?.available && vision.engine === "wd-swinv2-tagger-v3"),
-    identity: () => `${vision!.engine}:${vision!.engineVersion}`,
-    classify: (path) => enqueueRemoteVisionTask(() => vision!.classify(path, 30_000)),
-    rules: elementRules
-  }, semantic, semanticVectors, localImporter);
+  imageWorkbench = new ImageWorkbenchService(database, semantic, semanticVectors);
   const output = new ImageOutputService((owner, targets) => imageWorkbench!.resolveImages(owner, targets), createImageOutputHost(() => mainWindow ?? null));
   const dragIcon = nativeImage.createFromBitmap(Buffer.from([199, 132, 2, 255]), { width: 1, height: 1 }).resize({ width: 32, height: 32 });
   registerImageDragIpc(ipcMain, output, () => mainWindow ?? null, dragIcon);
   registerGalleryBannerIpc(ipcMain, database, () => mainWindow ?? null);
-  registerImageWorkbenchIpc(ipcMain, imageWorkbench, output, semantic, async () => {
-    const options = { title: "选择要找图的本地文件夹", properties: ["openDirectory"] as Array<"openDirectory"> };
-    const selected = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
-    return selected.canceled ? null : selected.filePaths[0] ?? null;
-  }, resolveWorkQuery);
+  registerImageWorkbenchIpc(ipcMain, imageWorkbench, output, semantic, resolveWorkQuery);
   registerWorkInformationIpc(ipcMain, database, dialog, () => mainWindow ?? null);
-  ipcMain.handle("inspiration:prepare-targets", async (event, targets: unknown) => {
-    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error("请从找图结果选择参考图");
-    if (!Array.isArray(targets) || !targets.length || targets.length > 4) throw new Error("请选择 1 至 4 张图片进行讨论");
-    const images = await imageWorkbench!.resolveImages(event.sender.id, targets);
-    return images.map(image => {
-      if (!("workId" in image.target)) throw new Error("文件夹图片请先导入，再开始讨论");
-      const work = database!.getWork(image.target.workId);
-      const asset = work?.assets.find(item => item.path === image.path);
-      if (!asset) throw new Error("参考图已经不可用，请重新选择");
-      return { workId: work!.id, pageIndex: asset.pageIndex };
-    });
-  });
-  ipcMain.handle("inspiration:import-sources", (event, id: unknown) => {
-    if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error("请从导入结果开始讨论");
-    const batch = localImporter.get(event.sender.id, id);
-    if (batch.phase === "ready" || batch.phase === "running" || batch.items.length > 4) throw new Error("请先完成 1 至 4 张图片的导入");
-    const sources = batch.items.filter(item => item.artworkId && ["imported", "existing", "duplicate"].includes(item.status)).map(item => {
-      const workId = database!.workIdForArtwork(item.artworkId!);
-      const work = workId ? database!.getWork(workId) : null;
-      const asset = work?.assets.find(asset => asset.legacyArtworkId === item.artworkId);
-      if (!asset) throw new Error("导入图片已不可用，请重新选择");
-      return { workId: work!.id, pageIndex: asset.pageIndex };
-    });
-    if (!sources.length) throw new Error("没有成功导入的参考图");
-    return [...new Map(sources.map(source => [`${source.workId}:${source.pageIndex}`, source])).values()];
-  });
   registerSavedWorkFilterIpc(ipcMain, database);
   ipcMain.handle("tasks:analysis", () => database?.listAnalysisTaskSummaries() ?? []);
   registerLibraryReadIpc(ipcMain, database, join(app.getPath("userData"), "thumbnails"), encodeLocalThumbnail, resolveWorkQuery, () => vision?.engine ?? null);

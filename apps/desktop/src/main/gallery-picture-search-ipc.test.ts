@@ -4,8 +4,8 @@ import type { ImageWorkbenchService } from "./image-workbench-service";
 import type { ImageOutputService } from "./image-output-service";
 import type { SemanticClient } from "./semantic-client";
 import { registerImageWorkbenchIpc } from "./image-workbench-ipc";
-function fixture(){const handlers=new Map<string,(...args:any[])=>unknown>(),workbench={searchGallery:vi.fn(),galleryResults:vi.fn(),currentGallery:vi.fn(),runLibrary:vi.fn()};
-  registerImageWorkbenchIpc({handle:(name:string,handler:any)=>handlers.set(name,handler)} as unknown as IpcMain,workbench as unknown as ImageWorkbenchService,{} as ImageOutputService,{} as SemanticClient,async()=>null);
+function fixture(){const handlers=new Map<string,(...args:any[])=>unknown>(),workbench={searchGallery:vi.fn(),galleryResults:vi.fn(),currentGallery:vi.fn()};
+  registerImageWorkbenchIpc({handle:(name:string,handler:any)=>handlers.set(name,handler)} as unknown as IpcMain,workbench as unknown as ImageWorkbenchService,{} as ImageOutputService,{} as SemanticClient);
   const frame={};return {handlers,workbench,event:{sender:{id:42,mainFrame:frame},senderFrame:frame}};
 }
 describe("gallery picture search IPC boundary",()=>{
@@ -18,10 +18,5 @@ describe("gallery picture search IPC boundary",()=>{
     const f=fixture();f.handlers.get("gallery:search-pictures")!(f.event,"海边女孩",{ownership:"external",favorite:true,limit:90000,offset:-1,owner:999,path:"private.png"});
     expect(f.workbench.searchGallery).toHaveBeenCalledWith(42,"海边女孩",{ownership:"external",favorite:true,limit:200,offset:0});
     f.handlers.get("gallery:picture-results")!(f.event,"job",60,"all");expect(f.workbench.galleryResults).toHaveBeenCalledWith(42,"job",60,"all");
-  });
-  it("binds one-step organizing to the local main frame",()=>{
-    const f=fixture(),handler=f.handlers.get("workbench:run-library")!,scope={type:"all"},query={mode:"rules",text:"",include:[],exclude:[]};
-    expect(()=>handler({...f.event,senderFrame:{}},scope,query)).toThrow("整理");expect(f.workbench.runLibrary).not.toHaveBeenCalled();
-    handler(f.event,scope,query);expect(f.workbench.runLibrary).toHaveBeenCalledWith(42,scope,query);
   });
 });

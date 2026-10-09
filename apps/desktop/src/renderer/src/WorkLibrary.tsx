@@ -33,7 +33,6 @@ export function WorkLibrary({
   onLoadMore: loadMoreWorks,
   onAssignCollection,
   onLibraryChanged: libraryChanged,
-  onAnalyzeWorks,
   onOpenInspiration,
   onError
 }: {
@@ -50,8 +49,7 @@ export function WorkLibrary({
   onLoadMore: () => void;
   onAssignCollection: (workId: string, collectionId: string) => Promise<void>;
   onLibraryChanged: () => Promise<void>;
-  onAnalyzeWorks: (workIds: string[]) => void;
-  onOpenInspiration: (workId: string, pageIndex: number) => void;
+  onOpenInspiration: (workId: string, pageIndex: number, sources?: Array<{ workId: string; pageIndex: number }>) => void;
   onError: (error: unknown) => void;
 }) {
   // Picture search swaps in its own result set while keeping the gallery filters as its scope.
@@ -306,7 +304,12 @@ export function WorkLibrary({
           <button type="button" className="ui-tool-button" aria-haspopup="menu" aria-expanded={Boolean(albumMenu)} disabled={!selectedIds.size || !collections.length}
             onClick={(event) => setAlbumMenu(albumMenu ? null : event.currentTarget)}><Icon name="album" size={16} /><span>加入相册</span></button>
           <ExportImagesButton targets={selectedList.map((workId) => ({ workId }))} label="复制原图到…" disabled={!selectedIds.size} />
-          <button type="button" className="ui-tool-button" disabled={!selectedIds.size} onClick={() => onAnalyzeWorks(selectedList)}><Icon name="organize" size={16} /><span>整理建议</span></button>
+          <button type="button" className="ui-tool-button" disabled={!selectedIds.size || selectedIds.size > 4} title={selectedIds.size > 4 ? "一次最多带 4 张图去创作" : undefined}
+            onClick={() => {
+              // Each selected work goes in as the page currently shown on its tile.
+              const sources = selectedList.map((workId) => ({ workId, pageIndex: result.items.find((work) => work.id === workId)?.coverAsset?.pageIndex ?? 0 }));
+              onOpenInspiration(sources[0]!.workId, sources[0]!.pageIndex, sources);
+            }}><Icon name="create" size={16} /><span>拿去创作</span></button>
           <button type="button" className="ui-tool-button work-selection-danger" disabled={!selectedIds.size} onClick={() => void previewDeletion(selectedList)}><Icon name="remove" size={16} /><span>移出图库</span></button>
           <span className="work-selection-divider" />
           <button type="button" className="ui-icon-button" aria-label="退出选择" title="退出选择" onClick={exitSelection}><Icon name="close" size={16} /></button>

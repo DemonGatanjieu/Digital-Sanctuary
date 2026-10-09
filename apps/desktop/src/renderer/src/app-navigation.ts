@@ -1,11 +1,10 @@
 import type { LibraryPreferences } from "@sanctuary/domain";
 
-export type ActiveView = "home" | "gallery" | "organize" | "inspiration" | "explore" | "settings";
+export type ActiveView = "home" | "gallery" | "inspiration" | "explore" | "settings";
 export type SettingsSection = "library" | "appearance" | "protection" | "models" | "connections";
 
 export const MAIN_NAVIGATION = [
   { id: "gallery", label: "图库", description: "浏览作品、相册与画师", icon: "gallery" },
-  { id: "organize", label: "整理", description: "找图、排查与批量入册", icon: "organize" },
   { id: "explore", label: "探索", description: "浏览图片网站，收进图库", icon: "explore" },
   { id: "inspiration", label: "创作", description: "聊图、写作与提示词", icon: "create" }
 ] as const;

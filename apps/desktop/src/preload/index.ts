@@ -160,8 +160,6 @@ export interface SanctuaryApi {
   getWorkInformation(workId: string, pageIndex: number): Promise<WorkInformation | null>;
   renameWork(workId: string, name: string): Promise<WorkRecord>;
   relinkExternalImage(workId: string, assetId: string): Promise<WorkRecord | null>;
-  prepareInspirationTargets(targets: ImageTarget[]): Promise<Array<{workId:string;pageIndex:number}>>;
-  importInspirationSources(batchId: string): Promise<Array<{workId:string;pageIndex:number}>>;
   exportImages(targets: ImageTarget[]): Promise<ImageExportBatch | null>;
   getImageExport(id: string): Promise<ImageExportBatch>;
   currentImageExport(): Promise<ImageExportBatch | null>;
@@ -176,15 +174,7 @@ export interface SanctuaryApi {
   searchGalleryPictures(text: string, query: WorkQuery): Promise<GallerySearchSnapshot>;
   galleryPictureResults(id: string, offset?: number, relevance?: GallerySearchRelevance): Promise<GallerySearchSnapshot>;
   currentGalleryPictureSearch(): Promise<GallerySearchSnapshot | null>;
-  chooseWorkbenchFolder(recursive: boolean): Promise<WorkbenchSnapshot | null>;
-  chooseWorkbenchLibrary(scope: AnalysisScope): Promise<WorkbenchSnapshot>;
-  runLibraryWorkbench(scope: AnalysisScope, query: WorkbenchQuery): Promise<WorkbenchSnapshot>;
-  currentWorkbench(source: WorkbenchSource): Promise<WorkbenchSnapshot | null>;
-  getWorkbench(id: string, offset?: number, filter?: "matches" | "all" | "failed"): Promise<WorkbenchSnapshot>;
-  startWorkbench(id: string, query: WorkbenchQuery): Promise<WorkbenchSnapshot>;
   cancelWorkbench(id: string): Promise<WorkbenchSnapshot>;
-  prepareWorkbenchImport(id: string, itemIds: string[]): Promise<LocalImportBatch | null>;
-  assignWorkbenchImages(id: string, itemIds: string[], collectionId: string): Promise<number>;
   semanticAvailability(): Promise<SemanticAvailability>;
   listImageTaskSummaries(): Promise<ImageTaskSummary[]>;
   recordWorkView(workId: string, assetId: string): Promise<WorkReadingProgress | null>;
@@ -316,8 +306,6 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("library:work-information", workId, pageIndex) as Promise<WorkInformation | null>,
   renameWork: (workId, name) => ipcRenderer.invoke("library:rename-work", workId, name) as Promise<WorkRecord>,
   relinkExternalImage: (workId, assetId) => ipcRenderer.invoke("library:relink-external", workId, assetId) as Promise<WorkRecord | null>,
-  prepareInspirationTargets: (targets) => ipcRenderer.invoke("inspiration:prepare-targets", targets) as Promise<Array<{workId:string;pageIndex:number}>>,
-  importInspirationSources: (id) => ipcRenderer.invoke("inspiration:import-sources", id) as Promise<Array<{workId:string;pageIndex:number}>>,
   exportImages: (targets) => ipcRenderer.invoke("images:export", targets),
   getImageExport: (id) => ipcRenderer.invoke("images:export-get", id),
   currentImageExport: () => ipcRenderer.invoke("images:export-current"),
@@ -332,15 +320,7 @@ const api: SanctuaryApi = {
   searchGalleryPictures: (text, query) => ipcRenderer.invoke("gallery:search-pictures",text,query),
   galleryPictureResults: (id, offset=0, relevance="relevant") => ipcRenderer.invoke("gallery:picture-results",id,offset,relevance),
   currentGalleryPictureSearch: () => ipcRenderer.invoke("gallery:current-picture-search"),
-  chooseWorkbenchFolder: (recursive) => ipcRenderer.invoke("workbench:folder", recursive),
-  chooseWorkbenchLibrary: (scope) => ipcRenderer.invoke("workbench:library", scope),
-  runLibraryWorkbench: (scope,query) => ipcRenderer.invoke("workbench:run-library",scope,query),
-  currentWorkbench: (source) => ipcRenderer.invoke("workbench:current", source),
-  getWorkbench: (id, offset = 0, filter = "matches") => ipcRenderer.invoke("workbench:get", id, offset, filter),
-  startWorkbench: (id, query) => ipcRenderer.invoke("workbench:start", id, query),
   cancelWorkbench: (id) => ipcRenderer.invoke("workbench:cancel", id),
-  prepareWorkbenchImport: (id, ids) => ipcRenderer.invoke("workbench:import", id, ids),
-  assignWorkbenchImages: (id, ids, collectionId) => ipcRenderer.invoke("workbench:assign", id, ids, collectionId),
   semanticAvailability: () => ipcRenderer.invoke("workbench:semantic-status"),
   listImageTaskSummaries: () => ipcRenderer.invoke("tasks:images"),
   recordWorkView: (workId, assetId) =>

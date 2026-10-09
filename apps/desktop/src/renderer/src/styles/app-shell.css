@@ -101,7 +101,7 @@
 .status-dot.warning { background: var(--ds-danger); }
 .rail-protection .status-dot { position: absolute; right: -1px; bottom: 1px; border: 2px solid var(--ds-bg-sidebar); box-sizing: content-box; }
 
-/* Page header used by views that are not image grids (organize, settings, creation) */
+/* Page header used by views that are not image grids (settings, creation) */
 .view-header {
   display: flex;
   align-items: center;

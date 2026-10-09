@@ -425,10 +425,6 @@ export class LibraryDatabase {
     return row ?? null;
   }
 
-  workIdForArtwork(id: string): string | null {
-    return (this.#database.prepare("SELECT work_id FROM assets WHERE legacy_artwork_id = ?").get(id) as { work_id: string } | undefined)?.work_id ?? null;
-  }
-
   /** One indexed image and its album membership commit together; existing analysis survives reuse. */
   commitLocalImport(path: string, contentHash: string, collectionId: string | null, reuseId?: string, ownership?: "managed" | "external", webSource?: {pageUrl:string;imageUrl:string;title:string;savedAt:string}): string {
     this.#database.exec("BEGIN IMMEDIATE");
@@ -1669,15 +1665,6 @@ export class LibraryDatabase {
       WHERE ${predicate.sql} AND a.media_type='image' AND a.file_state='available'
       ORDER BY w.saved_at DESC, w.id, a.page_index, a.id LIMIT ? OFFSET ?`)
       .all(...predicate.params, clampInteger(limit,100,1,200),clampInteger(offset,0,0,10_000_000)) as unknown as Array<WorkAssetRow & { work_title: string }>;
-    return rows.map(row => ({ asset: mapWorkAsset(row), title: row.work_title }));
-  }
-
-  listWorkbenchAssets(scope: AnalysisScope, offset = 0, limit = 100): Array<{ asset: WorkAssetRecord; title: string }> {
-    const predicate = analysisScopePredicate(scope);
-    const rows = this.#database.prepare(`SELECT a.*, w.title AS work_title FROM assets a JOIN works w ON w.id=a.work_id
-      WHERE ${predicate.sql} AND a.media_type='image' AND a.file_state='available'
-      ORDER BY w.saved_at DESC, w.id, a.page_index, a.id LIMIT ? OFFSET ?`)
-      .all(...predicate.params, Math.max(1,Math.min(200,Math.trunc(limit))),Math.max(0,Math.trunc(offset))) as unknown as Array<WorkAssetRow & { work_title: string }>;
     return rows.map(row => ({ asset: mapWorkAsset(row), title: row.work_title }));
   }
 

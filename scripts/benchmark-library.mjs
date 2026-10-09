@@ -38,7 +38,7 @@ try {
       };
       await waitUntil(() => Boolean(document.querySelector('[data-nav="gallery"]')));
       document.querySelector('[data-nav="gallery"]').click();
-      await waitUntil(() => document.querySelectorAll(".work-library-card").length >= 60);
+      await waitUntil(() => document.querySelectorAll("[data-work-tile]").length >= 60);
       const firstPageMs = performance.now();
       const sampleFrame = async () => {
         await new Promise((resolve) => setTimeout(resolve, 45));
@@ -73,8 +73,8 @@ try {
       const metrics = {
         fixtureWorks: ${fixtureSize},
         firstPageMs: Math.round(firstPageMs),
-        loadedCardsAfterScroll: document.querySelectorAll(".work-library-card").length,
-        renderedImages: document.querySelectorAll(".work-library-card img").length,
+        loadedCardsAfterScroll: document.querySelectorAll("[data-work-tile]").length,
+        renderedImages: document.querySelectorAll("[data-work-tile] img").length,
         idleP95FrameMs: Math.round(idleP95FrameMs * 10) / 10,
         p95FrameMs: Math.round(p95FrameMs * 10) / 10,
         p95FrameOverheadMs: Math.round(Math.max(0, p95FrameMs - idleP95FrameMs) * 10) / 10,
@@ -90,13 +90,10 @@ try {
       document.querySelector('[data-nav="settings"]')?.click();
       await waitUntil(() => Boolean(document.querySelector('.settings-navigation')));
       document.querySelector('[data-nav="gallery"]')?.click();
-      await waitUntil(() => document.querySelectorAll('.work-library-card').length >= metrics.loadedCardsAfterScroll);
+      await waitUntil(() => document.querySelectorAll('[data-work-tile]').length >= metrics.loadedCardsAfterScroll);
       await sampleFrame();
       const galleryPositionRestored = Math.abs(scroller.scrollTop - rememberedTop) <= 2;
-      const organizeButton = document.querySelector("nav [data-nav='organize']");
-      organizeButton?.click();
-      await waitUntil(() => Boolean(document.querySelector(".analysis-scope-card")), 3000);
-      return { ...metrics, galleryPositionRestored, analysisViewReady: Boolean(document.querySelector(".analysis-scope-card")) };
+      return { ...metrics, galleryPositionRestored };
     })()`);
     const afterMetrics = metricMap(await cdp.send("Performance.getMetrics"));
     const metricDeltaMs = (name) => Math.round(
@@ -116,7 +113,6 @@ try {
     if (measuredResult.taskDurationMs > 8_000) failures.push("renderer task duration exceeded 8s");
     if (measuredResult.layoutDurationMs > 3_000) failures.push("renderer layout duration exceeded 3s");
     if (measuredResult.jsHeapMb !== null && measuredResult.jsHeapMb > 512) failures.push("renderer heap exceeded 512MB");
-    if (!measuredResult.analysisViewReady) failures.push("explicit analysis center did not render");
     if (!measuredResult.galleryPositionRestored) failures.push("gallery scroll position or loaded range was lost on return");
     console.log(JSON.stringify({ ...measuredResult, status: failures.length ? "failed" : "passed", failures }, null, 2));
     if (failures.length) process.exitCode = 1;

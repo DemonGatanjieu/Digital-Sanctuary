@@ -14,7 +14,7 @@ describe("stored work information", () => {
     const png=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=","base64"),path=join(root,"original.png"),moved=join(root,"moved.png");
     writeFileSync(path,png);writeFileSync(moved,png);
     try {
-      const hash=await fingerprintImage(path),id=database.commitLocalImport(path,hash,null),workId=database.workIdForArtwork(id)!,work=database.getWork(workId)!,album=database.createCollection("参考");
+      const hash=await fingerprintImage(path),id=database.commitLocalImport(path,hash,null),workId=`local:${id}`,work=database.getWork(workId)!,album=database.createCollection("参考");
       database.addWorkToCollection(workId,album.id);database.renameWork(workId,"保留的名称");
       const assessment={engine:"test",engineVersion:"1",elapsedMs:1,status:"complete" as const,labels:{sky:.9}};database.saveAssessment(id,assessment,{action:"allow",reasons:[],decidedAt:new Date().toISOString()});
       const sender={mainFrame:{}},event={sender,senderFrame:sender.mainFrame},window={webContents:sender};

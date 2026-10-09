@@ -3,12 +3,7 @@
    ========================================================================== */
 
 /* Main Container */
-.studio-root {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  width: 100%;
-}
+
 
 /* --------------------------------------------------------------------------
    Top Bar & Header
@@ -27,11 +22,11 @@
 
 /* Daily organizing starts with a task; detailed inputs are opened deliberately. */
 
-.organize-simple > .ui-segmented { margin-bottom: 0; background: var(--ds-bg-card); border-color: var(--ds-border-light); }
-.organize-simple > .ui-segmented button.active { background: var(--ds-primary-subtle); color: var(--ds-primary); }
 
-.organize-field { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; color: var(--ds-text-body); font-size: 13px; }
-.organize-field select, .organize-field input:not([type="range"]) { min-width: 0; width: 100%; min-height: 40px; padding: 8px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-sm); background: var(--ds-bg-card); color: var(--ds-text-heading); }
+
+
+
+
 
 /* --------------------------------------------------------------------------
    Left Column: Control Deck (控制台)
@@ -77,42 +72,6 @@
 
 /* Job Cards */
 
-.studio-job-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px 20px;
-  border: 1px solid var(--ds-border-light);
-  border-radius: var(--ds-radius-xl);
-  background: var(--ds-bg-card);
-  box-shadow: var(--ds-shadow-xs);
-}
+
 
 /* Suggestions Block */
-
-.studio-suggestions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-}
-
-.studio-suggestion-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border: 1px solid var(--ds-border-light);
-  border-radius: var(--ds-radius-md);
-  background: var(--ds-bg-card-subtle);
-  cursor: pointer;
-  transition: all var(--ds-transition-fast);
-}
-
-.studio-suggestion-card:hover {
-  border-color: var(--ds-primary-border);
-  background: #ffffff;
-}
-
-.studio-suggestion-card input {
-  accent-color: var(--ds-primary);
-}
