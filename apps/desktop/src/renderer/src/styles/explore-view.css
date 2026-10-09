@@ -1,0 +1,126 @@
+/* Views: explore — a quiet browser bar; the web page is the content. */
+
+.explore-page { background: var(--ds-bg-app); }
+
+/* Save actions and download progress (moved here from the old sidebar) */
+.explore-save-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--ds-control-sm);
+  padding: 0 12px;
+  border: 1px solid var(--ds-primary);
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-on-accent);
+  background: var(--ds-primary);
+  font: inherit;
+  font-size: var(--ds-font-13);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.explore-save-button:hover:not(:disabled) { background: var(--ds-primary-hover); }
+.explore-save-button:disabled { border-color: var(--ds-border-light); color: var(--ds-text-muted); background: transparent; cursor: not-allowed; opacity: 1; }
+.explore-download-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  color: var(--ds-text-body);
+  background: var(--ds-bg-card);
+  font-size: var(--ds-font-13);
+}
+.explore-download-strip strong { color: var(--ds-text-heading); font-weight: var(--ds-weight-semibold); }
+.explore-download-strip span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.explore-download-strip small { color: var(--ds-text-secondary); white-space: nowrap; }
+.explore-download-strip.error strong, .explore-download-strip.partial strong { color: var(--ds-danger-text); }
+.explore-download-strip.complete strong { color: var(--ds-success-text); }
+.explore-download-strip button { height: 28px; padding: 0 10px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-sm); color: var(--ds-text-body); background: transparent; font: inherit; font-size: var(--ds-font-12); cursor: pointer; }
+
+
+.browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 52px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  background: var(--ds-bg-app);
+  box-shadow: none;
+}
+.browser-toolbar > button.ui-icon-button { width: var(--ds-control-sm); min-width: 0; height: var(--ds-control-sm); border: 0; color: var(--ds-text-secondary); background: transparent; box-shadow: none; }
+.browser-toolbar > button.ui-icon-button:hover:not(:disabled) { color: var(--ds-text-heading); background: var(--ds-bg-hover); transform: none; }
+.browser-toolbar > button.ui-tool-button { display: inline-flex; width: auto; min-width: 0; height: var(--ds-control-sm); border: 0; color: var(--ds-text-secondary); background: transparent; box-shadow: none; }
+.browser-toolbar > button.ui-tool-button:hover:not(:disabled) { color: var(--ds-text-heading); background: var(--ds-bg-hover); }
+.browser-toolbar > .explore-protection-trigger[aria-expanded="true"], .browser-toolbar > .explore-account-trigger[aria-expanded="true"] { color: var(--ds-text-heading); background: var(--ds-bg-active); }
+.browser-toolbar > button:disabled { opacity: 0.35; }
+
+.ui-search.explore-address-form { flex: 1; min-width: 160px; margin: 0 6px; padding-right: 2px; }
+.ui-search.explore-address-form input { min-height: 0; padding: 0; border: 0; color: var(--ds-text-heading); background: transparent; font-size: var(--ds-font-13); box-shadow: none; }
+.ui-search.explore-address-form .ui-icon-button { width: 28px; height: 28px; }
+
+.shield-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 14px;
+  color: var(--ds-text-secondary);
+  background: var(--ds-bg-hover);
+  font-size: var(--ds-font-12);
+  font-weight: 400;
+  white-space: nowrap;
+  box-shadow: none;
+}
+.shield-status > button { height: 22px; padding: 0 8px; border: 0; border-radius: 11px; color: var(--ds-on-accent); background: var(--ds-primary); font: inherit; cursor: pointer; }
+.shield-status .status-dot { box-shadow: none; }
+
+.browser-toolbar > .explore-save-button { display: inline-flex; flex: none; width: auto; height: var(--ds-control-sm); margin-left: 4px; padding: 0 12px; border: 1px solid var(--ds-primary); border-radius: var(--ds-radius-md); color: var(--ds-on-accent); background: var(--ds-primary); }
+.browser-toolbar > .explore-save-button:disabled { border-color: transparent; color: var(--ds-text-muted); background: var(--ds-bg-hover); opacity: 1; }
+.browser-toolbar > * { flex-shrink: 0; }
+.browser-toolbar > .explore-address-form { flex-shrink: 1; }
+
+.explore-site-shortcuts {
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--ds-border-subtle);
+  background: var(--ds-bg-app);
+}
+.explore-site-shortcuts button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 13px;
+  color: var(--ds-text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: var(--ds-font-12);
+  cursor: pointer;
+}
+.explore-site-shortcuts button:hover { color: var(--ds-text-heading); background: var(--ds-bg-hover); }
+.explore-site-shortcuts > span > button:last-child { width: 22px; padding: 0; justify-content: center; opacity: 0; }
+.explore-site-shortcuts > span:hover > button:last-child, .explore-site-shortcuts > span > button:last-child:focus-visible { opacity: 1; }
+.explore-site-shortcuts small { margin-left: auto; color: var(--ds-text-muted); font-size: var(--ds-font-12); }
+
+.explore-account-actions { border-bottom: 1px solid var(--ds-border-subtle); background: var(--ds-bg-app); }
+.explore-account-actions button { min-height: var(--ds-control-sm); }
+.auth-hint { border: 0; border-bottom: 1px solid var(--ds-border-subtle); border-radius: 0; color: var(--ds-text-body); background: var(--ds-bg-card-subtle); }
+.explore-page > .app-notice { margin: 8px 12px; }
+
+.explore-surface, .explore-placeholder { background: var(--ds-bg-app); }
+.explore-placeholder { color: var(--ds-text-secondary); }
+.explore-placeholder strong { color: var(--ds-text-heading); font-weight: var(--ds-weight-semibold); }
+.explore-protection-gate { color: var(--ds-text-body); background: var(--ds-bg-app); }
+.explore-protection-gate > div { border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-lg); background: var(--ds-bg-card); box-shadow: none; }
+
+@media (max-width: 1100px) {
+  .browser-toolbar > .ui-tool-button span, .browser-toolbar .explore-save-button span { display: none; }
+  .browser-toolbar .explore-save-button { width: var(--ds-control-sm); padding: 0; justify-content: center; }
+}

@@ -13,7 +13,7 @@ import { VisionSettingsSection } from "./VisionSettingsSection";
 import { ComfyUiSettingsSection } from "./ComfyUiSettingsSection";
 import { ModelCenterView } from "./ModelCenterView";
 import { SettingsDisclosure } from "./SettingsDisclosure";
-import { InteractiveCompassDial } from "./InteractiveCompassDial";
+import { Icon } from "./Icon";
 import { SETTINGS_SECTIONS, restoreDefaultDownloadLocation, type SettingsSection } from "./app-navigation";
 
 interface SettingsViewProps {
@@ -61,26 +61,19 @@ export function SettingsView({
 
   return (
     <>
-      <header className="topbar rules-heading">
-        <div>
-          <p className="eyebrow">PREFERENCES</p>
-          <h1>设置</h1>
-          <p className="page-description">应用偏好。浏览保护可在探索页直接调整。</p>
-        </div>
-        <Button variant="secondary" onClick={onOpenProtection}>在探索调整浏览保护 →</Button>
+      <header className="view-header settings-header">
+        <h1>设置</h1>
+        <nav className="ui-segmented settings-navigation" aria-label="设置分类">
+          {SETTINGS_SECTIONS.map((item) => (
+            <button key={item.id} type="button" data-settings={item.id} className={section === item.id ? "active" : ""} aria-current={section === item.id ? "page" : undefined} onClick={() => onSectionChange(item.id)}>
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <button type="button" className="ui-tool-button settings-protection-link" onClick={onOpenProtection} title="浏览保护在探索页调整"><Icon name="shield" size={16} /><span>浏览保护</span></button>
       </header>
       {error && <AppNotice tone="error">{error}</AppNotice>}
-      <nav className="settings-navigation" aria-label="设置分类">
-        {SETTINGS_SECTIONS.map((item) => (
-          <button key={item.id} type="button" data-settings={item.id} aria-current={section === item.id ? "page" : undefined} onClick={() => onSectionChange(item.id)}>
-            {item.label}
-          </button>
-        ))}
-      </nav>
-      <div className="settings-section-intro">
-        <h2>{currentSection.label}</h2>
-        <p>{currentSection.description}</p>
-      </div>
+      <p className="settings-section-intro">{currentSection.description}</p>
       <SettingsPanel active={section === "models"}><ModelCenterView embedded onError={onError} disabled={modelBusy} onBusyChange={onModelBusyChange} /></SettingsPanel>
       <SettingsPanel active={section === "connections"}>
         <SettingsDisclosure name="external-vision" title="外部画评服务" description="按需连接云端视觉模型。"><VisionSettingsSection /></SettingsDisclosure>
@@ -88,14 +81,10 @@ export function SettingsView({
       </SettingsPanel>
       <SettingsPanel active={section === "appearance"}>
       <ThemeSettingsSection />
-      <SettingsDisclosure name="theme-dial" title="主题拨盘" description="用拨盘切换内置主题。"><section className="appearance-theme-dial">
-        <div><h3>拨盘切换主题</h3><p>拖动罗盘，切换四套内置主题。</p></div>
-        <InteractiveCompassDial mode="hero" />
-      </section></SettingsDisclosure>
       <SettingsDisclosure name="avatar" title="个人头像" description="选择显示在侧栏的图片。"><section className="user-profile-card">
         <header>
           <div>
-            <p className="eyebrow">IDENTITY & PROFILE</p>
+            
             <h2>个人头像设置</h2>
           </div>
           <span>显示在左侧导航栏与专属控制台</span>
@@ -144,7 +133,7 @@ export function SettingsView({
 
       <section className="appearance-settings-card">
         <header>
-          <div><p className="eyebrow">APPEARANCE</p><h2>外观与性能</h2></div>
+          <div><h2>外观与性能</h2></div>
           <span>功能位置不会随档位改变</span>
         </header>
         <div className="appearance-profile-options">

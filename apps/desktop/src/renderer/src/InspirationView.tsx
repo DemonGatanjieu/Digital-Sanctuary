@@ -319,7 +319,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   return (
     <section className="inspiration-view">
       <header className="inspiration-header">
-        <div><p className="eyebrow">LOCAL CREATIVE COMPANION</p><h1>创作</h1><p>加入参考图，聊画面、比较多图、写设定或整理提示词。图片与对话只留在本机。</p></div>
+        <div><h1>创作</h1><p>聊图、写设定、整理提示词。图片和对话只留在本机。</p></div>
         <button type="button" className="inspiration-new" onClick={beginNew}>＋ 新对话</button>
       </header>
 
@@ -584,7 +584,6 @@ function InspirationGalleryPicker({ onClose, onSelect }: {
       <section className="inspiration-picker" role="dialog" aria-modal="true" aria-label="从画廊选择参考图">
         <header>
           <div>
-            <p className="eyebrow">LOCAL GALLERY</p>
             <h2>{expandedWork ? "选择具体一页" : "从画廊加入参考图"}</h2>
             <p>{expandedWork ? `《${expandedWork.title}》共有 ${availablePages.length} 张可用图片` : "最近保存的作品会排在前面，也可以按标题或画师搜索。"}</p>
           </div>

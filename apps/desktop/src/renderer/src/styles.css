@@ -26,11 +26,10 @@
 @import "./styles/responsive.css" layer(legacy);
 @import "./styles/saved-views.css" layer(legacy);
 @import "./styles/themes.css" layer(legacy);
-@import "./styles/compass-dial.css" layer(legacy);
 @import "./styles/vision-radar.css" layer(legacy);
 @import "./styles/prompt-bridge.css" layer(legacy);
 @import "./styles/typography-settings.css" layer(legacy);
-@import "./styles/inspiration.css" layer(legacy);
+@import "./styles/inspiration.css" layer(views);
 @import "./styles/interaction-motion.css" layer(legacy);
 @import "./styles/gallery-actions.css" layer(legacy);
 @import "./styles/foundation.css" layer(foundation);
@@ -40,3 +39,5 @@
 @import "./styles/viewer.css" layer(views);
 @import "./styles/directory.css" layer(views);
 @import "./styles/detail.css" layer(views);
+@import "./styles/explore-view.css" layer(views);
+@import "./styles/settings-view.css" layer(views);

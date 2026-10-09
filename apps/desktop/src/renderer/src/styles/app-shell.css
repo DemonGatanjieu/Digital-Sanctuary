@@ -115,39 +115,3 @@
 .eyebrow { display: none; }
 h1 { font-size: var(--ds-font-24); font-weight: var(--ds-weight-semibold); letter-spacing: 0; }
 .topbar { margin: 20px 0 20px; }
-
-/* Explore: save actions moved out of the old sidebar */
-.explore-save-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: var(--ds-control-sm);
-  padding: 0 12px;
-  border: 1px solid var(--ds-primary);
-  border-radius: var(--ds-radius-md);
-  color: var(--ds-on-accent);
-  background: var(--ds-primary);
-  font: inherit;
-  font-size: var(--ds-font-13);
-  white-space: nowrap;
-  cursor: pointer;
-}
-.explore-save-button:hover:not(:disabled) { background: var(--ds-primary-hover); }
-.explore-save-button:disabled { border-color: var(--ds-border-light); color: var(--ds-text-muted); background: transparent; cursor: not-allowed; opacity: 1; }
-.explore-download-strip {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--ds-border-subtle);
-  color: var(--ds-text-body);
-  background: var(--ds-bg-card);
-  font-size: var(--ds-font-13);
-}
-.explore-download-strip strong { color: var(--ds-text-heading); font-weight: var(--ds-weight-semibold); }
-.explore-download-strip span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.explore-download-strip small { color: var(--ds-text-secondary); white-space: nowrap; }
-.explore-download-strip.error strong, .explore-download-strip.partial strong { color: var(--ds-danger-text); }
-.explore-download-strip.complete strong { color: var(--ds-success-text); }
-.explore-download-strip button { height: 28px; padding: 0 10px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-sm); color: var(--ds-text-body); background: transparent; font: inherit; font-size: var(--ds-font-12); cursor: pointer; }

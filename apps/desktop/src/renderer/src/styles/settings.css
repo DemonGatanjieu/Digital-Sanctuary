@@ -17,21 +17,6 @@
 .settings-section-intro h2 { margin: 0; color: var(--ds-text-heading); font-size: 20px; }
 .settings-section-intro p { margin: 8px 0 0; color: var(--ds-text-secondary); font-size: 13px; line-height: 1.6; }
 
-.appearance-theme-dial {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 20px;
-  padding: 24px 28px;
-  margin-bottom: 24px;
-  border: 1px solid var(--ds-border-light);
-  border-radius: var(--ds-radius-xl);
-  background: var(--ds-bg-card);
-}
-.appearance-theme-dial h3 { margin: 0; color: var(--ds-text-heading); }
-.appearance-theme-dial p { color: var(--ds-text-secondary); font-size: 13px; }
-
 .page-description {
   max-width: 680px;
   margin: 12px 0 0;
@@ -39,6 +24,7 @@
   line-height: 1.65;
   font-size: 13.5px;
 }
+
 
 .user-profile-card {
   padding: 24px 28px;

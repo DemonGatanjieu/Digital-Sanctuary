@@ -23,7 +23,7 @@ export function AnalysisView({collections,artists,selectedWorkIds,status,error,o
   const scope=useMemo<AnalysisScope>(()=>scopeType==="selected"?{type:"selected",workIds:selectedWorkIds}:scopeType==="artist"?{type:"artist",artistId}:scopeType==="collection"?{type:"collection",collectionId}:{type:"all"},[scopeType,artistId,collectionId,selectedWorkIds]);
   const invalidScope=scopeType==="selected"&&!selectedWorkIds.length||scopeType==="artist"&&!artists.some(a=>a.id===artistId)||scopeType==="collection"&&!collections.some(c=>c.id===collectionId);
   return <div className="studio-root organize-simple organize-workbench">
-    <header className="topbar studio-topbar"><div><h1>找图与整理</h1><p className="page-description">选一批图片，说出需求，再处理找到的结果。</p></div></header>
+    <header className="view-header"><h1>整理</h1><small className="view-header-note">找图、排查，再批量处理结果</small></header>
     {error&&<p role="alert">{error}</p>}
     <section className="organize-source-tools" aria-label="选择图片范围">
       <SegmentedControl label="图片来源" value={source} options={[{value:"library",label:"我的图库"},{value:"folder",label:"本地文件夹"}]} onChange={value=>setSource(value as "library"|"folder")}/>

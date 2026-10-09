@@ -217,50 +217,41 @@ export function ExploreView({
   return (
     <section className="explore-page">
       <div className="browser-toolbar">
-        <button title="后退" disabled={!contentAvailable || !state.canGoBack} onClick={() => void runCommand("back")}>←</button>
-        <button title="前进" disabled={!contentAvailable || !state.canGoForward} onClick={() => void runCommand("forward")}>→</button>
-        <button title="刷新" disabled={!contentAvailable} onClick={() => void runCommand("reload")}>↻</button>
-        <button title="Pixiv 首页" onClick={() => void navigate("https://www.pixiv.net/")}>⌂</button>
-        <form className="address-bar explore-address-form" onSubmit={event => { event.preventDefault(); if (!addressComposing.current) void navigate(address); }}>
+        <button className="ui-icon-button" aria-label="后退" title="后退" disabled={!contentAvailable || !state.canGoBack} onClick={() => void runCommand("back")}><Icon name="chevronLeft" /></button>
+        <button className="ui-icon-button" aria-label="前进" title="前进" disabled={!contentAvailable || !state.canGoForward} onClick={() => void runCommand("forward")}><Icon name="chevronRight" /></button>
+        <button className="ui-icon-button" aria-label="刷新" title="刷新" disabled={!contentAvailable} onClick={() => void runCommand("reload")}><Icon name="refresh" /></button>
+        <form className="ui-search explore-address-form" onSubmit={event => { event.preventDefault(); if (!addressComposing.current) void navigate(address); }}>
+          <Icon name="search" size={16} />
           <input aria-label="网址或图片搜索" value={address} placeholder="输入网址或关键词找图" onChange={event => setAddress(event.target.value)} onCompositionStart={() => { addressComposing.current = true; }} onCompositionEnd={() => { addressComposing.current = false; }} />
-          <button type="submit" aria-label="前往网址或搜索">前往</button>
+          <button type="submit" className="ui-icon-button" aria-label="前往网址或搜索" title="前往"><Icon name="chevronRight" size={16} /></button>
         </form>
-        {!web && <button className="explore-account-trigger" type="button" aria-expanded={accountOpen} onClick={() => setAccountOpen(!accountOpen)}>账号</button>}
-        <div className={`shield-status protection-${web ? "web" : state.protectionStatus}`} title="本地模型状态与探索保护模式">
-          <span className={`status-dot ${protectedBrowsingReady ? "online" : ""}`} />
-          {web ? <span>此站未适配元素拦截</span> : state.protectionStatus === "bypassed" ? (
-            <><strong>本次无保护浏览</strong><button onClick={() => void runCommand("resume-protection")}>恢复保护</button></>
-          ) : state.protectionStatus === "starting" ? (
-            <span>模型启动中</span>
-          ) : state.protectionStatus === "failed" || state.protectionStatus === "stopped" ? (
-            <span>模型未就绪</span>
-          ) : (
-            <>
-              <span>保护已开启</span>
-            </>
-          )}
-        </div>
+        <span className={`shield-status protection-${web ? "web" : state.protectionStatus}`} title={web ? "此网站尚未适配元素拦截" : "本地模型状态与探索保护"}>
+          <span className={`status-dot ${!web && protectedBrowsingReady ? "online" : !web && state.protectionStatus === "bypassed" ? "warning" : ""}`} />
+          {web ? "此站未适配元素拦截" : state.protectionStatus === "bypassed" ? "无保护浏览" : state.protectionStatus === "starting" ? "模型启动中" : state.protectionStatus === "failed" || state.protectionStatus === "stopped" ? "模型未就绪" : "保护已开启"}
+          {!web && state.protectionStatus === "bypassed" && <button type="button" onClick={() => void runCommand("resume-protection")}>恢复保护</button>}
+        </span>
+        {!web && <button className="ui-tool-button explore-protection-trigger" type="button" aria-label="浏览保护" aria-expanded={protectionOpen}
+          onClick={protectionOpen ? onProtectionClose : onProtectionOpen}><Icon name="shield" size={16} /><span>浏览保护</span></button>}
+        {!web && <button className="ui-tool-button explore-account-trigger" type="button" aria-label="账号" aria-expanded={accountOpen} onClick={() => setAccountOpen(!accountOpen)}><Icon name="user" size={16} /><span>账号</span></button>}
         {!web && (state.pageKind === "bookmarks" ? (
-          <button className="explore-save-button" disabled={downloadBusy} onClick={() => void onPreviewBookmarks?.()} title="先预览范围，再开始下载">
+          <button className="explore-save-button" aria-label="下载全部收藏" disabled={downloadBusy} onClick={() => void onPreviewBookmarks?.()} title="先预览范围，再开始下载">
             <Icon name="download" size={16} /><span>下载全部收藏</span>
           </button>
         ) : (
-          <button className="explore-save-button" disabled={state.pageKind !== "artwork" || downloadBusy} onClick={() => void onDownloadCurrentArtwork?.()}
+          <button className="explore-save-button" aria-label="保存作品" disabled={state.pageKind !== "artwork" || downloadBusy} onClick={() => void onDownloadCurrentArtwork?.()}
             title={state.pageKind === "artwork" ? `保存作品 ${state.artworkId} 的全部页` : "打开作品详情后可保存"}>
             <Icon name="download" size={16} /><span>保存作品</span>
           </button>
         ))}
-        {!web && <button className="explore-protection-trigger" type="button" aria-expanded={protectionOpen}
-          onClick={protectionOpen ? onProtectionClose : onProtectionOpen}>浏览保护</button>}
-        <button className="maximize-button" title={state.maximized ? "还原窗口" : "最大化窗口"} onClick={() => void runCommand("maximize")}>
-          {state.maximized ? "❐" : "□"}
+        <button className="ui-icon-button maximize-button" aria-label={state.maximized ? "还原窗口" : "最大化窗口"} title={state.maximized ? "还原窗口" : "最大化窗口"} onClick={() => void runCommand("maximize")}>
+          <Icon name={state.maximized ? "restore" : "maximize"} size={16} />
         </button>
       </div>
       <nav className="explore-site-shortcuts" aria-label="网站快捷入口">
         <button onClick={() => void navigate("https://www.pixiv.net/")}>Pixiv</button>
-        {sites.map(site => <span key={site.url}><button title={site.url} onClick={() => void navigate(site.url)}>{site.title}</button><button aria-label={`移除网站 ${site.title}`} onClick={() => void saveSite(site.url)}>×</button></span>)}
-        <button onClick={() => void saveSite()}>＋ 保存当前网站</button>
-        <small>{web ? "图片上右键 → 加入图库" : "支持输入其他图片网站的网址"}</small>
+        {sites.map(site => <span key={site.url}><button title={site.url} onClick={() => void navigate(site.url)}>{site.title}</button><button aria-label={`移除网站 ${site.title}`} title="移除" onClick={() => void saveSite(site.url)}><Icon name="close" size={12} /></button></span>)}
+        <button className="explore-site-add" onClick={() => void saveSite()} title="把当前网站加入快捷入口"><Icon name="plus" size={14} />收藏网站</button>
+        {web && <small>在图片上右键可加入图库</small>}
       </nav>
       {state.download.phase !== "idle" && (
         <div className={`explore-download-strip ${state.download.phase}`} role="status">

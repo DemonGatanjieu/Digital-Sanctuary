@@ -1,0 +1,40 @@
+/* Views: settings and organize — compact headers, flat sections. */
+
+.view-header-note { color: var(--ds-text-secondary); font-size: var(--ds-font-12); }
+
+.settings-header { flex-wrap: wrap; }
+.settings-header .settings-navigation { display: inline-flex; flex-wrap: wrap; grid-template-columns: none; gap: 2px; margin: 0; }
+.settings-header .settings-navigation button {
+  min-height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--ds-text-secondary);
+  background: transparent;
+  font-size: var(--ds-font-13);
+  font-weight: var(--ds-weight-medium);
+}
+.settings-header .settings-navigation button:hover:not(.active) { color: var(--ds-text-heading); background: transparent; }
+.settings-header .settings-navigation button.active { color: var(--ds-text-heading); background: var(--ds-bg-card); box-shadow: var(--ds-shadow-sm); }
+.settings-protection-link { margin-left: auto; }
+.settings-section-intro { margin: 0 0 16px; color: var(--ds-text-secondary); font-size: var(--ds-font-13); }
+
+/* Flatten the legacy settings cards: one quiet surface, no glow or lift. */
+.library-preferences-card,
+.storage-preference-card,
+.theme-settings-container,
+.user-profile-card,
+.settings-disclosure,
+.typography-settings,
+.model-center-page .model-card,
+.analysis-panel,
+.studio-panel {
+  border: 1px solid var(--ds-border-subtle);
+  border-radius: var(--ds-radius-lg);
+  background: var(--ds-bg-card);
+  box-shadow: none;
+}
+.theme-card { border-width: 1px; border-radius: var(--ds-radius-md); box-shadow: none; }
+.theme-card:hover { transform: none; box-shadow: none; }
+.theme-card.active { border-color: var(--ds-primary); box-shadow: 0 0 0 1px var(--ds-primary); }
+.settings-disclosure-toggle { color: var(--ds-text-heading); }
