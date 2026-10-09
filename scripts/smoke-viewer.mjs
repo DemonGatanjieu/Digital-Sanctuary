@@ -105,6 +105,36 @@ try {
       await waitFor(`Boolean(document.querySelector(${JSON.stringify(selector)}))`);
       await cdp.evaluate(`(() => { const control = document.querySelector(${JSON.stringify(selector)}); const prototype = control.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(prototype, 'value').set.call(control, ${JSON.stringify(value)}); control.dispatchEvent(new Event(control.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); })()`);
     }
+
+    // ---- image-first gallery helpers (menus replace the old selects and segmented filters) ----
+    const TILE = "[data-work-tile]", OPEN = "[data-work-tile] .work-tile-image", SEARCH = ".gallery-search-field input";
+    const ALBUM_CARD = "section[aria-label=相册] .directory-card-open", ALBUM_TILE = ".album-fullscreen-theater .work-tile-image";
+    async function menu(trigger, label) {
+      await click(trigger);
+      await waitFor("Boolean(document.querySelector('.ui-popover'))");
+      await clickText('.ui-popover [role^="menuitem"]', label);
+    }
+    async function setPreset(label) { await menu('[data-gallery-filter]', label); }
+    async function setType(label) { await menu('[data-gallery-filter]', label); }
+    async function activePreset() {
+      return cdp.evaluate("(()=>{const t=[...document.querySelectorAll('.work-filter-chips .ui-chip')].map(c=>c.textContent);return ['喜欢','最近浏览','未分相册'].find(l=>t.some(x=>x.startsWith(l)))??'全部'})()");
+    }
+    async function hasChip(label) { return cdp.evaluate(`[...document.querySelectorAll('.work-filter-chips .ui-chip')].some(c=>c.textContent.startsWith(${JSON.stringify(label)}))`); }
+    async function sortLabel() { return cdp.evaluate("document.querySelector('[aria-label^=\"排序：\"]').getAttribute('aria-label')"); }
+    async function sortDisabled() { return cdp.evaluate("document.querySelector('[aria-label^=\"排序：\"]').disabled"); }
+    async function sortAscending() {
+      await click('[aria-label^="排序："]'); await waitFor("Boolean(document.querySelector('.ui-popover'))");
+      const ascending = await cdp.evaluate("[...document.querySelectorAll('.ui-popover [role^=menuitem]')].find(e=>e.textContent.includes('从旧到新')).getAttribute('aria-checked')==='true'");
+      await key('Escape'); await waitFor("!document.querySelector('.ui-popover')");
+      return ascending;
+    }
+    async function nameSearch() { if (await cdp.evaluate("document.querySelector('.gallery-search-mode')?.textContent==='按画面'")) await click('.gallery-search-mode'); }
+    async function openSavedFilters() { await menu('[data-gallery-filter]', '常用筛选'); await waitFor("Boolean(document.querySelector('.saved-work-filters-dialog'))"); }
+    async function contextMenu(selector) {
+      await waitFor(`Boolean(document.querySelector(${JSON.stringify(selector)}))`);
+      await cdp.evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)}),r=e.getBoundingClientRect();e.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+20,clientY:r.top+20}))})()`);
+      await waitFor("Boolean(document.querySelector('.ui-popover'))");
+    }
     async function waitForProgress(pageIndex) {
       await waitFor(`(async () => { const work = await window.sanctuary.getWork('pixiv:123456789'); return work.readingProgress?.assetId === work.assets[${pageIndex}].id; })()`);
     }
@@ -119,13 +149,13 @@ try {
     async function viewerChecks(entry) {
       await imageReady();
       const inspectCount = await main.evaluate('__viewerInspect.requests.length');
-      await clickText('.cinema-hud-island button', '作品信息与相册');
+      await click('[aria-label="作品信息"]');
       await waitFor("Boolean(document.querySelector('.work-information-drawer [aria-label=\"作品相册\"]'))");
       assert.equal(await cdp.evaluate("document.querySelector('.work-information-drawer').textContent.includes('Pixiv · 123456789')"), true);
       assert.equal(await cdp.evaluate("document.querySelector('.work-information-drawer').textContent.includes('查看器测试相册')"), true);
       assert.equal(await main.evaluate('__viewerInspect.requests.length'), inspectCount, 'reading information started model analysis');
       const informationBounds = await cdp.evaluate("(()=>{const n=document.querySelector('.work-information-drawer'),r=n.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:innerWidth,height:innerHeight,overflow:n.scrollWidth-n.clientWidth};})()");
-      assert.ok(informationBounds.left >= 0 && informationBounds.right <= informationBounds.width && informationBounds.top >= 0 && informationBounds.bottom <= informationBounds.height && informationBounds.overflow <= 2);
+      assert.ok(informationBounds.left >= 0 && informationBounds.right <= informationBounds.width && informationBounds.top >= 0 && informationBounds.bottom <= informationBounds.height && informationBounds.overflow <= 2, `information panel outside the window: ${JSON.stringify(informationBounds)}`);
       await clickText('.work-information-drawer button', '移出相册');
       await waitFor("document.querySelector('.work-information-drawer').textContent.includes('还未加入相册')");
       await changeControl('[aria-label="作品信息相册"]', 'viewer-album');
@@ -135,8 +165,8 @@ try {
       assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"), true);
       await cdp.evaluate("document.querySelector('[aria-label=\"作品信息相册\"]').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:229,isComposing:true,bubbles:true}))");
       assert.equal(await cdp.evaluate("Boolean(document.querySelector('.work-information-drawer'))"), true);
-      await waitFor("Array.from(document.querySelectorAll('.work-information-drawer button')).some(button=>button.textContent.includes('修改图库名称') && !button.disabled)");
-      await clickText('.work-information-drawer button','修改图库名称');
+      await waitFor("Array.from(document.querySelectorAll('.work-information-drawer button')).some(button=>button.textContent.includes('改名') && !button.disabled)");
+      await clickText('.work-information-drawer button','改名');
       await waitFor("document.activeElement?.getAttribute('aria-label')==='图库名称'");
       await changeControl('[aria-label="图库名称"]',' ');
       assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.work-information-drawer button')).find(button=>button.textContent.includes('保存名称')).disabled"),true);
@@ -185,7 +215,7 @@ try {
       // Wait for the tiny transform easing to settle; do not make timing/frame-rate claims.
       await waitFor(`Math.abs(new DOMMatrixReadOnly(getComputedStyle(document.querySelector('.cinema-image-entity')).transform).a - ${native.expected}) < 0.01`);
       assert.ok(native.expected > 1, "fixture must require a genuine native zoom");
-      assert.equal(await cdp.evaluate("document.querySelector('.zoom-readout').textContent"), "100%", "native pixel scale readout should be 100%");
+      assert.equal(await cdp.evaluate("document.querySelector('.viewer-readout').textContent"), "100%", "native pixel scale readout should be 100%");
       await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: 450, y: 310 });
       await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", button: "left", clickCount: 1, x: 450, y: 310 });
       await waitFor("document.querySelector('.cinema-stage-viewport').classList.contains('panning')");
@@ -217,19 +247,19 @@ try {
       await key("Home");
       await waitFor("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')");
       await imageReady();
-      assert.equal(await cdp.evaluate("document.querySelector('.artwork-tools-menu').open"),false);
-      await click('.artwork-tools-menu > summary');
-      await cdp.evaluate("document.querySelector('.artwork-tools-menu > summary').focus()");
-      const toolsBounds=await cdp.evaluate("(() => {const r=document.querySelector('.artwork-tools-options').getBoundingClientRect();return {left:r.left,right:r.right,bottom:r.bottom,height:innerHeight,width:innerWidth};})()");
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.ui-popover'))"),false);
+      await click('[aria-label="更多工具"]');
+      await waitFor("Boolean(document.querySelector('.ui-popover'))");
+      const toolsBounds=await cdp.evaluate("(() => {const r=document.querySelector('.ui-popover').getBoundingClientRect();return {left:r.left,right:r.right,bottom:r.bottom,height:innerHeight,width:innerWidth};})()");
       assert.ok(toolsBounds.left>=0 && toolsBounds.right<=toolsBounds.width && toolsBounds.bottom<=toolsBounds.height,`${entry} tools menu clipped: ${JSON.stringify(toolsBounds)}`);
       await key('ArrowRight');
       assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"),true);
-      await cdp.evaluate("document.querySelector('.artwork-tools-menu summary').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:229,isComposing:true,bubbles:true}))");
-      assert.equal(await cdp.evaluate("document.querySelector('.artwork-tools-menu').open"),true);
+      await cdp.evaluate("document.querySelector('.ui-popover').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',keyCode:229,isComposing:true,bubbles:true}))");
+      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.ui-popover'))"),true);
       await key('Escape');
-      assert.equal(await cdp.evaluate("document.querySelector('.artwork-tools-menu').open"),false);
+      await waitFor("!document.querySelector('.ui-popover')");
       assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"),true);
-      await clickText(".cinema-hud-island button", "雷达画像");
+      await menu('[aria-label="更多工具"]', "画像与画评");
       await waitFor("Boolean(document.querySelector('.cinema-radar-drawer'))");
       assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.cinema-nav-arrow, .filmstrip-thumb-btn')).every(button => button.disabled)"), true, "background page controls remained enabled under radar");
       await click(".cinema-nav-arrow.next");
@@ -239,7 +269,7 @@ try {
       await key("Escape");
       await waitFor("!document.querySelector('.cinema-radar-drawer')");
       assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"), true);
-      await clickText(".cinema-hud-island button", "元素透视");
+      await menu('[aria-label="更多工具"]', "元素与提示词");
       await waitFor("Boolean(document.querySelector('.element-inspector-drawer'))");
       assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.cinema-nav-arrow, .filmstrip-thumb-btn')).every(button => button.disabled)"), true, "background page controls remained enabled under inspector");
       // Keep this test independent of installed vision models. An editor in the actual topmost drawer has the same keyboard ownership as its prompt/search inputs.
@@ -263,40 +293,40 @@ try {
 
     await cdp.send("Emulation.setDeviceMetricsOverride", { width: 900, height: 620, deviceScaleFactor: 1, mobile: false });
     await click('[data-nav="gallery"]');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
-    await changeControl('[aria-label="排序字段"]', 'title');
-    await click('.work-sort-direction');
-    await clickText('[aria-label="常用筛选"] button', '最近浏览');
-    await waitFor("document.querySelector('.compact-empty h2')?.textContent === '还没有浏览记录'");
-    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.library-start-actions'))"), false, "empty recent history was presented as a completely empty library");
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
+    await menu('[aria-label^="排序："]', '标题');
+    await menu('[aria-label^="排序："]', '从旧到新');
+    await setPreset('最近浏览');
+    await waitFor("document.querySelector('.gallery-empty h2')?.textContent === '还没有浏览记录'");
+    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.gallery-empty--first'))"), false, "empty recent history was presented as a completely empty library");
     await click('[data-nav="settings"]');
     await click('[data-nav="gallery"]');
-    await waitFor("document.querySelector('[aria-label=\"常用筛选\"] button.active')?.textContent === '最近浏览'");
-    await clickText('[aria-label="常用筛选"] button', '全部');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').value"), 'title', "leaving recent after visiting settings lost the user's previous sort");
-    assert.equal(await cdp.evaluate("document.querySelector('.work-sort-direction').textContent.trim()"), '升序 ↑');
-    await clickText('[aria-label="常用筛选"] button', '喜欢');
-    await waitFor("document.querySelector('.compact-empty h2')?.textContent === '还没有喜欢的作品'");
-    await clickText('[aria-label="常用筛选"] button', '未分相册');
-    await waitFor("document.querySelector('.compact-empty h2')?.textContent === '没有未分相册的作品'");
+    await waitFor("[...document.querySelectorAll('.work-filter-chips .ui-chip')].some(c=>c.textContent.startsWith('最近浏览'))");
+    await setPreset('全部作品');
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
+    assert.match(await sortLabel(), /标题/, "leaving recent after visiting settings lost the user's previous sort");
+    assert.equal(await sortAscending(), true);
+    await setPreset('喜欢');
+    await waitFor("document.querySelector('.gallery-empty h2')?.textContent === '还没有喜欢的作品'");
+    await setPreset('未分相册');
+    await waitFor("document.querySelector('.gallery-empty h2')?.textContent === '没有未分相册的作品'");
     await screenshot('empty-presets-retain-controls');
-    await clickText('[aria-label="常用筛选"] button', '全部');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    await setPreset('全部作品');
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
     checks.push({ name: "empty-presets-keep-controls-and-recent-restores-sort-across-settings" });
     await cdp.evaluate(`(() => { const RealImage = window.Image; window.__viewerPreloads = []; window.Image = function(...args) { const image = new RealImage(...args); window.__viewerPreloads.push(image); return image; }; })()`);
-    await click(".work-cover-button");
+    await click(OPEN);
     await viewerChecks("flat-gallery");
     const flatPreloads = await cdp.evaluate("({ total: window.__viewerPreloads.length, liveAfterExit: window.__viewerPreloads.filter(image => image.hasAttribute('src')).length })");
     assert.ok(flatPreloads.total <= 3, `unbounded original preload: ${JSON.stringify(flatPreloads)}`);
     assert.equal(flatPreloads.liveAfterExit, 0, "original preloads retained after closing");
     checks.push({ name: "bounded-original-preload-and-exit-release", ...flatPreloads });
 
-    await clickText('[aria-label="画廊布局"] button', "相册");
-    await click(".collection-card");
+    await clickText('.gallery-scope button', "相册");
+    await click(ALBUM_CARD);
     await waitFor("Boolean(document.querySelector('.album-fullscreen-theater'))");
-    await clickText('[aria-label="画册模式"] button', "典藏网格");
-    await click(".collection-detail-grid .art-preview-button");
+    await clickText('.detail-header .ui-segmented button', "网格");
+    await click(ALBUM_TILE);
     await viewerChecks("album-gallery");
     assert.equal(await cdp.evaluate("Boolean(document.querySelector('.album-fullscreen-theater'))"), true, "closing the viewer also closed its parent album");
     await key("Escape");
@@ -307,9 +337,9 @@ try {
     await clickText(".settings-panel:not([hidden]) button", "省电");
     await waitFor("document.querySelector('.app-shell').dataset.displayProfile === 'efficient'");
     await click('[data-nav="gallery"]');
-    await clickText('[aria-label="画廊布局"] button', "全部作品");
+    await clickText('.gallery-scope button', "作品");
     const before = await cdp.evaluate("window.__viewerPreloads.length");
-    await click(".work-cover-button");
+    await click(OPEN);
     await imageReady();
     const profile = await cdp.evaluate("({ profile: document.querySelector('.cinema-lightbox-theater').dataset.displayProfile, backdrop: getComputedStyle(document.querySelector('.cinema-hud-island')).backdropFilter, addedPreloads: window.__viewerPreloads.length - " + before + " })");
     assert.equal(profile.profile, "efficient");
@@ -321,25 +351,25 @@ try {
 
     await cdp.evaluate("(async () => window.sanctuary.updateLibraryPreferences({ ...(await window.sanctuary.getLibraryPreferences()), defaultView: 'collections' }))()");
     await cdp.send("Page.reload");
-    await click('[data-home-task="gallery"]');
-    await waitFor("Boolean(document.querySelector('.collection-card'))");
-    await click(".collection-card");
+    await click('[data-nav="gallery"]');
+    await waitFor("Boolean(document.querySelector('section[aria-label=相册] .directory-card-open'))");
+    await click(ALBUM_CARD);
     await waitFor("Boolean(document.querySelector('.album-fullscreen-theater'))");
-    await clickText('[aria-label="画册模式"] button', "典藏网格");
-    await waitFor("document.querySelectorAll('.collection-detail-grid .art-preview-button').length === 3");
+    await clickText('.detail-header .ui-segmented button', "网格");
+    await waitFor("document.querySelectorAll('.album-fullscreen-theater .work-tile-image').length === 3");
     checks.push({ name: "default-album-after-home-loads-all-three-legacy-pages" });
     await key("Escape");
     await cdp.evaluate("(async () => window.sanctuary.updateLibraryPreferences({ ...(await window.sanctuary.getLibraryPreferences()), defaultView: 'author-work' }))()");
     await cdp.send("Page.reload");
-    await click('[data-home-task="gallery"]');
-    await waitFor("document.querySelectorAll('.author-browser-card').length === 1");
+    await click('[data-nav="gallery"]');
+    await waitFor("document.querySelectorAll('.author-gallery .directory-card-open').length === 1");
     checks.push({ name: "default-artist-after-home-loads-legacy-pages" });
 
-    await clickText('[aria-label="画廊布局"] button', "全部作品");
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
-    await click(".work-cover-button");
+    await clickText('.gallery-scope button', "作品");
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
+    await click(OPEN);
     await imageReady();
-    await clickText(".cinema-hud-island button", "元素透视");
+    await menu('[aria-label="更多工具"]', "元素与提示词");
     await waitFor("document.querySelector('.inspector-tag-name')?.textContent === 'fixture_page_0'");
     await main.evaluate("globalThis.__viewerInspect.controlled = true");
     await click('.inspector-page-pill:nth-child(2)');
@@ -373,7 +403,7 @@ try {
     await key("Escape");
     await waitFor("!document.querySelector('.element-inspector-drawer')");
     await main.evaluate("globalThis.__viewerInspect.controlled = false");
-    await clickText(".cinema-hud-island button", "元素透视");
+    await menu('[aria-label="更多工具"]', "元素与提示词");
     await waitFor("document.querySelector('.inspector-tag-name')?.textContent === 'fixture_page_0'");
     await main.evaluate("globalThis.__viewerInspect.pending[6].resolve(globalThis.__viewerInspect.response(2))");
     await cdp.evaluate("new Promise(done => setTimeout(done, 100))");
@@ -383,48 +413,49 @@ try {
     await waitFor("!document.querySelector('.cinema-lightbox-theater')");
     checks.push({ name: "inspector-out-of-order-result-error-loading-current-page-retry-and-unmount" });
 
-    await cdp.evaluate("(() => { const button = document.querySelector('.work-card-favorite'); button.click(); button.click(); })()");
-    await waitFor("document.querySelector('.work-card-favorite')?.classList.contains('active') && !document.querySelector('.work-card-favorite')?.disabled");
-    await waitFor("document.querySelector('.work-operation-notice')?.textContent.includes('已喜欢')");
-    await clickText(".work-operation-notice button", "撤销");
-    await waitFor("!document.querySelector('.work-card-favorite')?.classList.contains('active') && !document.querySelector('.work-operation-notice')");
-    await click(".work-select-toggle");
-    await click(".work-cover-button");
-    await waitFor("document.querySelector('.work-library-card').classList.contains('selected')");
+    await cdp.evaluate("(() => { const button = document.querySelector('.work-tile-favorite'); button.click(); button.click(); })()");
+    await waitFor("document.querySelector('.work-tile-favorite')?.hasAttribute('data-active') && !document.querySelector('.work-tile-favorite')?.disabled");
+    await waitFor("document.querySelector('.ui-toast-region .app-notice')?.textContent.includes('已喜欢')");
+    await clickText(".ui-toast-region .app-notice button", "撤销");
+    await waitFor("!document.querySelector('.work-tile-favorite')?.hasAttribute('data-active') && !document.querySelector('.ui-toast-region .app-notice')");
+    await click('[aria-label="选择作品"]');
+    await click(OPEN);
+    await waitFor("document.querySelector('[data-work-tile]').hasAttribute('data-selected')");
     assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"), false, "stable card callbacks used stale selection mode");
-    await click(".work-select-toggle");
+    await click('[aria-label="完成选择"]');
     checks.push({ name: "memoized-card-favorite-undo-and-current-selection-mode" });
 
     await cdp.evaluate("window.sanctuary.updateWorkFavorite(['pixiv:123456789'], true)");
-    await clickText('[aria-label="常用筛选"] button', '喜欢');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1 && document.querySelector('.work-card-favorite').classList.contains('active')");
-    await changeControl('[aria-label="搜索方式"]', 'name');
-    await changeControl('input[type="search"]', '不可能匹配的测试标题');
-    await waitFor("document.querySelector('.compact-empty h2')?.textContent === '当前条件下没有喜欢的作品'");
-    await changeControl('input[type="search"]', '我的三页');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
-    await changeControl('[aria-label="作品类型"]', 'local');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 0 && Boolean(document.querySelector('.compact-empty'))");
-    await changeControl('[aria-label="作品类型"]', '');
-    await clickText('[aria-label="画廊布局"] button', '相册');
-    await click('.collection-filter-button');
-    await waitFor("Boolean(document.querySelector('.work-collection-context')) && document.querySelectorAll('.work-library-card').length === 1");
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"常用筛选\"] button.active').textContent"), '全部');
-    assert.equal(await cdp.evaluate("document.querySelector('input[type=search]').value"), '', 'directory entry inherited unrelated old search');
-    await clickText('.work-collection-context button', '查看全部作品');
-    await waitFor("!document.querySelector('.work-collection-context') && document.querySelector('[aria-label=\"常用筛选\"] button.active')?.textContent === '全部'");
-    assert.equal(await cdp.evaluate("document.querySelector('input[type=search]').value"), '', "return all retained a stale search");
-    await changeControl('input[type="search"]', '');
+    await setPreset('喜欢');
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 1 && document.querySelector('.work-tile-favorite').hasAttribute('data-active')");
+    await nameSearch();
+    await changeControl(SEARCH, '不可能匹配的测试标题');
+    await waitFor("document.querySelector('.gallery-empty h2')?.textContent === '当前条件下没有喜欢的作品'");
+    await changeControl(SEARCH, '我的三页');
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
+    await setType('本地导入');
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 0 && Boolean(document.querySelector('.gallery-empty'))");
+    await setType('全部类型');
+    await clickText('.gallery-scope button', '相册');
+    await click('section[aria-label=相册] .directory-card-more');
+    await clickText('.ui-popover [role^="menuitem"]', '在作品中筛选');
+    await waitFor("[...document.querySelectorAll('.work-filter-chips .ui-chip')].some(c=>c.textContent.startsWith('相册：')) && document.querySelectorAll('[data-work-tile]').length === 1");
+    assert.equal(await activePreset(), '全部');
+    assert.equal(await cdp.evaluate("document.querySelector('.gallery-search-field input').value"), '', 'directory entry inherited unrelated old search');
+    await click('.work-filter-chips [aria-label^="移除筛选 相册"]');
+    await waitFor("!document.querySelector('.work-filter-chips') && ![...document.querySelectorAll('.work-filter-chips .ui-chip')].some(c=>/^(喜欢|最近浏览|未分相册)/.test(c.textContent))");
+    assert.equal(await cdp.evaluate("document.querySelector('.gallery-search-field input').value"), '', "return all retained a stale search");
+    await changeControl(SEARCH, '');
     await cdp.evaluate("window.sanctuary.updateWorkFavorite(['pixiv:123456789'], false)");
-    await clickText('[aria-label="常用筛选"] button', '最近浏览');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').value"), 'lastViewedAt');
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').disabled && document.querySelector('.work-sort-direction').disabled"), true);
+    await setPreset('最近浏览');
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
+    assert.match(await sortLabel(), /浏览时间/);
+    assert.equal(await sortDisabled(), true);
     await screenshot('recent-reading-gallery');
-    await clickText('[aria-label="常用筛选"] button', '全部');
+    await setPreset('全部作品');
     checks.push({ name: "favorite-recent-uncollected-compose-with-search-type-and-directory-entry-clears-unrelated-scope" });
 
-    await click('.work-cover-button');
+    await click(OPEN);
     await imageReady();
     await key('End');
     await waitFor("document.querySelector('.cinema-heading-group small')?.textContent.includes('第 3/3 页')");
@@ -432,7 +463,7 @@ try {
     // Close before the 500 ms coalescing interval: the last displayed page must still be flushed.
     await key('Escape');
     await waitForProgress(2);
-    await click('.work-cover-button');
+    await click(OPEN);
     await imageReady();
     assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 3/3 页')"), true, 'work cover did not resume its last successful page');
     await screenshot('continued-third-page');
@@ -445,7 +476,7 @@ try {
     fixtureDb.close();
     await main.evaluate(`(() => { const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain; const channel = 'library:record-work-view'; const original = ipc._invokeHandlers.get(channel); globalThis.__viewerReading = { original, requests: [] }; ipc.removeHandler(channel); ipc.handle(channel, (event, request) => { globalThis.__viewerReading.requests.push(request); return original(event, request); }); })()`);
     try {
-      await click('.work-cover-button');
+      await click(OPEN);
       await imageReady();
       await key('ArrowLeft');
       await waitFor("Boolean(document.querySelector('.cinema-load-error'))");
@@ -461,12 +492,12 @@ try {
       await main.evaluate("(() => { const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain; ipc.removeHandler('library:record-work-view'); ipc.handle('library:record-work-view', globalThis.__viewerReading.original); delete globalThis.__viewerReading; })()");
     }
 
-    await clickText('[aria-label="画廊布局"] button', '相册');
-    await click('.collection-card');
-    await clickText('[aria-label="画册模式"] button', '典藏网格');
+    await clickText('.gallery-scope button', '相册');
+    await click(ALBUM_CARD);
+    await clickText('.detail-header .ui-segmented button', '网格');
     await main.evaluate("(() => { const ipc = process.getBuiltinModule('module').createRequire(process.cwd() + '/package.json')('electron').ipcMain; const channel = 'library:get-work'; const original = ipc._invokeHandlers.get(channel); globalThis.__viewerMapping = { original, pending: [] }; ipc.removeHandler(channel); ipc.handle(channel, (event, request) => new Promise(resolve => globalThis.__viewerMapping.pending.push({ result: original(event, request), resolve }))); })()");
     try {
-      await click('.collection-detail-grid .art-preview-button');
+      await click(ALBUM_TILE);
       await waitForMain('globalThis.__viewerMapping.pending.length === 1');
       await waitFor("document.querySelector('.app-notice--info')?.textContent.includes('正在读取作品')");
       assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"), false, 'viewer opened before canonical assets were available');
@@ -476,7 +507,7 @@ try {
       await main.evaluate('globalThis.__viewerMapping.pending[0].resolve(globalThis.__viewerMapping.pending[0].result)');
       await cdp.evaluate("new Promise(done => setTimeout(done, 100))");
       assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"), false, 'canceled late work reopened its viewer');
-      await click('.collection-detail-grid .art-preview-button');
+      await click(ALBUM_TILE);
       await waitForMain('globalThis.__viewerMapping.pending.length === 2');
       await main.evaluate('globalThis.__viewerMapping.pending[1].resolve(globalThis.__viewerMapping.pending[1].result)');
       await imageReady();
@@ -488,8 +519,8 @@ try {
     }
     await waitForProgress(0);
     await key('Escape');
-    await clickText('[aria-label="画廊布局"] button', '全部作品');
-    await click('.work-cover-button');
+    await clickText('.gallery-scope button', '作品');
+    await click(OPEN);
     await imageReady();
     assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"), true, 'album entry did not save its canonical asset progress');
     await key('End');
@@ -501,19 +532,27 @@ try {
     checks.push({ name: 'cover-resumes-explicit-album-page-flushes-on-close-and-canceled-canonical-read-never-reopens' });
 
     await cdp.evaluate("(() => { window.__viewerUnhandled = 0; window.addEventListener('unhandledrejection', () => window.__viewerUnhandled++); })()");
-    // Delete only this fixture album through IPC while leaving the rendered select stale, then exercise a genuine failed assignment.
-    await cdp.evaluate("window.sanctuary.deleteCollection('viewer-album')");
-    await cdp.evaluate("(() => { const select = document.querySelector('.work-card-foot select'); Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, 'viewer-album'); select.dispatchEvent(new Event('change', { bubbles: true })); })()");
-    await waitFor("Boolean(document.querySelector('.app-notice--error')) && !document.querySelector('.work-card-foot select').disabled");
+    // Take the work out of the album, then make the next real assignment fail once in the main process.
+    await cdp.evaluate("window.sanctuary.removeWorkFromCollection('pixiv:123456789','viewer-album')");
+    await click('[data-nav="settings"]'); await click('[data-nav="gallery"]'); await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
+    await main.evaluate(`(() => {
+      const ipc=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').ipcMain;
+      const original=ipc._invokeHandlers.get('collections:add-work');ipc.removeHandler('collections:add-work');
+      ipc.handle('collections:add-work',()=>{ipc.removeHandler('collections:add-work');ipc.handle('collections:add-work',original);throw new Error('隔离入册失败')});return true;
+    })()`);
+    await contextMenu(OPEN);
+    await clickText('.ui-popover [role^="menuitem"]', '加入相册');
+    await clickText('.ui-popover [role^="menuitem"]', '查看器测试相册');
+    await waitFor("Boolean(document.querySelector('.app-notice--error')) && !document.querySelector('.work-tile-favorite').disabled");
     assert.equal(await cdp.evaluate("window.__viewerUnhandled"), 0, "card mutation produced an unhandled rejection");
-    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.work-operation-notice'))"), false, "failed assignment claimed success");
+    assert.equal(await cdp.evaluate("Boolean(document.querySelector('.ui-toast-region .app-notice'))"), false, "failed assignment claimed success");
     checks.push({ name: "failed-card-assignment-surfaces-error-and-releases-busy-without-success-or-rejection" });
 
-    await changeControl('[aria-label="搜索方式"]', 'name');
-    await changeControl('.work-search input', '我的三页');
-    await changeControl('[aria-label="作品类型"]', 'illustration');
-    await changeControl('[aria-label="排序字段"]', 'title');
-    await click('[data-saved-filters="open"]');
+    await nameSearch();
+    await changeControl(SEARCH, '我的三页');
+    await setType('插画');
+    await menu('[aria-label^="排序："]', '标题');
+    await openSavedFilters();
     await waitFor("Boolean(document.querySelector('.saved-work-filters-dialog input'))");
     await changeControl('[aria-label="筛选名称"]', '三页参考');
     await clickText('.saved-work-filters-dialog button', '保存筛选');
@@ -523,8 +562,8 @@ try {
     assert.ok(savedBounds.left >= 0 && savedBounds.right <= savedBounds.width && savedBounds.bottom <= savedBounds.height && savedBounds.overflow <= 2);
     await screenshot('saved-work-filter-900');
     await key('Escape');
-    await changeControl('.work-search input', '');
-    await changeControl('[aria-label="作品类型"]', '');
+    await changeControl(SEARCH, '');
+    await setType('全部类型');
 
     // Restart the actual Electron process, keeping only this disposable SQLite library.
     cdp.close();
@@ -538,26 +577,26 @@ try {
     const restartedTarget = await waitForRenderer();
     cdp = await connectCdp(restartedTarget.webSocketDebuggerUrl);
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 900, height: 620, deviceScaleFactor: 1, mobile: false });
-    await click('[data-home-task="gallery"]');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
-    await click('.work-cover-button');
+    await click('[data-nav="gallery"]');
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
+    await click(OPEN);
     await imageReady();
     assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 3/3 页')"), true, 'reading progress did not survive an Electron restart');
     assert.match(await cdp.evaluate("document.querySelector('.cinema-heading-group strong').textContent"),/^我的三页收藏/,'gallery name did not survive restart');
     checks.push({name:'gallery-display-name-survives-real-electron-restart'});
     await key('Escape');
     await waitForProgress(2);
-    await clickText('[aria-label="常用筛选"] button', '最近浏览');
-    await waitFor("document.querySelectorAll('.work-library-card').length === 1");
+    await setPreset('最近浏览');
+    await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
     checks.push({ name: 'successful-reading-page-and-recent-history-survive-real-electron-restart' });
-    await click('[data-saved-filters="open"]');
+    await openSavedFilters();
     await waitFor("document.querySelectorAll('[data-filter-apply]').length === 1");
     await click('[data-filter-apply]');
-    await waitFor("document.querySelector('.work-search input')?.value === '我的三页'");
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"作品类型\"]').value"), 'illustration');
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"排序字段\"]').value"), 'title');
-    assert.equal(await cdp.evaluate("document.querySelector('[aria-label=\"常用筛选\"] button.active').textContent"), '全部');
-    await click('[data-saved-filters="open"]');
+    await waitFor("document.querySelector('.gallery-search-field input')?.value === '我的三页'");
+    assert.equal(await hasChip('插画'), true);
+    assert.match(await sortLabel(), /标题/);
+    assert.equal(await activePreset(), '全部');
+    await openSavedFilters();
     await click('[aria-label="删除筛选 三页参考"]');
     await waitFor("document.querySelectorAll('[data-filter-apply]').length === 0");
     assert.equal(await cdp.evaluate("(async () => (await window.sanctuary.queryWorks({})).total)()"), 1);

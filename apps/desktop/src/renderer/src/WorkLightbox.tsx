@@ -62,7 +62,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
       <header className="cinema-hud-island viewer-bar">
         <div className="cinema-heading-group">
           <strong>{displayTitle}</strong>
-          <small>{work.artistName ?? "本地作品"}{work.assets.length > 1 ? ` · ${pageIndex + 1} / ${work.assets.length}` : ""}</small>
+          <small>{work.artistName ?? "本地作品"}{work.assets.length > 1 ? ` · 第 ${pageIndex + 1}/${work.assets.length} 页` : ""}</small>
         </div>
 
         <div className="cinema-controls-group">

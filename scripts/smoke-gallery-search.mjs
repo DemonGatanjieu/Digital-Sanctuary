@@ -60,7 +60,7 @@ try {
   await click('[data-nav=inspiration]');await click('[data-nav=gallery]');await waitFor("document.querySelectorAll('[data-work-tile]').length===3");
   await click('[aria-label="只看较相关结果"]');await waitFor("document.querySelectorAll('[data-work-tile]').length===1");
   checks.push('default-relevance-hides-unrelated-images-and-expansion-reuses-the-same-index-and-survives-navigation');
-  await click('[data-work-tile] .work-tile-image');await waitFor("document.querySelector('.cinema-lightbox-theater')?.textContent.includes('2 / 2')");
+  await click('[data-work-tile] .work-tile-image');await waitFor("document.querySelector('.cinema-lightbox-theater')?.textContent.includes('第 2/2 页')");
   await click('[aria-label="关闭大图"]');
   checks.push('best-matching-page-becomes-card-cover-and-opens-the-same-original-page');
   await click('[data-nav=inspiration]');await click('[data-nav=gallery]');assert.equal(await cdp.evaluate("document.querySelector('.gallery-search-field input').value"),'夜晚，月亮和星星');

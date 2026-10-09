@@ -33,7 +33,7 @@
 .viewer-icon, .viewer-readout, .viewer-text {
   display: inline-grid;
   place-items: center;
-  height: 34px;
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: var(--ds-radius-md);
@@ -43,12 +43,12 @@
   font-size: var(--ds-font-13);
   cursor: pointer;
 }
-.viewer-icon { width: 34px; }
+.viewer-icon { width: 36px; }
 .viewer-readout { min-width: 52px; font-variant-numeric: tabular-nums; }
 .viewer-text { padding: 0 10px; }
 .viewer-icon:hover, .viewer-readout:hover, .viewer-text:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
 .viewer-icon[aria-pressed="true"], .viewer-icon[aria-expanded="true"], .viewer-text[aria-pressed="true"] { color: #fff; background: rgba(255, 255, 255, 0.18); }
-.viewer-bar .cinema-btn-close { position: static; width: 34px; height: 34px; border: 0; background: transparent; box-shadow: none; }
+.viewer-bar .cinema-btn-close { position: static; width: 36px; height: 36px; border: 0; background: transparent; box-shadow: none; }
 .viewer-divider { width: 1px; height: 18px; margin: 0 6px; background: rgba(255, 255, 255, 0.2); }
 
 .cinema-image-entity { border-radius: 0; box-shadow: none; }
@@ -109,7 +109,7 @@
   box-shadow: var(--ds-shadow-xl);
   animation: side-in 0.18s var(--ds-ease) both;
 }
-@keyframes side-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes side-in { from { opacity: 0; } to { opacity: 1; } }
 
 .work-information-drawer { gap: 20px; align-content: start; font-size: var(--ds-font-13); }
 .work-information-drawer h2 { font-size: var(--ds-font-16); font-weight: var(--ds-weight-semibold); }

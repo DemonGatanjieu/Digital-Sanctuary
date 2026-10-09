@@ -59,7 +59,13 @@ export function Popover({ anchor, onClose, children, label, align = "start", rol
         close();
         return;
       }
-      if (role !== "menu" || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
+      if (role !== "menu") return;
+      // While a menu is open it owns the keyboard: arrows, Home/End and shortcuts must not reach the page or viewer behind it.
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+        if (event.key !== "Tab" && event.key !== "Enter" && event.key !== " ") event.stopImmediatePropagation();
+        return;
+      }
+      event.stopImmediatePropagation();
       const items = [...(panel.current?.querySelectorAll<HTMLElement>("[role^=menuitem]:not(:disabled)") ?? [])];
       if (!items.length) return;
       event.preventDefault();
