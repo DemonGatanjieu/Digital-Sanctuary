@@ -4,14 +4,16 @@
 
 ## 唯一现行计划
 
-- [`ACTIVE_ROADMAP.md`](./ACTIVE_ROADMAP.md)：当前施工任务、排队提案、阶段门槛和完成基线的唯一索引。
+- [`../design/IMAGE_FIRST_REDESIGN.md`](../design/IMAGE_FIRST_REDESIGN.md)：整顿期唯一路线（阶段与状态）。[`ACTIVE_ROADMAP.md`](./ACTIVE_ROADMAP.md) 只保留指向它的说明。
 
-## 当前任务与提案
+## 整顿期后再评估的提案
 
 - [`TASK_LOCAL_AI_PLAYGROUND_AND_WIDGET_WORKSHOP.md`](./TASK_LOCAL_AI_PLAYGROUND_AND_WIDGET_WORKSHOP.md)：后续方向；本地灵感台之后的自由工作台与安全小组件，尚未整包授权施工。
 - [`TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md`](./TASK_SEMANTIC_SEARCH_CLIP_AND_EXTERNAL_VISION.md)：排队中的语义搜索架构提案，尚未授权施工。
 
 ## 历史归档
+
+- [`archive/2026-10-09-everyday-library-roadmap-before-redesign.md`](./archive/2026-10-09-everyday-library-roadmap-before-redesign.md)：重设计前的现行路线全文（各批功能与验收记录）。
 
 - [`archive/2026-10-04-serpent-workflow-adoption-complete.md`](./archive/2026-10-04-serpent-workflow-adoption-complete.md)：已完成的导入、作品信息、保存筛选与统一任务入口整合，四批完整门禁与真实窗口验收。
 
