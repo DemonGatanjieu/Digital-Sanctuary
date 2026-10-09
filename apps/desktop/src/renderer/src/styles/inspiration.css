@@ -5,7 +5,7 @@
 .inspiration-header h1 { margin: 0 0 2px; font-size: var(--ds-font-20); font-weight: var(--ds-weight-semibold); letter-spacing: 0; }
 .inspiration-header p:last-child { max-width: 680px; margin: 0; color: var(--text-secondary); font-size: var(--ds-font-12); }
 .inspiration-new, .inspiration-send { border: 0; border-radius: var(--ds-radius-md); padding: 0 14px; min-height: var(--ds-control-md); color: var(--ds-on-accent); font-weight: var(--ds-weight-semibold); background: var(--ds-primary); cursor: pointer; }
-.inspiration-new { flex-shrink: 0; white-space: nowrap; }
+.inspiration-new { flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .inspiration-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(160px, 200px) minmax(0, 1fr) minmax(180px, 230px); grid-template-rows: minmax(0, 1fr); gap: 18px; }
 .inspiration-layout > * { min-width: 0; min-height: 0; }
 .inspiration-sessions, .inspiration-chat, .inspiration-presets { border: 1px solid var(--ds-border-subtle); border-radius: var(--ds-radius-lg); background: var(--ds-bg-card); overflow: hidden; }
@@ -18,7 +18,7 @@
 .inspiration-session > button:first-child { min-width: 0; padding: 11px 8px 11px 13px; border: 0; background: transparent; text-align: left; color: inherit; cursor: pointer; }
 .inspiration-session strong, .inspiration-session small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .inspiration-session small { margin-top: 4px; color: var(--text-tertiary); }
-.inspiration-delete { width: 25px; height: 25px; border: 0; border-radius: 50%; color: var(--text-tertiary); background: transparent; cursor: pointer; }
+.inspiration-delete { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--ds-radius-sm); color: var(--text-tertiary); background: transparent; cursor: pointer; }
 .inspiration-delete:hover { color: var(--ds-danger-text); background: var(--ds-danger-light); }
 .inspiration-chat { position: relative; display: flex; flex-direction: column; padding: 16px; }
 .inspiration-chat > :not(.inspiration-messages) { flex-shrink: 0; }
@@ -37,14 +37,13 @@
 .inspiration-source-actions button:hover { color: var(--ds-text-heading); background: var(--ds-bg-hover); }
 .inspiration-source-actions button:disabled { opacity: .45; cursor: default; }
 .inspiration-attach-empty { display: grid; grid-template-columns: 38px 1fr; grid-template-rows: auto auto; column-gap: 11px; align-items: center; width: 100%; padding: 11px 13px; border: 1px dashed var(--ds-border-light); border-radius: var(--ds-radius-md); color: inherit; background: transparent; text-align: left; cursor: pointer; }
-.inspiration-attach-empty > span { grid-row: 1 / 3; display: grid; place-items: center; width: 34px; height: 34px; border-radius: var(--ds-radius-md); color: var(--ds-text-secondary); font-size: 19px; background: var(--ds-bg-hover); }
+.inspiration-attach-empty > svg { grid-row: 1 / 3; justify-self: center; color: var(--ds-text-secondary); }
 .inspiration-attach-empty strong { font-size: 13px; }
 .inspiration-attach-empty small { color: var(--text-tertiary); }
 .inspiration-attach-empty:hover { border-color: var(--ds-text-muted); background: var(--ds-bg-hover); }
 .inspiration-welcome { margin: auto; max-width: 520px; text-align: center; padding: 18px; }
 .inspiration-welcome h2 { margin: 12px 0 6px; font-size: var(--ds-font-20); font-weight: var(--ds-weight-semibold); }
 .inspiration-welcome p { color: var(--text-secondary); line-height: 1.7; }
-.inspiration-orb { display: inline-grid; place-items: center; width: 60px; height: 60px; border-radius: 50%; color: var(--ds-text-secondary); font-size: 22px; background: var(--ds-bg-hover); }
 .inspiration-messages { flex: 1 1 0; min-height: 0; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 4px; }
 .inspiration-messages:focus-visible { outline: 2px solid var(--ds-primary); outline-offset: -2px; border-radius: 8px; }
 .inspiration-message { max-width: 84%; margin: 12px 0; }
@@ -68,13 +67,13 @@
 .inspiration-send { padding: 0 16px; }
 .inspiration-send:disabled { opacity: .45; cursor: default; }
 .inspiration-stop { border: 1px solid var(--ds-danger-border); border-radius: var(--ds-radius-md); padding: 0 14px; min-height: var(--ds-control-md); color: var(--ds-danger-text); background: transparent; cursor: pointer; }
-.inspiration-regenerate { align-self: center; margin-top: 8px; border: 0; color: var(--text-secondary); background: transparent; cursor: pointer; }
-.inspiration-presets > button { display: block; width: 100%; margin-bottom: 8px; padding: 12px 13px; border: 1px solid transparent; border-radius: var(--ds-radius-md); background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.inspiration-presets > button:hover { background: var(--ds-bg-hover); }
-.inspiration-presets > button.active { color: var(--ds-text-heading); background: var(--ds-bg-active); }
-.inspiration-presets > button.active strong { color: var(--ds-primary); }
-.inspiration-presets > button strong, .inspiration-presets > button small { display: block; }
-.inspiration-presets > button small { margin-top: 4px; color: var(--text-tertiary); line-height: 1.4; }
+.inspiration-regenerate { align-self: center; display: inline-flex; align-items: center; gap: 4px; min-height: 32px; margin-top: 8px; border: 0; color: var(--text-secondary); background: transparent; cursor: pointer; }
+:is(.inspiration-presets, .inspiration-writing-presets) > button { display: block; width: 100%; margin-bottom: 8px; padding: 12px 13px; border: 1px solid transparent; border-radius: var(--ds-radius-md); background: transparent; color: inherit; text-align: left; cursor: pointer; }
+:is(.inspiration-presets, .inspiration-writing-presets) > button:hover { background: var(--ds-bg-hover); }
+:is(.inspiration-presets, .inspiration-writing-presets) > button.active { color: var(--ds-text-heading); background: var(--ds-bg-active); }
+:is(.inspiration-presets, .inspiration-writing-presets) > button.active strong { color: var(--ds-primary); }
+:is(.inspiration-presets, .inspiration-writing-presets) > button strong, :is(.inspiration-presets, .inspiration-writing-presets) > button small { display: block; }
+:is(.inspiration-presets, .inspiration-writing-presets) > button small { margin-top: 4px; color: var(--text-tertiary); line-height: 1.4; }
 .inspiration-model-controls { margin: -2px 0 20px; padding: 13px; border: 0; border-radius: 0; border-bottom: 1px solid var(--ds-border-subtle); padding: 0 0 16px; background: transparent; }
 .inspiration-model-controls .inspiration-panel-title { margin-left: 0; margin-right: 0; }
 .inspiration-model-controls > select { width: 100%; padding: 10px 11px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); outline: 0; color: inherit; background: var(--ds-bg-card); font: inherit; }
@@ -92,9 +91,6 @@
 .inspiration-setup-notice { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; padding: 14px 18px; }
 .inspiration-setup-notice p { margin: 0; }
 .inspiration-setup-notice button { min-height: 36px; white-space: nowrap; }
-.inspiration-boundary { margin-top: 20px; padding: 12px; border-radius: var(--ds-radius-md); color: var(--text-secondary); background: var(--ds-bg-card-subtle); }
-.inspiration-boundary strong { color: var(--text-primary); font-size: 13px; }
-.inspiration-boundary p { margin: 6px 0 0; font-size: 12px; line-height: 1.55; }
 .inspiration-picker { width: min(980px, calc(100vw - 70px)); height: min(760px, calc(100vh - 70px)); box-sizing: border-box; display: flex; flex-direction: column; padding: 24px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-lg); color: var(--text-primary); background: var(--ds-bg-card); box-shadow: var(--ds-shadow-xl); }
 .inspiration-picker > header { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 17px; }
 .inspiration-picker > header h2 { margin: 0 0 4px; font-size: var(--ds-font-20); font-weight: var(--ds-weight-semibold); }
@@ -132,8 +128,7 @@
   .inspiration-chat { padding: 12px; }
   .inspiration-welcome { padding: 12px; }
   .inspiration-welcome h2 { font-size: var(--ds-font-16); }
-  .inspiration-orb { width: 44px; height: 44px; font-size: 18px; }
-  .inspiration-composer { padding: 10px; }
+    .inspiration-composer { padding: 10px; }
   .inspiration-composer textarea { height: 54px; }
   .inspiration-composer-actions { gap: 8px; }
   .inspiration-composer-actions small { font-size: 10px; }
@@ -145,3 +140,6 @@
 .inspiration-reference-strip .inspiration-source img { width: 44px; height: 44px; }
 .inspiration-reference-strip .inspiration-source-actions { flex-direction: column; gap: 3px; }
 .inspiration-reference-strip .inspiration-source-actions button { padding: 4px 8px; }
+
+.inspiration-writing-presets { margin-top: 4px; }
+.inspiration-writing-presets > summary { padding: 8px 13px; color: var(--ds-text-secondary); font-size: var(--ds-font-13); cursor: pointer; }

@@ -15,14 +15,15 @@ import { DEFAULT_INSPIRATION_SETTINGS } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { DialogOverlay } from "./DialogOverlay";
 import { Button } from "./Button";
+import { Icon } from "./Icon";
 
-const PRESETS: Array<{ id: InspirationPresetId; label: string; hint: string; starter: string }> = [
-  { id: "chat", label: "随便聊聊", hint: "讨论灵感、设定和写作问题", starter: "我有一个想法，想和你一起把它梳理清楚：" },
+const PRESETS: Array<{ id: InspirationPresetId; label: string; hint: string; starter: string; writing?: true }> = [
   { id: "image_chat", label: "聊聊这张图", hint: "读画面、找细节和叙事线索", starter: "请认真看看这张图，先说说你看到了什么，再聊聊它可能藏着的故事。" },
-  { id: "story_scene", label: "写成小说片段", hint: "从画面或想法写出一个完整场景", starter: "请以这张图或我的描述为起点，写成一个有动作、氛围和人物语气的小说场景。" },
-  { id: "character_profile", label: "生成角色设定", hint: "外观、性格、动机和矛盾钩子", starter: "请把这个人物发展成可继续创作的角色设定。" },
-  { id: "world_building", label: "生成世界观", hint: "环境规则、生活细节与冲突来源", starter: "请从这个画面或想法出发，建立一个有生活质感和冲突空间的世界观。" },
-  { id: "prompt_notes", label: "整理提示词", hint: "转成结构清楚的生成提示词笔记", starter: "请把画面和我的要求整理成生成提示词笔记，分开主体、环境、构图、光色、材质与负向约束。" }
+  { id: "prompt_notes", label: "整理成提示词", hint: "按主体、环境、构图、光色分开写", starter: "请把画面和我的要求整理成生成提示词笔记，分开主体、环境、构图、光色、材质与负向约束。" },
+  { id: "chat", label: "随便聊聊", hint: "不带图也可以", starter: "我有一个想法，想和你一起把它梳理清楚：" },
+  { id: "story_scene", label: "写成小说片段", hint: "从画面写出一个完整场景", starter: "请以这张图或我的描述为起点，写成一个有动作、氛围和人物语气的小说场景。", writing: true },
+  { id: "character_profile", label: "生成角色设定", hint: "外观、性格、动机和矛盾", starter: "请把这个人物发展成可继续创作的角色设定。", writing: true },
+  { id: "world_building", label: "生成世界观", hint: "环境规则与冲突来源", starter: "请从这个画面或想法出发，建立一个有生活质感和冲突空间的世界观。", writing: true }
 ];
 
 export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }: {
@@ -316,11 +317,17 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     catch (caught) { if (mounted.current) setError(messageOf(caught)); }
   }
 
+  const presetButton = (preset: typeof PRESETS[number]) => (
+    <button key={preset.id} type="button" className={(selected?.presetId ?? presetId) === preset.id ? "active" : ""} onClick={() => choosePreset(preset)}>
+      <strong>{preset.label}</strong><small>{preset.hint}</small>
+    </button>
+  );
+
   return (
     <section className="inspiration-view">
       <header className="inspiration-header">
-        <div><h1>创作</h1><p>聊图、写设定、整理提示词。图片和对话只留在本机。</p></div>
-        <button type="button" className="inspiration-new" onClick={beginNew}>＋ 新对话</button>
+        <div><h1>创作</h1><p>从图出发：聊图、整理成提示词，也可以写设定。</p></div>
+        <button type="button" className="inspiration-new" onClick={beginNew}><Icon name="plus" size={16} />新对话</button>
       </header>
 
       {!modelsLoading && models.length === 0 && (
@@ -339,7 +346,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
               <button type="button" onClick={() => selectConversation(item)}>
                 <strong>{item.title}</strong><small>{PRESETS.find((preset) => preset.id === item.presetId)?.label} · {formatTime(item.updatedAt)}</small>
               </button>
-              <button type="button" className="inspiration-delete" aria-label={`删除 ${item.title}`} onClick={() => void removeConversation(item.id)}>×</button>
+              <button type="button" className="inspiration-delete" aria-label={`删除 ${item.title}`} onClick={() => void removeConversation(item.id)}><Icon name="close" size={14} /></button>
             </div>
           ))}
         </aside>
@@ -365,13 +372,13 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
             </div>
           </div>)}</div>
           {referenceSources.length < 4 && <button type="button" className="inspiration-attach-empty" disabled={Boolean(requestId) || sourcesLoading} onClick={() => { setAppendReference(true); setGalleryPickerOpen(true); }}>
-            <span>＋</span><strong>{referenceSources.length ? "再加入一张参考图" : "从画廊加入参考图"}</strong><small>最多 4 张；可以选择多页作品中的具体一页</small>
+            <Icon name="plus" size={18} /><strong>{referenceSources.length ? "再加入一张参考图" : "从图库加入参考图"}</strong><small>最多 4 张；可以选择多页作品中的具体一页</small>
           </button>}
           <div ref={messagesRef} className="inspiration-messages" tabIndex={0} aria-label="对话消息">
             {!selected && !requestId && (
               <div className="inspiration-welcome">
-                <span className="inspiration-orb">✦</span><h2>{sourceWork ? "把这张图变成新的灵感" : "今天想一起做点什么？"}</h2>
-                <p>{sourceWork ? "参考图已经带进来了。选一个方向，或者直接改写下面的话。" : "不必先写完整提示词，像平时聊天一样说就可以。"}</p>
+                <h2>{sourceWork ? "参考图已经带进来了" : "从一张图开始"}</h2>
+                <p>{sourceWork ? "选一种方式，或者直接改写下面的话。" : "在图库多选后点“拿去创作”，或在上面加入参考图。不带图也可以直接聊。"}</p>
               </div>
             )}
             <InspirationMessageTimeline
@@ -388,7 +395,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
           {outputNotice && <AppNotice tone="success">{outputNotice}</AppNotice>}
           {requestId && !pendingVisible && <AppNotice tone="info">另一段对话正在生成。可以先写草稿，完成后回答会保存在原对话。</AppNotice>}
           <div className="inspiration-composer">
-            <div className="inspiration-mode-pill">✦ {activePreset.label}</div>
+            <div className="inspiration-mode-pill">{activePreset.label}</div>
             <textarea
               maxLength={referenceSources.length ? 2000 : 8000}
               value={draft}
@@ -408,16 +415,16 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
             </div>
           </div>
           {selected?.messages.at(-1)?.role === "assistant" && !requestId && (
-            <button type="button" className="inspiration-regenerate" disabled={modelsLoading || models.length === 0} onClick={() => void regenerate()}>↻ 换一种回答</button>
+            <button type="button" className="inspiration-regenerate" disabled={modelsLoading || models.length === 0} onClick={() => void regenerate()}><Icon name="refresh" size={14} />换一种回答</button>
           )}
         </article>
 
         <aside className="inspiration-presets">
           <div className="inspiration-model-controls">
-            <div className="inspiration-panel-title"><strong>本次模型</strong><small>仅影响灵感台</small></div>
+            <div className="inspiration-panel-title"><strong>本次模型</strong><small>仅影响创作</small></div>
             {models.length > 0 ? (
               <>
-                <select value={modelId} disabled={Boolean(requestId)} onChange={(event) => setModelId(event.target.value)} aria-label="选择灵感台本地模型">
+                <select value={modelId} disabled={Boolean(requestId)} onChange={(event) => setModelId(event.target.value)} aria-label="选择创作模型">
                   {modelId && !models.some((model) => model.id === modelId) && <option value={modelId}>原模型已不可用</option>}
                   {models.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
                 </select>
@@ -443,12 +450,11 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
             <p className="inspiration-next-answer-note">调整会从下一次回答开始生效。</p>
           </div>
           <div className="inspiration-panel-title"><strong>创作方式</strong><small>每次新对话选一种</small></div>
-          {PRESETS.map((preset) => (
-            <button key={preset.id} type="button" className={(selected?.presetId ?? presetId) === preset.id ? "active" : ""} onClick={() => choosePreset(preset)}>
-              <strong>{preset.label}</strong><small>{preset.hint}</small>
-            </button>
-          ))}
-          <div className="inspiration-boundary"><strong>资源有界</strong><p>会话最多 30 段，每段最多 80 条消息；传给模型的只取最近上下文，旧内容不会无限挤占内存。</p></div>
+          {PRESETS.filter((preset) => !preset.writing).map((preset) => presetButton(preset))}
+          <details className="inspiration-writing-presets" open={PRESETS.some((preset) => preset.writing && preset.id === (selected?.presetId ?? presetId))}>
+            <summary>更多写作方式</summary>
+            {PRESETS.filter((preset) => preset.writing).map((preset) => presetButton(preset))}
+          </details>
         </aside>
       </div>
       {galleryPickerOpen && (
@@ -563,7 +569,7 @@ function InspirationGalleryPicker({ onClose, onSelect }: {
     setPickerError("");
     try {
       const work = await window.sanctuary.getWork(item.id);
-      if (!work) throw new Error("这件作品已经不在画廊里了");
+      if (!work) throw new Error("这件作品已经不在图库里了");
       const pages = work.assets.filter((asset) => asset.mediaType === "image" && asset.fileState === "available");
       if (pages.length === 0) throw new Error("这件作品暂时没有可用的本地图片");
       if (pages.length === 1) onSelect(work, pages[0]!.pageIndex);
@@ -581,10 +587,10 @@ function InspirationGalleryPicker({ onClose, onSelect }: {
 
   return (
     <DialogOverlay onClose={onClose}>
-      <section className="inspiration-picker" role="dialog" aria-modal="true" aria-label="从画廊选择参考图">
+      <section className="inspiration-picker" role="dialog" aria-modal="true" aria-label="从图库选择参考图">
         <header>
           <div>
-            <h2>{expandedWork ? "选择具体一页" : "从画廊加入参考图"}</h2>
+            <h2>{expandedWork ? "选择具体一页" : "从图库加入参考图"}</h2>
             <p>{expandedWork ? `《${expandedWork.title}》共有 ${availablePages.length} 张可用图片` : "最近保存的作品会排在前面，也可以按标题或画师搜索。"}</p>
           </div>
           <button type="button" className="dialog-close" onClick={onClose} aria-label="关闭">✕</button>
