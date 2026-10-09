@@ -49,6 +49,12 @@ export class ImageWorkbenchService {
     if(!isAnalysisScope(value))throw new Error("整理范围无效");
     this.#assertIdle();const s=this.#create(owner,"library","当前图库范围",false);s.state.scope=value;void this.#scanLibrary(s,value);return this.#snapshot(s,0,"all");
   }
+  runLibrary(owner: number, value: unknown, input: unknown): WorkbenchSnapshot {
+    if(!isAnalysisScope(value))throw new Error("整理范围无效");
+    const query=parseWorkbenchQuery(input);this.#assertIdle();
+    const s=this.#create(owner,"library","当前图库范围",false);s.state.scope=value;s.state.query=query;
+    void this.#scanLibrary(s,value,query);return this.#snapshot(s,0,"matches");
+  }
   current(owner: number, source: unknown): WorkbenchSnapshot | null {
     this.#prune();if(source!=="folder"&&source!=="library")throw new Error("图片来源无效");
     const s=[...this.#sessions.values()].reverse().find(s=>s.owner===owner&&s.state.source===source&&!s.state.galleryQuery);
@@ -219,7 +225,7 @@ export class ImageWorkbenchService {
       if(s.state.limitReached)s.state.warnings.push("已达到本批上限（1,000 张图片或 20,000 个目录项），范围未扫描完。请改选更小的文件夹。");
     }catch(error){s.state.phase="failed";s.state.error=this.#message(error);}
   }
-  async #scanLibrary(s: Session,scope: AnalysisScope) {
+  async #scanLibrary(s: Session,scope: AnalysisScope,query?: WorkbenchQuery) {
     try {
       for(let offset=0;!s.cancelled;offset+=100){
         const rows=this.database.listWorkbenchAssets(scope,offset,100);
@@ -230,6 +236,7 @@ export class ImageWorkbenchService {
       }
       if(s.state.limitReached)s.state.warnings.push("当前范围超过 1,000 张图片，请通过相册、画师或图库已选缩小范围后重建。");
       s.state.phase=s.cancelled?"cancelled":"ready";
+      if(query&&!s.cancelled){if(s.entries.length)this.start(s.owner,s.state.id,query);else s.state.phase="completed";}
     }catch(error){s.state.phase="failed";s.state.error=this.#message(error);}
   }
   async #analyze(s: Session,q: WorkbenchQuery,rules: FilterRule[]) {
@@ -283,9 +290,15 @@ export class ImageWorkbenchService {
     if(!missingLeaf){const info=await lstat(path);if(!info.isFile()||info.size>512*1024*1024)throw new Error("图片不可读取或超过 512 MB");}
   }
   #snapshot(s: Session,offset: number,filter: string): WorkbenchSnapshot {
-    s.touched=Date.now();const entries=s.entries.filter(e=>filter==="failed"?e.item.status==="failed":filter==="matches"&&s.state.query?e.item.matched===true:true);
+    if(s.state.source==="library"&&!s.state.galleryQuery&&!["scanning","analyzing"].includes(s.state.phase)){
+      const present=this.database.matchingWorkIds(s.entries.flatMap(e=>"workId" in e.item.target?[e.item.target.workId]:[]),{});
+      const remaining=s.entries.filter(e=>"workId" in e.item.target&&present.has(e.item.target.workId));
+      if(remaining.length!==s.entries.length){s.entries=remaining;s.state.total=remaining.length;s.state.processed=remaining.filter(e=>e.item.status!=="pending").length;s.state.failed=remaining.filter(e=>e.item.status==="failed").length;}
+    }
+    const matches=(e:Entry)=>e.item.matched===true&&(s.state.query?.mode!=="description"||Number.isFinite(e.item.score)&&e.item.score!>=GALLERY_SEARCH_MIN_SIMILARITY);
+    s.touched=Date.now();const entries=s.entries.filter(e=>filter==="failed"?e.item.status==="failed":filter==="matches"&&s.state.query?matches(e):true);
     if(s.state.query?.mode==="description")entries.sort((a,b)=>(b.item.score??-2)-(a.item.score??-2)||a.item.id.localeCompare(b.item.id));
-    return structuredClone({...s.state,matched:s.entries.filter(e=>e.item.matched).length,unanalysed:s.entries.filter(e=>e.item.status==="pending").length,
+    return structuredClone({...s.state,matched:s.entries.filter(matches).length,unanalysed:s.entries.filter(e=>e.item.status==="pending").length,
       items:entries.slice(offset,offset+60).map(e=>e.item),hasMore:entries.length>offset+60});
   }
   #owned(owner: number,id: unknown): Session {

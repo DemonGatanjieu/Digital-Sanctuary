@@ -94,8 +94,8 @@ describe("task-based navigation", () => {
   it("opens classification suggestions for the selected works without starting analysis", () => {
     const markup = renderToStaticMarkup(<AnalysisView collections={[]} artists={[]} selectedWorkIds={["work-1"]}
       status={null} error="" onApplied={resolve} onError={ignore} onOpenProtection={ignore} onImportPrepared={ignore} />);
-    expect(markup).toContain("选择要整理的范围");
-    expect(markup).toContain("1 项已选");
+    expect(markup).toContain("相册建议与任务记录");
+    expect(markup).toContain("图库已选 · 1 件");
     expect(markup).not.toContain("排查配置与条件");
   });
 });

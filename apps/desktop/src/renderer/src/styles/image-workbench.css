@@ -1,6 +1,21 @@
-.image-workbench { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 24px; margin-top: 20px; align-items: start; }
+.image-workbench { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-top: 12px; align-items: start; }
 .image-workbench-controls, .image-workbench-results { min-width: 0; padding: 20px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-lg); background: var(--ds-bg-card); }
-.image-workbench-controls { display: grid; gap: 12px; }
+.image-workbench-controls { display: grid; gap: 10px; }
+.workbench-request { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.workbench-request .organize-field { flex: 1 1 260px; margin: 0; }
+.workbench-request > .ui-button { min-height: 42px; }
+.workbench-folder-choice { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+.workbench-folder-choice label { font-size: 13px; color: var(--ds-text-body); }
+.workbench-folder-choice p { flex: 1 1 180px; }
+.organize-inline-field { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ds-text-body); }
+.organize-source-tools select { max-width: 100%; min-height: 38px; padding: 7px 10px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); background: var(--ds-bg-card); color: var(--ds-text-heading); }
+.album-suggestions { padding: 20px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-lg); background: var(--ds-bg-card); }
+.album-suggestions header, .album-suggestions-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.album-suggestions h2 { margin: 0; font-size: 18px; }
+.album-suggestions p, .album-suggestions small { color: var(--ds-text-secondary); line-height: 1.6; }
+.album-suggestions-actions { margin: 14px 0; font-size: 13px; }
+.album-suggestions-jobs { display: grid; gap: 14px; }
+.album-suggestions progress { width: 100%; height: 8px; accent-color: var(--ds-primary); }
 .workbench-analysis-actions { display: grid; gap: 10px; }
 .organize-source-tools { display: contents; }
 .organize-source-tools > .ui-segmented { margin-bottom: 0; background: var(--ds-bg-card); border-color: var(--ds-border-light); }

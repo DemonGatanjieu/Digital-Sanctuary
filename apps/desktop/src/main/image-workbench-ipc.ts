@@ -55,6 +55,10 @@ export function registerImageWorkbenchIpc(ipc: Pick<IpcMain,"handle">, workbench
     return workbench.currentGallery(e.sender.id);
   });
   ipc.handle("workbench:library",(e,scope: unknown)=>workbench.chooseLibrary(e.sender.id,scope));
+  ipc.handle("workbench:run-library",(e,scope: unknown,query: unknown)=>{
+    if(e.senderFrame!==e.sender.mainFrame)throw new Error("请在整理页操作");
+    return workbench.runLibrary(e.sender.id,scope,query);
+  });
   ipc.handle("workbench:current",(e,source: unknown)=>workbench.current(e.sender.id,source));
   ipc.handle("workbench:get",(e,id: unknown,offset: unknown,filter: unknown)=>workbench.get(e.sender.id,id,offset,filter));
   ipc.handle("workbench:start",(e,id: unknown,query: unknown)=>workbench.start(e.sender.id,id,query));

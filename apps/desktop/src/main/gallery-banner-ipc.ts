@@ -15,16 +15,27 @@ export interface GalleryBannerHost {
 /** Native-picked file becomes a bounded, owned bitmap; original paths never enter renderer preferences. */
 export class GalleryBannerService {
   #busy = false;
-  constructor(private store: Store, private host: GalleryBannerHost) {}
+  constructor(private store: Store, private host: GalleryBannerHost, private key=KEY,
+    private resolveAsset?: (workId: string, assetId: string) => string | null) {}
   get(): string | null {
-    const value = this.store.getPreference<unknown>(KEY);
+    const value = this.store.getPreference<unknown>(this.key);
     return validBanner(value) ? value : null;
   }
-  async choose(): Promise<string | null> {
-    if (this.#busy) throw new Error("请先完成当前横幅选择");
+  async fromLibrary(value: unknown): Promise<string | null> {
+    if(!value||typeof value!=="object")throw new Error("请从图库选择一张图片");
+    const {workId,assetId}=value as Record<string,unknown>;
+    if(typeof workId!=="string"||!workId||workId.length>300||typeof assetId!=="string"||!assetId||assetId.length>300)throw new Error("图库图片选择无效");
+    return this.choose(async()=>{
+      const path=this.resolveAsset?.(workId,assetId);
+      if(!path)throw new Error("这张图片已不在图库中，请重新选择");
+      return path;
+    });
+  }
+  async choose(pick: () => Promise<string | null> = () => this.host.choose()): Promise<string | null> {
+    if (this.#busy) throw new Error("请先完成当前图片选择");
     this.#busy = true;
     try {
-      const path = await this.host.choose();
+      const path = await pick();
       if (!path) return this.get();
       const file = await open(path, "r");
       let bytes: Buffer;
@@ -47,18 +58,18 @@ export class GalleryBannerService {
       if (!size) throw new Error("请选择 JPG、PNG、WebP 或 GIF 图片");
       if (size.width * size.height > 32_000_000) throw new Error("图片尺寸过大，请选择小于 3,200 万像素的图片");
       const encoded = await this.host.encode(bytes);
-      if (!validBanner(encoded)) throw new Error("横幅生成失败，请换一张图片重试");
-      this.store.setPreference(KEY, encoded);
+      if (!validBanner(encoded)) throw new Error("图片生成失败，请换一张图片重试");
+      this.store.setPreference(this.key, encoded);
       return encoded;
     } catch (cause) {
       if (cause instanceof Error && /[\u4e00-\u9fff]/.test(cause.message)) throw cause;
       const code = (cause as NodeJS.ErrnoException).code;
-      throw new Error(code === "ENOENT" ? "找不到这张图片，请重新选择" : code === "EACCES" || code === "EPERM" ? "无法读取这张图片，请检查访问权限" : "无法设置横幅，请换一张图片重试");
+      throw new Error(code === "ENOENT" ? "找不到这张图片，请重新选择" : code === "EACCES" || code === "EPERM" ? "无法读取这张图片，请检查访问权限" : "无法设置图片，请换一张图片重试");
     } finally { this.#busy = false; }
   }
   reset(): null {
-    if (this.#busy) throw new Error("请先完成当前横幅选择");
-    this.store.setPreference(KEY, null);
+    if (this.#busy) throw new Error("请先完成当前图片选择");
+    this.store.setPreference(this.key, null);
     return null;
   }
 }
@@ -66,11 +77,12 @@ function validBanner(value: unknown): value is string {
   return typeof value === "string" && value.length < MAX_DATA_URL && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(value);
 }
 
-export function registerGalleryBannerIpc(ipc: Pick<IpcMain, "handle">, store: Store, getWindow: () => BrowserWindow | null) {
+export function registerGalleryBannerIpc(ipc: Pick<IpcMain, "handle">, store: Store & Pick<LibraryDatabase,"getWork">, getWindow: () => BrowserWindow | null) {
+  for(const surface of ["gallery","home"] as const){
   const service = new GalleryBannerService(store, {
     async choose() {
       const { dialog } = await import("electron"), window = getWindow();
-      const options = { title: "选择图库横幅", properties: ["openFile"] as ["openFile"], filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }] };
+      const options = { title: surface==="gallery"?"选择图库横幅":"选择首页背景", properties: ["openFile"] as ["openFile"], filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp", "gif"] }] };
       const picked = window ? await dialog.showOpenDialog(window, options) : await dialog.showOpenDialog(options);
       return picked.canceled ? null : picked.filePaths[0] ?? null;
     },
@@ -85,12 +97,17 @@ export function registerGalleryBannerIpc(ipc: Pick<IpcMain, "handle">, store: St
       const resized = scale < 1 ? image.resize({ width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)), quality: "better" }) : image;
       return `data:image/jpeg;base64,${resized.toJPEG(85).toString("base64")}`;
     }
+  },surface==="gallery"?KEY:"home.background.v1",(workId,assetId)=>{
+    const asset=store.getWork(workId)?.assets.find(asset=>asset.id===assetId&&asset.mediaType==="image"&&asset.fileState==="available");
+    return asset?.path??null;
   });
-  for (const [channel, action] of [["gallery:banner-get", () => service.get()], ["gallery:banner-choose", () => service.choose()], ["gallery:banner-reset", () => service.reset()]] as const) {
-    ipc.handle(channel, event => {
+  const prefix=surface==="gallery"?"gallery:banner":"home:background";
+  for (const [suffix, action] of [["get", () => service.get()], ["choose", () => service.choose()], ["reset", () => service.reset()], ["library", (value:unknown)=>service.fromLibrary(value)]] as const) {
+    ipc.handle(`${prefix}-${suffix}`, (event,value:unknown) => {
       const window = getWindow();
-      if (!window || event.sender !== window.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error("请从图库设置横幅");
-      return action();
+      if (!window || event.sender !== window.webContents || event.senderFrame !== event.sender.mainFrame) throw new Error("请从应用内设置图片");
+      return action(value);
     });
+  }
   }
 }

@@ -562,7 +562,7 @@ export function App() {
     } },
     { id: "import", label: "导入本地图片", description: "将图片加入图库", shortcut: "Ctrl O", disabled: busy, disabledReason: "正在导入，请稍候", keywords: ["添加", "文件"], onSelect: importImages },
     { id: "albums", label: "浏览相册", description: "管理相册与组合视图", keywords: ["分类", "画集"], onSelect: () => { setActiveView("gallery"); void changeGalleryMode("collections"); } },
-    { id: "organize", label: "整理与分类", description: "按探索规则排查、查找特征、推荐相册分类", keywords: ["分析", "标签"], onSelect: () => { setAnalysisWorkIds([]); setActiveView("organize"); } },
+    { id: "organize", label: "找图与整理", description: "从图库或文件夹找图，复制、导入或加入相册", keywords: ["分析", "标签", "分类"], onSelect: () => { setAnalysisWorkIds([]); setActiveView("organize"); } },
     { id: "explore", label: "打开探索", description: "浏览 Pixiv 并保存作品", shortcut: "Ctrl 2", keywords: ["下载", "收藏"], onSelect: () => setActiveView("explore") },
     { id: "protection", label: "浏览保护", description: "在探索调整拦截内容与识别模型", keywords: ["规则", "过滤", "阈值"], onSelect: openProtection },
     { id: "creation", label: "打开创作", description: "聊图、写设定与提示词", shortcut: "Ctrl 3", keywords: ["对话", "写作"], onSelect: () => setActiveView("inspiration") },

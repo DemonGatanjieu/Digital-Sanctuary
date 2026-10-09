@@ -43,23 +43,23 @@ try{
   await shot("folder-preview-1280");checks.push("native-folder-preview-without-import-and-bounded-thumbnail-protocol");
   console.log("Folder preview passed; checking WD analysis");
   await waitFor("(async()=>{const s=await window.sanctuary.status();return s.visionReady&&s.modelBacked})()",90000);
-  await clickText('.image-workbench-controls button',"分析并排查");await finished("folder");
+  await clickText('.image-workbench-controls button',"按探索规则排查");await finished("folder");
   session=await cdp.evaluate("window.sanctuary.currentWorkbench('folder')");assert.equal(session.failed,1);assert.equal(session.processed,4);assert.equal(await countWorks(),1);
   checks.push("real-WD-rule-analysis-keeps-failures-separate-and-does-not-import");
   console.log("WD analysis passed; checking real Chinese semantic query");
-  await clickText('[aria-label="文件夹查找方式"] button',"按画面描述");
   await fill('[aria-label="画面描述"]',"夜晚，月亮和星星");
   assert.equal((await cdp.evaluate("window.sanctuary.semanticAvailability()")).available,true);
   await assertFindActionVisible();
-  const started=Date.now();await clickText('.image-workbench-controls button',"按描述找图");
-  await click('[aria-label="任务与进度"]');await waitFor("document.querySelector('[data-task-kind=workbench]')?.textContent.includes('处理中')");
-  await clickText('[data-task-kind=workbench] button',"返回找图与取用");await waitFor("document.querySelector('[aria-label=\"画面描述\"]')?.value==='夜晚，月亮和星星'");
+  const started=Date.now();await clickText('.image-workbench-controls button',"开始找图");
+  const folderTask=`[data-task-kind="workbench"][data-task-id="${session.id}"]`;
+  await click('[aria-label="任务与进度"]');await waitFor(`document.querySelector(${JSON.stringify(folderTask)})?.textContent.includes('处理中')`);
+  await clickText(`${folderTask} button`,"返回找图与取用");await waitFor("document.querySelector('[aria-label=\"画面描述\"]')?.value==='夜晚，月亮和星星'");
   checks.push("model-cold-load-keeps-task-center-responsive-and-restores-pending-query");
   await finished("folder",180000);
   let ranked=await cdp.evaluate(`window.sanctuary.getWorkbench(${JSON.stringify(session.id)},0,'matches')`);
-  assert.equal(ranked.items[0].fileName,"night-moon-and-stars.png");assert.equal(ranked.failed,1);assert.equal(ranked.matched,3);
+  assert.equal(ranked.items[0].fileName,"night-moon-and-stars.png");assert.equal(ranked.failed,1);assert.equal(ranked.matched,1);
   checks.push({name:"real-offline-EmbeddingGemma2-Chinese-query-ranks-image-content",elapsedMs:Date.now()-started});
-  const warmStarted=Date.now();await fill('[aria-label="画面描述"]',"白色背景上的红色正方形");await clickText('.image-workbench-controls button',"按描述找图");await finished("folder");
+  const warmStarted=Date.now();await fill('[aria-label="画面描述"]',"白色背景上的红色正方形");await clickText('.image-workbench-controls button',"开始找图");await finished("folder");
   ranked=await cdp.evaluate(`window.sanctuary.getWorkbench(${JSON.stringify(session.id)},0,'matches')`);assert.equal(ranked.items[0].fileName,"red-square.png");
   const cache=new DatabaseSync(join(userData,"semantic-index.db"));assert.equal(cache.prepare("SELECT COUNT(*) AS count FROM vectors").get().count,3);cache.close();
   assert.equal(await countWorks(),1);checks.push({name:"second-query-reuses-three-persistent-content-vectors",elapsedMs:Date.now()-warmStarted});await shot("folder-Chinese-description-results-1280");
@@ -88,14 +88,13 @@ try{
   await waitFor("Boolean(document.querySelector('.workbench-result-actions .image-output-progress'))");
   assert.equal((await cdp.evaluate("window.sanctuary.currentWorkbench('folder')")).id,session.id);
   checks.push("task-center-exposes-copy-and-analysis-and-returns-to-progress-without-reselection");
-  await clickText('[aria-label="图片来源"] button',"我的图库");await clickText('[aria-label="整理方式"] button',"按画面描述");
-  await clickText('.image-workbench-controls button',"载入当前图库范围");await waitFor("(async()=>{const s=await window.sanctuary.currentWorkbench('library');return s?.phase==='ready'&&s.total===3})()");
-  await fill('[aria-label="画面描述"]',"夜晚，月亮和星星");await clickText('.image-workbench-controls button',"按描述找图");await finished("library");
+  await clickText('[aria-label="图片来源"] button',"我的图库");
+  await fill('[aria-label="画面描述"]',"夜晚，月亮和星星");await clickText('.image-workbench-controls button',"开始找图");await finished("library");
   const library=await cdp.evaluate("window.sanctuary.currentWorkbench('library')");ranked=await cdp.evaluate(`window.sanctuary.getWorkbench(${JSON.stringify(library.id)},0,'matches')`);assert.equal(ranked.items[0].fileName,"456_p1.png");
   await cdp.evaluate("document.querySelector('.workbench-image-grid input').click()");await fill('[aria-label="找图结果相册"]',album.id);await clickText('.workbench-result-actions button',"加入相册");
   await waitFor("document.querySelector('.image-workbench-controls').textContent.includes('已将 1 张所选图片加入相册')");
   const pages=await cdp.evaluate(`window.sanctuary.listScopedArtworks({kind:'collection',collectionId:${JSON.stringify(album.id)}})`);assert.equal(pages.length,1);assert.equal(pages[0].pageIndex,1);
-  checks.push("library-description-search-includes-all-pages-and-archives-selected-page-only");
+  checks.push("one-submit-library-search-scans-all-pages-without-load-step-and-archives-selected-page-only");
   const batch=await cdp.evaluate("window.sanctuary.exportImages([{workId:'pixiv:456'}])");await waitFor(`(async()=>{const b=await window.sanctuary.getImageExport(${JSON.stringify(batch.id)});return b.phase==='completed'})()`);
   const multipage=await cdp.evaluate(`window.sanctuary.getImageExport(${JSON.stringify(batch.id)})`);assert.equal(multipage.items.length,2);assert.ok(multipage.items.every(i=>i.status==='copied'));
   checks.push("whole-work-export-includes-every-original-page");
@@ -119,7 +118,7 @@ finally{
 }
 async function restoreClipboard(){return main.evaluate(`(()=>{if(!globalThis.__clipboardBefore)return false;const {clipboard}=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron');clipboard.clear();for(const [format,data]of __clipboardBefore)clipboard.writeBuffer(format,Buffer.from(data,'base64'));delete globalThis.__clipboardBefore;return true;})()`);}
 async function countWorks(){return cdp.evaluate("(async()=>(await window.sanctuary.queryWorks({})).total)()");}
-async function assertFindActionVisible(){await cdp.evaluate("document.querySelector('main').scrollTop=0");const bottom=await cdp.evaluate("Array.from(document.querySelectorAll('.image-workbench-controls button')).find(b=>b.textContent==='按描述找图').getBoundingClientRect().bottom");assert.ok(bottom<=720,`Find action below initial viewport: ${bottom}`);}
+async function assertFindActionVisible(){await cdp.evaluate("document.querySelector('main').scrollTop=0");const bottom=await cdp.evaluate("Array.from(document.querySelectorAll('.image-workbench-controls button')).find(b=>b.textContent==='开始找图').getBoundingClientRect().bottom");assert.ok(bottom<=720,`Find action below initial viewport: ${bottom}`);}
 async function finished(source,timeout=90000){await waitFor(`(async()=>{const s=await window.sanctuary.currentWorkbench('${source}');return s&&s.phase!=='analyzing'&&s.phase!=='scanning'})()`,timeout);const s=await cdp.evaluate(`window.sanctuary.currentWorkbench('${source}')`);assert.equal(s.phase,"completed",s.error);await waitFor("!Array.from(document.querySelectorAll('.image-workbench-controls button')).some(b=>b.textContent.includes('停止分析'))");}
 async function waitFor(expression,timeout=20000){const start=Date.now();while(Date.now()-start<timeout){if(await cdp.evaluate(expression))return;await new Promise(done=>setTimeout(done,100));}throw new Error(`Timed out: ${expression}`);}
 async function click(selector){await waitFor(`Boolean(document.querySelector(${JSON.stringify(selector)}))`);await cdp.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);}

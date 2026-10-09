@@ -1,4 +1,10 @@
-.home-view { max-width: 1060px; margin: 0 auto; padding: clamp(20px, 5vh, 60px) 0; }
+.home-view { position: relative; isolation: isolate; max-width: 1060px; margin: 0 auto; padding: clamp(20px, 5vh, 60px) 0; }
+.home-content { position: relative; min-width: 0; }
+.home-background { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; border-radius: var(--ds-radius-xl); }
+.home-with-background { padding: clamp(20px, 4vw, 40px); border-radius: var(--ds-radius-xl); }
+.home-with-background::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--ds-bg-app); opacity: .78; }
+.home-background-controls { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.home-with-background .home-task-card { background: var(--ds-bg-card); }
 .home-heading { margin-bottom: 30px; }
 .home-heading h1 { margin: 8px 0 12px; font-size: clamp(28px, 3.6vw, 44px); color: var(--ds-text-heading); }
 .home-task-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
@@ -13,5 +19,5 @@
 .home-library-entry { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 14px; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--ds-border-light); }
 .home-library-entry p { color: var(--ds-text-secondary); font-size: 13px; }
 .home-library-entry .ui-button--secondary { color: var(--ds-text-heading); background: var(--ds-bg-card); }
-@media (max-width: 980px) { .home-view { padding: 16px 0; } .home-heading { margin-bottom: 20px; } .home-task-card { min-height: 136px; padding: 18px; gap: 12px; } .home-task-symbol { flex-basis: 36px; height: 40px; font-size: 24px; } .home-task-copy strong { font-size: 16px; } }
+@media (max-width: 980px) { .home-view { padding: 16px 0; } .home-view.home-with-background { padding: 20px; } .home-heading { margin-bottom: 20px; } .home-task-card { min-height: 136px; padding: 18px; gap: 12px; } .home-task-symbol { flex-basis: 36px; height: 40px; font-size: 24px; } .home-task-copy strong { font-size: 16px; } }
 @media (max-width: 720px) { .home-task-grid { grid-template-columns: 1fr; } .home-task-card { min-height: 104px; } }

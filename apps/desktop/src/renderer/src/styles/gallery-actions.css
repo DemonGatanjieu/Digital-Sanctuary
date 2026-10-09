@@ -24,6 +24,21 @@
 .gallery-banner-custom::after { background: linear-gradient(90deg, rgba(8, 15, 28, .90), rgba(8, 15, 28, .65) 55%, rgba(8, 15, 28, .15)); }
 .gallery-banner-custom .work-ambient-copy > strong, .gallery-banner-custom .work-ambient-copy > small { color: #fff; }
 .gallery-banner-custom .gallery-banner-actions .ui-button { color: #fff; background: rgba(8, 15, 28, .75); border-color: rgba(255, 255, 255, .5); }
+.background-source-dialog { display: grid; gap: 14px; width: min(460px, calc(100vw - 40px)); }
+.background-source-dialog h2, .background-source-dialog p { margin: 0; }
+.background-source-dialog p { color: var(--ds-text-secondary); line-height: 1.65; }
+.library-image-picker { display: flex; flex-direction: column; gap: 14px; width: min(820px, calc(100vw - 40px)); max-height: calc(100vh - 48px); overflow: auto; }
+.library-image-picker header, .library-image-picker footer { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.library-image-picker header > div, .library-image-picker footer > span { flex: 1; min-width: 140px; }
+.library-image-picker header h2, .library-image-picker header p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.library-image-picker p, .library-image-picker small, .library-image-picker footer { color: var(--ds-text-secondary); font-size: 13px; }
+.library-image-picker input { min-height: 42px; padding: 10px 12px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); background: var(--ds-bg-card); color: var(--ds-text-heading); }
+.library-image-picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.library-image-picker-grid button { display: grid; gap: 6px; min-width: 0; padding: 8px; border: 1px solid var(--ds-border-light); border-radius: var(--ds-radius-md); background: var(--ds-bg-card); color: var(--ds-text-heading); text-align: left; cursor: pointer; }
+.library-image-picker-grid button[aria-pressed="true"], .library-image-picker-grid button:focus-visible { border-color: var(--ds-primary); outline: 2px solid var(--ds-primary); outline-offset: 2px; }
+.library-image-picker-grid button:disabled { opacity: .6; cursor: wait; }
+.library-image-picker-grid img { width: 100%; height: 124px; object-fit: contain; border-radius: 6px; }
+.library-image-picker-grid strong { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; font-size: 13px; }
 .work-library-controls { display: flex; flex-wrap: wrap; }
 .work-library-controls, .work-library-card { background: var(--ds-bg-card); }
 .work-library-controls select, .work-library-controls input, .work-sort-direction, .work-select-toggle { background: var(--ds-bg-card); color: var(--ds-text-heading); }

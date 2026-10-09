@@ -46,7 +46,7 @@ describe("owned gallery banner", () => {
     const output = { drag: vi.fn(async (_owner, _target, start) => start("trusted.png")) } as unknown as ImageOutputService;
     try {
       registerGalleryBannerIpc(ipc, store, () => window); registerImageDragIpc(ipc, output, () => window, {} as NativeImage);
-      for (const channel of ["gallery:banner-get", "gallery:banner-choose", "gallery:banner-reset", "images:drag"]) {
+      for (const channel of ["gallery:banner-get", "gallery:banner-choose", "gallery:banner-reset", "gallery:banner-library", "home:background-get", "home:background-choose", "home:background-reset", "home:background-library", "images:drag"]) {
         expect(() => handlers.get(channel)!({ sender: {}, senderFrame: sender.mainFrame }, {})).toThrow("请从");
         expect(() => handlers.get(channel)!({ sender, senderFrame: {} }, {})).toThrow("请从");
       }
@@ -54,5 +54,19 @@ describe("owned gallery banner", () => {
       await handlers.get("images:drag")!({ sender, senderFrame: sender.mainFrame }, { workId: "x", assetId: "y" });
       expect(sender.startDrag).toHaveBeenCalledWith({ file: "trusted.png", icon: {} });
     } finally { store.close(); }
+  });
+  it("resolves a selected library page in main, keeps independent home/banner copies and preserves them on failure",async()=>{
+    const root=await mkdtemp(join(tmpdir(),"sanctuary-library-background-")),store=new LibraryDatabase(":memory:"),path=join(root,"page.png");
+    await writeFile(path,PNG);const art=store.importArtwork(path),work=store.getWork(`local:${art.id}`)!,asset=work.assets[0]!;
+    const choose=vi.fn(async()=>null),encode=vi.fn(async()=>ENCODED),resolve=(workId:string,assetId:string)=>store.getWork(workId)?.assets.find(a=>a.id===assetId)?.path??null;
+    const banner=new GalleryBannerService(store,{choose,encode},"library.banner.v1",resolve),home=new GalleryBannerService(store,{choose,encode},"home.background.v1",resolve);
+    try{
+      await banner.fromLibrary({workId:work.id,assetId:asset.id,path:"not-a-renderer-path"});expect(choose).not.toHaveBeenCalled();expect(encode).toHaveBeenCalledWith(PNG);
+      encode.mockResolvedValueOnce("data:image/jpeg;base64,aG9tZQ==");await home.fromLibrary({workId:work.id,assetId:asset.id});
+      expect(home.get()).not.toBe(banner.get());expect(banner.reset()).toBeNull();expect(home.get()).not.toBeNull();
+      await expect(home.fromLibrary({workId:work.id,assetId:"not-a-member"})).rejects.toThrow("已不在图库");
+      await expect(home.fromLibrary({path})).rejects.toThrow("选择无效");
+      await rm(path);await expect(home.fromLibrary({workId:work.id,assetId:asset.id})).rejects.toThrow("找不到");expect(home.get()).toBe("data:image/jpeg;base64,aG9tZQ==");
+    }finally{store.close();await rm(root,{recursive:true,force:true});}
   });
 });

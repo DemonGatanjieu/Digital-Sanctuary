@@ -177,11 +177,17 @@ export interface SanctuaryApi {
   getGalleryBanner(): Promise<string | null>;
   chooseGalleryBanner(): Promise<string | null>;
   resetGalleryBanner(): Promise<null>;
+  setGalleryBannerFromLibrary(target: {workId:string;assetId:string}): Promise<string | null>;
+  getHomeBackground(): Promise<string | null>;
+  chooseHomeBackground(): Promise<string | null>;
+  setHomeBackgroundFromLibrary(target: {workId:string;assetId:string}): Promise<string | null>;
+  resetHomeBackground(): Promise<null>;
   searchGalleryPictures(text: string, query: WorkQuery): Promise<GallerySearchSnapshot>;
   galleryPictureResults(id: string, offset?: number, relevance?: GallerySearchRelevance): Promise<GallerySearchSnapshot>;
   currentGalleryPictureSearch(): Promise<GallerySearchSnapshot | null>;
   chooseWorkbenchFolder(recursive: boolean): Promise<WorkbenchSnapshot | null>;
   chooseWorkbenchLibrary(scope: AnalysisScope): Promise<WorkbenchSnapshot>;
+  runLibraryWorkbench(scope: AnalysisScope, query: WorkbenchQuery): Promise<WorkbenchSnapshot>;
   currentWorkbench(source: WorkbenchSource): Promise<WorkbenchSnapshot | null>;
   getWorkbench(id: string, offset?: number, filter?: "matches" | "all" | "failed"): Promise<WorkbenchSnapshot>;
   startWorkbench(id: string, query: WorkbenchQuery): Promise<WorkbenchSnapshot>;
@@ -344,11 +350,17 @@ const api: SanctuaryApi = {
   getGalleryBanner: () => ipcRenderer.invoke("gallery:banner-get"),
   chooseGalleryBanner: () => ipcRenderer.invoke("gallery:banner-choose"),
   resetGalleryBanner: () => ipcRenderer.invoke("gallery:banner-reset"),
+  setGalleryBannerFromLibrary: target => ipcRenderer.invoke("gallery:banner-library",target),
+  getHomeBackground: () => ipcRenderer.invoke("home:background-get"),
+  chooseHomeBackground: () => ipcRenderer.invoke("home:background-choose"),
+  setHomeBackgroundFromLibrary: target => ipcRenderer.invoke("home:background-library",target),
+  resetHomeBackground: () => ipcRenderer.invoke("home:background-reset"),
   searchGalleryPictures: (text, query) => ipcRenderer.invoke("gallery:search-pictures",text,query),
   galleryPictureResults: (id, offset=0, relevance="relevant") => ipcRenderer.invoke("gallery:picture-results",id,offset,relevance),
   currentGalleryPictureSearch: () => ipcRenderer.invoke("gallery:current-picture-search"),
   chooseWorkbenchFolder: (recursive) => ipcRenderer.invoke("workbench:folder", recursive),
   chooseWorkbenchLibrary: (scope) => ipcRenderer.invoke("workbench:library", scope),
+  runLibraryWorkbench: (scope,query) => ipcRenderer.invoke("workbench:run-library",scope,query),
   currentWorkbench: (source) => ipcRenderer.invoke("workbench:current", source),
   getWorkbench: (id, offset = 0, filter = "matches") => ipcRenderer.invoke("workbench:get", id, offset, filter),
   startWorkbench: (id, query) => ipcRenderer.invoke("workbench:start", id, query),

@@ -64,8 +64,8 @@ try {
   const surface=await cdp.evaluate("(()=>{const r=document.querySelector('.explore-surface').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()");
   assert.equal(nativeBounds.visible,true);for(const axis of ['x','y','width','height'])assert.ok(Math.abs(nativeBounds.bounds[axis]-surface[axis])<=2,JSON.stringify({nativeBounds,surface}));
   checks.push('browser-small-window-address-shortcuts-native-surface-do-not-overlap');
-  await click('[data-nav=gallery]');await clickText('main button','整理与分类');await clickText('[aria-label="整理方式"] button','按画面描述').catch(async()=>{await clickText('.organize-source-tools button','按画面描述');});
-  await waitFor("Boolean(document.querySelector('.image-workbench'))");await clickText('.image-workbench button','载入').catch(async()=>{await clickText('.image-workbench button','读取');});
+  await click('[data-nav=gallery]');await clickText('main button','整理与分类');
+  await waitFor("Boolean(document.querySelector('.image-workbench'))");
   await waitFor("document.querySelectorAll('.workbench-image-grid article').length>=2");await cdp.evaluate("document.querySelectorAll('.workbench-image-grid input')[0].click();document.querySelectorAll('.workbench-image-grid input')[1].click()");await clickText('.workbench-result-actions button','聊聊所选图片');
   await waitFor("document.querySelectorAll('.inspiration-source').length===2");assert.equal(await cdp.evaluate("document.querySelector('.inspiration-composer textarea').value.includes('逐张')"),true);
   const bounds=await cdp.evaluate("(()=>{const r=document.querySelector('.inspiration-send').getBoundingClientRect();return {bottom:r.bottom,right:r.right,height:innerHeight,width:innerWidth};})()");assert.ok(bounds.bottom<=bounds.height&&bounds.right<=bounds.width);await shot('multi-reference-900');

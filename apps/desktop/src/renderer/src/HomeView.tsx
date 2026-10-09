@@ -1,4 +1,5 @@
 import { Button } from "./Button";
+import { ArtworkBackgroundControls, useArtworkBackground } from "./ArtworkBackgroundControls";
 
 export type HomeDestination = "gallery" | "explore" | "organize" | "inspiration";
 export const HOME_TASKS: { id: HomeDestination; title: string; description: string; symbol: string }[] = [
@@ -12,8 +13,12 @@ export function HomeView({ onSelect, onImport, importing, workCount }: {
   onSelect: (destination: HomeDestination) => void; onImport: () => void | Promise<void>;
   importing: boolean; workCount: number;
 }) {
-  return <section className="home-view" aria-label="开始">
+  const background=useArtworkBackground("home");
+  return <section className={`home-view ${background.image?"home-with-background":""}`} aria-label="开始">
+    {background.image&&<img className="home-background" src={background.image} alt="" aria-hidden="true" draggable={false}/>}
+    <div className="home-content">
     <header className="home-heading">
+      <div className="home-background-controls"><ArtworkBackgroundControls surface="home" background={background}/></div>
       <p className="eyebrow">DIGITAL SANCTUARY</p>
       <h1>今天想做什么？</h1>
       <p className="page-description">从一件想做的事开始。</p>
@@ -29,6 +34,7 @@ export function HomeView({ onSelect, onImport, importing, workCount }: {
     <div className="home-library-entry">
       <p>{workCount ? "已有本地图片也可以随时导入。" : "第一次使用？先导入本地图片，或去探索保存作品。"}</p>
       <Button variant="secondary" busy={importing} onClick={() => void onImport()}>导入本地图片</Button>
+    </div>
     </div>
   </section>;
 }

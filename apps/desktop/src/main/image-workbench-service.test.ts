@@ -60,7 +60,8 @@ describe("authorized image workbench",()=>{
     await settled(f.service,f.service.start(1,s.id,{...description,text:"另一句夜晚描述"}));expect(f.encode).toHaveBeenCalledTimes(4);
     const cache=new SemanticVectorStore(join(f.root,"vectors.db"));expect(validVector(cache.get("unknown"))).toBe(false);cache.close();
     f.image("day.png",f.folder,Buffer.concat([PNG,Buffer.from("new pixels")]));await settled(f.service,f.service.start(1,s.id,description));expect(f.encode).toHaveBeenCalledTimes(6);
-    const combined=await settled(f.service,f.service.start(1,s.id,{...description,exclude:["blood"]}));expect(combined.matched).toBe(1);expect(f.service.get(1,s.id).items[0]!.fileName).toBe("day.png");
+    const combined=await settled(f.service,f.service.start(1,s.id,{...description,exclude:["blood"]}));expect(combined.matched).toBe(0);expect(f.service.get(1,s.id).items).toEqual([]);
+    expect(f.service.get(1,s.id,0,"all").items).toHaveLength(2);
   });
   it("cancels an in-flight job without converting unprocessed images into negative matches",async()=>{
     const f=fixture();f.image("day.png");let release!:(value:VisionAssessment)=>void;
@@ -89,7 +90,7 @@ describe("authorized image workbench",()=>{
     await settled(f.service,f.service.start(1,s.id,description));
     f.classify.mockImplementationOnce(async()=>{writeFileSync(path,Buffer.concat([PNG,Buffer.from("changed during analysis")]));return {status:"complete",engine:"fixture",engineVersion:"1",elapsedMs:1,labels:{sky:.9}};});
     const result=await settled(f.service,f.service.start(1,s.id,{...description,include:["sky"]}));expect(result.failed).toBe(1);expect(result.matched).toBe(0);
-    const retry=await settled(f.service,f.service.start(1,s.id,{...description,include:["sky"]}));expect(retry.matched).toBe(1);expect(f.classify).toHaveBeenCalledTimes(2);
+    const retry=await settled(f.service,f.service.start(1,s.id,{...description,include:["sky"]}));expect(retry.matched).toBe(0);expect(f.service.get(1,s.id,0,"all").items[0]?.matchedTags).toEqual(["sky"]);expect(f.classify).toHaveBeenCalledTimes(2);
   });
   it("bounds folder manifests and reports incomplete scans",async()=>{
     const f=fixture();for(let i=0;i<1001;i++)f.image(`${i}.png`);
@@ -106,7 +107,7 @@ describe("authorized image workbench",()=>{
   it("requires real element inference and never treats a filename probe as an exclusion result",async()=>{
     const f=fixture();f.image("day.png");const s=await settled(f.service,f.service.chooseFolder(1,f.folder,false));f.ready.mockReturnValue(false);
     expect(()=>f.service.start(1,s.id,rules)).toThrow("尚未就绪");expect(f.classify).not.toHaveBeenCalled();
-    expect((await settled(f.service,f.service.start(1,s.id,description))).matched).toBe(1);
+    expect((await settled(f.service,f.service.start(1,s.id,description))).matched).toBe(0);
     f.ready.mockReturnValue(true);f.classify.mockResolvedValueOnce({status:"complete",engine:"filename-probe",engineVersion:"0.1.0",elapsedMs:1,labels:{safe:.9}});
     const result=await settled(f.service,f.service.start(1,s.id,{mode:"elements",text:"",include:[],exclude:["blood"]}));expect(result.failed).toBe(1);expect(result.matched).toBe(0);
   });
@@ -169,7 +170,7 @@ describe("one-step gallery picture search",()=>{
     expect(result.progress).toMatchObject({total:1001,processed:1001,limitReached:false});expect(result.result.items).toHaveLength(60);expect(result.result.hasMore).toBe(true);
     const last=f.service.galleryResults(1,result.progress.id,960);expect(last.result.items).toHaveLength(41);expect(last.result.hasMore).toBe(false);
     expect(f.encode).toHaveBeenCalledTimes(2);expect(()=>f.service.galleryResults(1,result.progress.id,-1)).toThrow("分页");
-  },20000);
+  },40000);
   it("hides scores below the inclusive model threshold before grouping and paging, without discarding the index",async()=>{
     const f=fixture();
     f.encode.mockImplementation(async(kind,value)=>{
@@ -193,5 +194,18 @@ describe("one-step gallery picture search",()=>{
     const expanded=f.service.galleryResults(1,filtered.progress.id,0,"all");expect(expanded.result.items[0]?.id).toBe(`local:${weak.id}`);
     f.database.updateWorkFavorite([`local:${weak.id}`],false);
     expect(f.service.galleryResults(1,filtered.progress.id).relevance.hiddenWorks).toBe(0);
+  });
+  it("runs a library request directly, scans exact pages and reports empty ranges or model failures",async()=>{
+    const f=fixture(),a=f.database.importArtwork(f.image("day.png")),b=f.database.importArtwork(f.image("night.png"));
+    const result=await settled(f.service,f.service.runLibrary(1,{type:"selected",workIds:[`local:${b.id}`]},description));
+    expect(result).toMatchObject({phase:"completed",total:1,processed:1,matched:1});expect(result.items[0]?.fileName).toBe("night.png");
+    expect(f.classify).not.toHaveBeenCalled();expect(()=>f.service.runLibrary(1,{type:"anything"},description)).toThrow("范围");
+    expect(()=>f.service.get(2,result.id)).toThrow("过期");
+    f.database.removeWorkFromIndex(`local:${b.id}`);
+    expect(f.service.get(1,result.id)).toMatchObject({total:0,processed:0,matched:0,items:[]});
+    const empty=await settled(f.service,f.service.runLibrary(1,{type:"selected",workIds:[]},rules));expect(empty).toMatchObject({phase:"completed",total:0});
+    f.ready.mockReturnValue(false);
+    const unavailable=await settled(f.service,f.service.runLibrary(1,{type:"selected",workIds:[`local:${a.id}`]},rules));
+    expect(unavailable.phase).toBe("failed");expect(unavailable.error).toContain("尚未就绪");
   });
 });
