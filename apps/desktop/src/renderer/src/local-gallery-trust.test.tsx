@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ArtworkRecord } from "@sanctuary/domain";
-import { ArtworkCard } from "./ArtworkCard.js";
+import { PageGrid } from "./PageGrid";
 
 function artwork(action: "allow" | "blur" | "hide" | null): ArtworkRecord {
   return {
@@ -40,12 +40,7 @@ describe("local gallery trust boundary", () => {
     "always renders the local image clearly when the stored decision is %s",
     (action) => {
       const markup = renderToStaticMarkup(
-        <ArtworkCard
-          artwork={artwork(action)}
-          collections={[]}
-          onAssign={() => undefined}
-          onOpen={() => undefined}
-        />
+        <PageGrid pages={[artwork(action)]} onOpen={() => undefined} renderMenu={() => null} />
       );
       expect(markup).toContain("<img");
       expect(markup).not.toContain("blurred");

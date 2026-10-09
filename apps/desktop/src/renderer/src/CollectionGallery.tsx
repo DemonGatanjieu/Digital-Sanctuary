@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ArtworkRecord, CollectionRecord, CollectionSummary, SavedCollectionView, SavedViewSummary } from "@sanctuary/domain";
-import { artworkImageUrl } from "./ArtworkCard";
+import { artworkImageUrl } from "./image-url";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { MenuItem, MenuLabel, MenuSeparator } from "./Popover";
@@ -53,8 +53,6 @@ export function CollectionDetailPage({
   onRegisterCapture?: (capture: () => CollectionSessionPatch) => () => void;
 }) {
   const items = artworks;
-  const coverArtwork = artworks.find((a) => a.id === collection.coverArtworkId) ?? items[0];
-  const coverUrl = coverArtwork ? artworkImageUrl(coverArtwork) : "";
   const [fallbackMode, setFallbackMode] = useState<CollectionDetailViewMode>("grid");
   // The floating "aquarium" stage was retired; sessions that remember it open the grid instead.
   const viewMode: CollectionDetailViewMode = session?.viewMode && session.viewMode !== "aquarium" ? session.viewMode : fallbackMode;

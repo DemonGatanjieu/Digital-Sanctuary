@@ -5,9 +5,7 @@
 @import "./styles/main-content.css" layer(legacy);
 @import "./styles/home.css" layer(legacy);
 @import "./styles/components.css" layer(legacy);
-@import "./styles/empty-states.css" layer(legacy);
 @import "./styles/lightbox.css" layer(legacy);
-@import "./styles/legacy-gallery.css" layer(legacy);
 @import "./styles/authors.css" layer(legacy);
 @import "./styles/collections.css" layer(legacy);
 @import "./styles/dialogs.css" layer(legacy);

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { ArtistRecord, ArtistSummary, CollectionRecord } from "@sanctuary/domain";
-import { LazyArtworkImage } from "./ArtworkCard";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { MenuItem, MenuLabel, MenuSeparator } from "./Popover";
 import { PageGrid, type GridPage } from "./PageGrid";
+import { LazyImage } from "./WorkGrid";
 import { SegmentedControl } from "./SegmentedControl";
-import { localImageUrl } from "./image-url";
 import { AuthorAvatar } from "./DirectoryCards";
 import { PhotobookFlipSpread, type PhotobookAlbumInfo } from "./CollectionGallery";
 import type { AuthorGalleryGroup } from "./gallery-model";
@@ -165,7 +164,7 @@ export function AuthorDetailPage({
                     <small className="catalog-subtitle">{artwork.source?.workId ? `Pixiv ${artwork.source.workId}` : "本地导入"}</small>
                   </div>
                   <div className="catalog-page-cell"><span className="catalog-page-tag">{artwork.source?.pageIndex !== undefined ? `第 ${artwork.source.pageIndex + 1} 页` : "单页"}</span></div>
-                  <div className="catalog-thumb-cell"><LazyArtworkImage src={localImageUrl((artwork as GridPage).thumbnailPath ?? artwork.path)} className="catalog-thumb-img" /></div>
+                  <div className="catalog-thumb-cell catalog-thumb-img"><LazyImage path={(artwork as GridPage).thumbnailPath ?? artwork.path} /></div>
                   <div className="catalog-action-cell" />
                 </div>
               ))}
