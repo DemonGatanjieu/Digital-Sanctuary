@@ -11,7 +11,7 @@
   min-height: var(--ds-toolbar-height);
   background: var(--ds-bg-app);
 }
-.detail-back { margin-left: -8px; }
+.detail-back { padding-left: 4px; }
 .detail-title { display: grid; min-width: 0; }
 .detail-title h1 { overflow: hidden; margin: 0; color: var(--ds-text-heading); font-size: var(--ds-font-16); font-weight: var(--ds-weight-semibold); text-overflow: ellipsis; white-space: nowrap; }
 .detail-title small { overflow: hidden; color: var(--ds-text-secondary); font-size: var(--ds-font-12); text-overflow: ellipsis; white-space: nowrap; }

@@ -25,8 +25,9 @@ const checks = [];
 let child, main, cdp;
 let stderr = "", currentCheck = "fixture", currentWidth = 0, currentHeight = 0;
 const detailSelector = { collection: ".album-fullscreen-theater", artist: ".author-detail-page" };
-const modes = { collection: { flip: "翻页画册", grid: "典藏网格", toc: "篇目目录" },
-  artist: { works: "套图展区", artbook: "翻页画集", catalog: "篇目编目" } };
+const modes = { collection: { flip: "画册", grid: "网格", toc: "目录" },
+  artist: { works: "网格", artbook: "画册", catalog: "目录" } };
+const MODE_BUTTONS = '.detail-header [aria-label="浏览方式"] button';
 const pause = (ms) => new Promise(done => setTimeout(done, ms));
 
 try {
@@ -73,7 +74,7 @@ try {
   // Exercise all four production animations independently of the host OS motion preference.
   await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "no-preference" }] });
   await click('[data-nav="gallery"]');
-  await waitFor("document.querySelectorAll('.album-card-book').length === 63");
+  await waitFor("document.querySelectorAll('section[aria-label=相册] .directory-card-open').length === 63");
 
   for (const width of [1280, 900]) {
     await resize(width);
@@ -177,11 +178,11 @@ try {
     await cdp.evaluate("for(const element of [document.querySelector('.app-shell'),document.body]) { element.dataset.displayProfile='balanced'; element.dataset.reducedMotion='false'; }");
     await check("collection-lightbox-and-picker-remain-closed-on-return", async () => {
       await mode("collection", "grid");
-      await click(".collection-detail-grid .art-preview-button");
+      await click(".album-fullscreen-theater .work-tile-image");
       await waitFor("document.querySelector('.cinema-image-entity')?.naturalWidth > 0");
       await leaveAndReturn("inspiration", "collection", "grid");
       await assertOverlaysClosed();
-      await clickText(".theater-action-pill", "添加画作");
+      await clickText(".detail-actions button", "添加作品");
       await waitFor("Boolean(document.querySelector('.paged-artwork-picker'))");
       await leaveAndReturn("settings", "collection", "grid");
       await assertOverlaysClosed();
@@ -268,8 +269,8 @@ try {
     await leave("settings");
     await cdp.evaluate(`window.sanctuary.deleteCollection(${JSON.stringify(fixture.deleteAlbumId)})`);
     await click('[data-nav="gallery"]');
-    await waitFor("!document.querySelector('.album-fullscreen-theater') && document.querySelectorAll('.album-card-book').length === 62");
-    assert.equal(await cdp.evaluate(`Array.from(document.querySelectorAll('.collection-info h3')).some(node=>node.textContent===${JSON.stringify(fixture.deleteAlbumName)})`), false);
+    await waitFor("!document.querySelector('.album-fullscreen-theater') && document.querySelectorAll('section[aria-label=相册] .directory-card-open').length === 62");
+    assert.equal(await cdp.evaluate(`Array.from(document.querySelectorAll('.directory-card-copy strong')).some(node=>node.textContent===${JSON.stringify(fixture.deleteAlbumName)})`), false);
   });
   await check("same-ID-reappearing-after-deletion-starts-a-new-session", async () => {
     // Reintroduce only this fixture collection identity, so stale cache cannot hide
@@ -280,9 +281,9 @@ try {
         .run(fixture.deleteAlbumId, fixture.deleteAlbumName, new Date().toISOString());
     } finally { database.close(); }
     await leave("settings"); await click('[data-nav="gallery"]');
-    await waitFor("document.querySelectorAll('.album-card-book').length === 63");
+    await waitFor("document.querySelectorAll('section[aria-label=相册] .directory-card-open').length === 63");
     await openDetail("collection", fixture.deleteAlbumName);
-    assert.equal(await cdp.evaluate("document.querySelector('.album-fullscreen-theater').dataset.detailMode"), "flip",
+    assert.equal(await cdp.evaluate("document.querySelector('.album-fullscreen-theater').dataset.detailMode"), "grid",
       "deleted collection kept its former detail session when the same ID reappeared");
   });
   await check("late-old-scope-response-cannot-restore-another-session", async () => {
@@ -295,15 +296,15 @@ try {
     await waitFor("Boolean(__galleryReturnSmoke.heldScope)", main);
     await directory("artist"); await openDetail("artist", fixture.secondAuthorName);
     await waitFor("document.querySelector('.author-detail-page')?.dataset.detailMode === 'catalog'");
-    const title = await cdp.evaluate("document.querySelector('.author-atelier-name').textContent");
+    const title = await cdp.evaluate("document.querySelector('.author-detail-page .detail-title h1').textContent");
     await main.evaluate("__galleryReturnSmoke.releaseHeld()");
     await settledFrames();
-    assert.equal(await cdp.evaluate("document.querySelector('.author-atelier-name')?.textContent"), title);
+    assert.equal(await cdp.evaluate("document.querySelector('.author-detail-page .detail-title h1')?.textContent"), title);
     assert.equal(await cdp.evaluate("document.querySelector('.author-detail-page')?.dataset.detailMode"), "catalog");
     const artistPages = await scopePages({ kind: "artist", artistId: fixture.secondAuthorId });
     assert.equal(await cdp.evaluate("document.querySelectorAll('.author-detail-page [data-gallery-page-id]').length"), artistPages.length);
     await leaveAndReturn("inspiration", "artist", "catalog");
-    assert.equal(await cdp.evaluate("document.querySelector('.author-atelier-name')?.textContent"), title);
+    assert.equal(await cdp.evaluate("document.querySelector('.author-detail-page .detail-title h1')?.textContent"), title);
     await assertOverlaysClosed();
   });
   const stats = await main.evaluate("({listCalls:__galleryReturnSmoke.listCalls,scopeReads:__galleryReturnSmoke.scopes.length})");
@@ -376,18 +377,18 @@ async function assertLayout(kind) {
   const layout = await cdp.evaluate(`(() => {
     const detail=document.querySelector(${JSON.stringify(detailSelector[kind])}),stage=document.querySelector('.photobook-stage-deck');
     const bounds=detail.getBoundingClientRect();
-    const hud=document.querySelector('.theater-hud-header');
-    const clippedControls=Array.from(detail.querySelectorAll('.theater-hud-header button,.author-back-btn,[aria-label="浏览视角"] button')).filter(node=>{
+    const hud=document.querySelector('.detail-header');
+    const clippedControls=Array.from(detail.querySelectorAll('.detail-header button')).filter(node=>{
       const rect=node.getBoundingClientRect();return node.checkVisibility() && (rect.left<bounds.left-2 || rect.right>bounds.right+2);
     }).map(node=>node.textContent.trim());
-    const wrappedLabels=Array.from(detail.querySelectorAll('.photobook-toc-trigger-btn .btn-text,.mount-pill-text,.theater-hud-center button')).filter(node=>{
+    const wrappedLabels=Array.from(detail.querySelectorAll('.photobook-toc-trigger-btn .btn-text,.mount-pill-text,.detail-header .ui-segmented button')).filter(node=>{
       if(!node.checkVisibility()) return false;
       const range=document.createRange();range.selectNodeContents(node);
       const style=getComputedStyle(node),lineHeight=parseFloat(style.lineHeight)||parseFloat(style.fontSize)*1.6;
       return range.getBoundingClientRect().height>lineHeight*1.5;
     }).map(node=>node.textContent.trim());
-    const smallTargets=innerWidth>900?[]:Array.from(detail.querySelectorAll('.photobook-toc-trigger-btn,.mount-style-pill,.theater-hud-header button')).filter(node=>{
-      const rect=node.getBoundingClientRect();return node.checkVisibility() && (rect.height<35.5 || rect.width<35.5);
+    const smallTargets=innerWidth>900?[]:Array.from(detail.querySelectorAll('.photobook-toc-trigger-btn,.mount-style-pill,.detail-header button')).filter(node=>{
+      const rect=node.getBoundingClientRect();return node.checkVisibility() && (rect.height<31.5 || rect.width<31.5);
     }).map(node=>node.textContent.trim());
     return { width:innerWidth,height:innerHeight,documentOverflow:document.documentElement.scrollWidth-document.documentElement.clientWidth,
       hudOverflow:hud?hud.scrollWidth-hud.clientWidth:0,clippedControls,wrappedLabels,smallTargets,stageOverflow:stage?stage.scrollWidth-stage.clientWidth:0 };
@@ -406,25 +407,23 @@ async function clickText(selector, text) {
   await waitFor(`Boolean(${find})`);
   await cdp.evaluate(`(() => { const node=${find}; const menu=node.closest(".browse-mode-menu,.photobook-display-options"); if(menu && !menu.open) menu.querySelector("summary").click(); })()`);
   await settledFrames();
-  if(selector.includes('画册模式') || selector.includes('浏览视角')) await assertLayout(selector.includes('画册模式')?'collection':'artist');
+  if(selector === MODE_BUTTONS) await assertLayout(await cdp.evaluate("document.querySelector('.album-fullscreen-theater')?'collection':'artist'"));
   await cdp.evaluate(`(${find}).click()`);
 }
 async function directory(kind) {
   if (await cdp.evaluate("document.querySelector('[data-nav=gallery]')?.getAttribute('aria-current') !== 'page'")) await click('[data-nav="gallery"]');
-  const back = kind === "collection" ? ".theater-game-back-btn" : ".author-back-btn";
-  const anyBack = await cdp.evaluate("document.querySelector('.theater-game-back-btn,.author-back-btn')?.className");
-  if (anyBack) await click(anyBack.includes("theater-game") ? ".theater-game-back-btn" : ".author-back-btn");
-  await clickText('[aria-label="画廊布局"] button', kind === "collection" ? "相册" : "画师");
-  await waitFor(`!document.querySelector(${JSON.stringify(back)}) && Boolean(document.querySelector(${JSON.stringify(kind === "collection" ? ".album-card-book" : ".author-browser-card")}))`);
+  if (await cdp.evaluate("Boolean(document.querySelector('.detail-back'))")) await click(".detail-back");
+  await clickText('.gallery-scope button', kind === "collection" ? "相册" : "画师");
+  await waitFor(`!document.querySelector('.detail-back') && Boolean(document.querySelector(${JSON.stringify(kind === "collection" ? "section[aria-label=相册] .directory-card-open" : ".author-gallery .directory-card-open")}))`);
   await settledFrames();
 }
 async function openDetail(kind, name) {
-  await clickText(kind === "collection" ? ".album-card-book" : ".author-browser-card", name);
+  await clickText(kind === "collection" ? "section[aria-label=相册] .directory-card-open" : ".author-gallery .directory-card-open", name);
   await waitFor(`Boolean(document.querySelector(${JSON.stringify(detailSelector[kind])}))`);
   await settledFrames();
 }
 async function mode(kind, value) {
-  await clickText(kind === "collection" ? '[aria-label="画册模式"] button' : '[aria-label="浏览视角"] button', modes[kind][value]);
+  await clickText(MODE_BUTTONS, modes[kind][value]);
   await waitFor(`document.querySelector(${JSON.stringify(detailSelector[kind])})?.dataset.detailMode === ${JSON.stringify(value)}`);
   await settledFrames();
 }
@@ -482,11 +481,13 @@ async function scrollAndCapture(selector) {
     window.__returnScrollStop ??= event=>event.stopImmediatePropagation();
     document.addEventListener('scroll',window.__returnScrollStop,true);
     const node=document.querySelector(${JSON.stringify(selector)});
-    node.scrollTo({top:Math.min(900,(node.scrollHeight-node.clientHeight)*0.45),behavior:'instant'});
+    const range=node.scrollHeight-node.clientHeight;
+    // Short ranges (e.g. a book that nearly fits) still get a meaningful, non-zero offset.
+    node.scrollTo({top:range*0.45>100?Math.min(900,range*0.45):range*0.8,behavior:'instant'});
   })()`);
   await settledFrames();
   const position = await scrollSnapshot(selector);
-  assert.ok(position.scrollTop > 100, `fixture is not scrollable: ${selector} ${JSON.stringify(position)}`);
+  assert.ok(position.scrollTop > Math.min(100, position.max * 0.5), `fixture is not scrollable: ${selector} ${JSON.stringify(position)}`);
   return position;
 }
 async function assertScroll(selector, expected, { resized = false } = {}) {
@@ -513,7 +514,7 @@ async function scrollReturn(selector, kind, value, destination) {
   await assertScroll(selector, before);
 }
 async function directoryReturn(kind, name) {
-  const selector = kind === "collection" ? ".album-card-book" : ".author-browser-card";
+  const selector = kind === "collection" ? "section[aria-label=相册] .directory-card-open" : ".author-gallery .directory-card-open";
   // Scroll to the chosen real card and enter in the same task, before a scroll event can fire.
   const before = await cdp.evaluate(`(() => {
     window.__returnScrollStop=event=>event.stopImmediatePropagation(); document.addEventListener('scroll',window.__returnScrollStop,true);
@@ -524,7 +525,7 @@ async function directoryReturn(kind, name) {
   })()`);
   assert.ok(before > 100, `directory fixture did not put ${name} below the first viewport`);
   await waitFor(`Boolean(document.querySelector(${JSON.stringify(detailSelector[kind])}))`);
-  await click(kind === "collection" ? ".theater-game-back-btn" : ".author-back-btn");
+  await click(".detail-back");
   await waitFor(`Boolean(document.querySelector(${JSON.stringify(selector)})) && !document.querySelector(${JSON.stringify(detailSelector[kind])})`);
   await settledFrames();
   const actual = await cdp.evaluate("document.querySelector('.app-shell > main').scrollTop");

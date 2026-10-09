@@ -65,7 +65,7 @@
 
 /* Segmented control: underline-free pill group */
 .ui-segmented { gap: 2px; padding: 2px; border: 0; border-radius: var(--ds-radius-md); background: var(--ds-bg-hover); }
-.ui-segmented button { min-height: 28px; padding: 0 12px; border-radius: 6px; color: var(--ds-text-secondary); font-size: var(--ds-font-13); font-weight: var(--ds-weight-medium); }
+.ui-segmented button { min-height: 32px; padding: 0 12px; border-radius: 6px; color: var(--ds-text-secondary); font-size: var(--ds-font-13); font-weight: var(--ds-weight-medium); }
 .ui-segmented button:hover:not(.active) { color: var(--ds-text-heading); background: transparent; }
 .ui-segmented button.active { color: var(--ds-text-heading); background: var(--ds-bg-card); box-shadow: var(--ds-shadow-sm); }
 .ui-segmented--compact { background: var(--ds-bg-hover); }

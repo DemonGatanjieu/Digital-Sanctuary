@@ -210,7 +210,8 @@ export function GalleryView({
 
   return (
     <>
-      {mode !== "flat" && !selectedCollection && !selectedAuthor && (
+      {/* The detail page brings its own header; keep this one while a slow scope is still loading so there is a way out. */}
+      {mode !== "flat" && (!(selectedCollection || selectedAuthor) || (scopeLoading && scopedArtworks.length === 0)) && (
         <header className="gallery-toolbar">
           <div className="gallery-toolbar-row">
             {scopeTabs}

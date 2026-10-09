@@ -30,7 +30,7 @@ const child = spawn(resolve("node_modules/electron/dist/electron.exe"), [resolve
 let main, cdp, stderr = ""; child.stderr.on("data", chunk => { stderr += String(chunk); }); const checks = [];
 try {
   main = await connectElectronMainInspector(mainPort); await showElectronTestWindow(main); cdp = await renderer();
-  await waitFor("Boolean(document.querySelector('.home-library-entry button'))");
+  await click('[data-nav="home"]');await waitFor("Boolean(document.querySelector('.home-library-entry button'))");
   await main.evaluate(`(()=>{const e=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron');globalThis.__discovery={pick:${JSON.stringify([originals[2]])},menu:null};e.dialog.showOpenDialog=async()=>({canceled:!__discovery.pick,filePaths:__discovery.pick??[]});const original=e.Menu.buildFromTemplate;e.Menu.buildFromTemplate=(template)=>{const menu=original(template);menu.popup=()=>{__discovery.menu=menu;};return menu;};return true;})()`);
   await click('.home-library-entry button');await waitFor("Boolean(document.querySelector('.import-images-dialog'))");
   assert.equal(await cdp.evaluate("document.querySelector('input[name=storage-mode]')?.checked"),true);
@@ -39,7 +39,7 @@ try {
   const managedWork=await cdp.evaluate(`window.sanctuary.getWork(${JSON.stringify(managed.id)})`);assert.equal(await readFile(managedWork.assets[0].path).then(b=>b.equals(images[2])),true);assert.notEqual(managedWork.assets[0].path,originals[2]);
   checks.push('native-import-defaults-to-managed-copy-and-keeps-existing-external-reference');
   const referencePath=join(root,'reference-only.png');await writeFile(referencePath,Buffer.concat([images[2],Buffer.from('reference-specific')]));
-  await main.evaluate(`__discovery.pick=${JSON.stringify([referencePath])}`);await clickText('main button','导入图片');await waitFor("Boolean(document.querySelector('.import-images-dialog'))");await cdp.evaluate("document.querySelectorAll('input[name=storage-mode]')[1].click()");await click('[data-import-action=start]');await waitFor("document.querySelector('.import-images-dialog')?.textContent.includes('导入结果')");await clickText('.import-images-dialog button','完成');
+  await main.evaluate(`__discovery.pick=${JSON.stringify([referencePath])}`);await click('.gallery-toolbar-actions .ui-button--primary');await waitFor("Boolean(document.querySelector('.import-images-dialog'))");await cdp.evaluate("document.querySelectorAll('input[name=storage-mode]')[1].click()");await click('[data-import-action=start]');await waitFor("document.querySelector('.import-images-dialog')?.textContent.includes('导入结果')");await clickText('.import-images-dialog button','完成');
   const external=(await cdp.evaluate("window.sanctuary.queryWorks({ownership:'external',limit:50})")).items.find(item=>item.title==='reference-only.png');assert.ok(external);
   const externalWork=await cdp.evaluate(`window.sanctuary.getWork(${JSON.stringify(external.id)})`);const moved=join(root,'moved-reference.png');await writeFile(moved,await readFile(referencePath));await rm(referencePath);
   await main.evaluate(`__discovery.pick=${JSON.stringify([moved])}`);const relinked=await cdp.evaluate(`window.sanctuary.relinkExternalImage(${JSON.stringify(external.id)},${JSON.stringify(externalWork.assets[0].id)})`);assert.equal(relinked.assets[0].path,moved);assert.equal(relinked.id,external.id);
@@ -51,10 +51,10 @@ try {
   await waitFor("document.querySelector('.shield-status')?.textContent.includes('未适配元素拦截')");await waitForMain("process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').webContents.getAllWebContents().some(c=>c.getURL().includes('example.com/sanctuary-fixture'))");
   const remoteId=await main.evaluate("process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').webContents.getAllWebContents().find(c=>c.getURL().includes('example.com/sanctuary-fixture')).id");
   assert.equal(await main.evaluate(`process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').webContents.fromId(${remoteId}).executeJavaScript('typeof window.sanctuary')`),'undefined');
-  await clickText('.explore-site-shortcuts button','保存当前网站');await waitFor("document.querySelector('.explore-site-shortcuts')?.textContent.includes('收图测试站')");
+  await clickText('.explore-site-shortcuts button','收藏网站');await waitFor("document.querySelector('.explore-site-shortcuts')?.textContent.includes('收图测试站')");
   await main.evaluate(`(()=>{const c=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron').webContents.fromId(${remoteId});c.emit('context-menu',{}, {hasImageContents:true,srcURL:'https://example.com/sanctuary-fixture.png'});__discovery.menu.items[0].click();return true;})()`);
   await waitFor("document.body.textContent.includes('已加入图库')",35000);
-  await click('[data-nav=gallery]');await waitFor("Array.from(document.querySelectorAll('.work-card-title-row strong')).some(e=>e.textContent==='收图测试站')");
+  await click('[data-nav=gallery]');await waitFor("Array.from(document.querySelectorAll('.work-tile-caption strong')).some(e=>e.textContent==='收图测试站')");
   const webWork=(await cdp.evaluate("window.sanctuary.queryWorks({search:'收图测试站',limit:20})")).items[0];const info=await cdp.evaluate(`window.sanctuary.getWorkInformation(${JSON.stringify(webWork.id)},0)`);assert.equal(info.work.ownership,'managed');assert.equal(info.webSource.pageUrl,'https://example.com/sanctuary-fixture');
   checks.push('isolated-browser-address-site-shortcut-context-image-import-and-gallery-provenance');
   await click('[data-nav=explore]');await waitFor("document.querySelector('.shield-status')?.textContent.includes('未适配元素拦截')");await shot('web-explore-1280');
@@ -64,7 +64,7 @@ try {
   const surface=await cdp.evaluate("(()=>{const r=document.querySelector('.explore-surface').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height};})()");
   assert.equal(nativeBounds.visible,true);for(const axis of ['x','y','width','height'])assert.ok(Math.abs(nativeBounds.bounds[axis]-surface[axis])<=2,JSON.stringify({nativeBounds,surface}));
   checks.push('browser-small-window-address-shortcuts-native-surface-do-not-overlap');
-  await click('[data-nav=gallery]');await clickText('main button','整理与分类');
+  await click('[data-nav=gallery]');await click('[data-nav="organize"]');
   await waitFor("Boolean(document.querySelector('.image-workbench'))");
   await waitFor("document.querySelectorAll('.workbench-image-grid article').length>=2");await cdp.evaluate("document.querySelectorAll('.workbench-image-grid input')[0].click();document.querySelectorAll('.workbench-image-grid input')[1].click()");await clickText('.workbench-result-actions button','聊聊所选图片');
   await waitFor("document.querySelectorAll('.inspiration-source').length===2");assert.equal(await cdp.evaluate("document.querySelector('.inspiration-composer textarea').value.includes('逐张')"),true);
@@ -72,7 +72,7 @@ try {
   assert.equal(await main.evaluate(`(()=>{const e=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron');return e.BrowserWindow.getAllWindows()[0].contentView.children.find(v=>v.webContents?.id===${remoteId}).getVisible();})()`),false);
   checks.push('library-result-selection-launches-creation-with-two-real-reference-pages-and-visible-composer');
   const folder=join(root,'folder-picks');await mkdir(folder);await writeFile(join(folder,'sky.png'),images[0]);await writeFile(join(folder,'night.png'),images[1]);
-  await main.evaluate(`__discovery.pick=${JSON.stringify([folder])}`);await click('[data-nav=gallery]');await clickText('main button','整理与分类');await clickText('[aria-label="图片来源"] button','本地文件夹');await clickText('.image-workbench button','选择图片文件夹');
+  await main.evaluate(`__discovery.pick=${JSON.stringify([folder])}`);await click('[data-nav=gallery]');await click('[data-nav="organize"]');await clickText('[aria-label="图片来源"] button','本地文件夹');await clickText('.image-workbench button','选择图片文件夹');
   await waitFor("document.querySelectorAll('.workbench-image-grid article').length===2");await cdp.evaluate("document.querySelectorAll('.workbench-image-grid input')[0].click();document.querySelectorAll('.workbench-image-grid input')[1].click()");await clickText('.workbench-result-actions button','导入后讨论');await waitFor("Boolean(document.querySelector('.import-images-dialog'))");await click('[data-import-action=start]');await waitFor("document.querySelector('.import-images-dialog')?.textContent.includes('导入结果')");await clickText('.import-images-dialog button','讨论已导入图片');await waitFor("document.querySelectorAll('.inspiration-source').length===2");
   assert.equal(await cdp.evaluate("!document.querySelector('.import-images-dialog')&&Array.from(document.querySelectorAll('.inspiration-source img')).every(img=>img.src.startsWith('sanctuary-image://local/'))"),true);
   checks.push('folder-selection-confirms-storage-import-then-opens-persistent-library-references-for-discussion');

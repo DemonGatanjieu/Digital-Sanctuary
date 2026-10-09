@@ -121,8 +121,8 @@ async function runFixture(metadataWorks) {
     }
 
     await click('[data-nav="gallery"]');
-    await waitFor("document.querySelectorAll('.album-card-book').length === 3");
-    await waitFor("document.querySelectorAll('.saved-view-card').length === 12");
+    await waitFor("document.querySelectorAll('section[aria-label=相册] .directory-card').length === 3");
+    await waitFor("document.querySelectorAll('section[aria-label=相册组合] .directory-card').length === 12");
     const firstReadyMs = await cdp.evaluate("Math.round(performance.now())");
     const summaries = await cdp.evaluate("(async () => (await window.sanctuary.listCollectionSummaries()).map(item => ({ id:item.id,workCount:item.workCount,pageCount:item.pageCount,bookPageCount:item.bookPageCount,coverCount:item.coverAsset ? 1 : 0 })))()");
     const metadataAlbum = summaries.find(item => item.id === fixture.metadataAlbumId);
@@ -138,44 +138,44 @@ async function runFixture(metadataWorks) {
     assert.deepEqual([saved.firstSize, saved.nextSize, saved.total], [12, 3, 15]);
     assert.ok(saved.counts.every(count => count === metadataWorks / 2));
     assert.ok(saved.previews.every(count => count <= 4));
-    assert.equal(await cdp.evaluate("document.querySelectorAll('.saved-view-card').length"), 12);
-    await clickText(".saved-views-section button", "继续加载组合视图");
-    await waitFor("document.querySelectorAll('.saved-view-card').length === 15");
+    assert.equal(await cdp.evaluate("document.querySelectorAll('section[aria-label=相册组合] .directory-card').length"), 12);
+    await clickText('section[aria-label=相册组合] button', "继续加载");
+    await waitFor("document.querySelectorAll('section[aria-label=相册组合] .directory-card').length === 15");
     checks.push("collection-work-vs-book-page-counts-and-bounded-saved-view-previews");
 
-    await clickText('[aria-label="画廊布局"] button', "画师");
-    await waitFor("document.querySelectorAll('.author-browser-card').length === 253");
+    await clickText('.gallery-scope button', "画师");
+    await waitFor("document.querySelectorAll('.directory-card-open').length === 253");
     const artists = await cdp.evaluate("(async () => (await window.sanctuary.listArtistSummaries()).map(item=>({artistId:item.artistId,workCount:item.workCount,pageCount:item.pageCount,previewCount:item.previewAssets.length})))()");
     assert.equal(artists.reduce((sum, item) => sum + item.workCount, 0), metadataWorks + 68);
     assert.equal(artists.reduce((sum, item) => sum + item.pageCount, 0), metadataWorks + 70);
     assert.ok(artists.every(item => item.previewCount <= 3));
-    assert.ok(await cdp.evaluate("document.querySelectorAll('.author-browser-card img').length <= 3 * 253"));
-    await clickText(".author-browser-card", "待补充作者信息");
+    assert.ok(await cdp.evaluate("document.querySelectorAll('.directory-card img').length <= 3 * 253"));
+    await clickText(".directory-card-open", "待补充作者信息");
     await waitFor("Boolean(document.querySelector('.author-detail-page'))");
-    await waitFor("document.querySelectorAll('.author-detail-page .art-card').length === 2");
-    assert.equal(await cdp.evaluate("document.querySelectorAll('.author-detail-page .work-group').length"), 2, "numeric local filenames merged unrelated works");
+    await waitFor("document.querySelectorAll('.author-detail-page [data-gallery-page-id]').length === 2");
+    assert.equal(await cdp.evaluate("document.querySelectorAll('.author-detail-page .work-tile-pages').length"), 0, "numeric local filenames merged unrelated works");
     const unknownScope = await main.evaluate("__directorySmoke.scopes.findLast(item => item.scope.kind === 'artist' && item.scope.artistId === null)");
     assert.equal(unknownScope.size, 2);
-    await click(".author-detail-page .art-preview-button");
+    await click(".author-detail-page .work-tile-image");
     await waitFor("Boolean(document.querySelector('.cinema-lightbox-theater')) && document.querySelector('.cinema-image-entity')?.naturalWidth > 0");
     assert.equal(await cdp.evaluate("document.querySelectorAll('.filmstrip-thumb-btn').length"), 0, "single-page work offered a fabricated filmstrip");
     const localWork = await main.evaluate("__directorySmoke.works.findLast(item => item.workId.startsWith('local:'))");
     assert.equal(localWork.size, 1, "a numeric local filename resolved another local work's pages");
     await key("Escape");
     await waitFor("!document.querySelector('.cinema-lightbox-theater')");
-    await click(".author-back-btn");
-    await waitFor("document.querySelectorAll('.author-browser-card').length === 253");
+    await click(".detail-back");
+    await waitFor("document.querySelectorAll('.directory-card-open').length === 253");
     checks.push("artist-summary-counts-bounded-previews-and-unattributed-scope");
 
-    await clickText('[aria-label="画廊布局"] button', "相册");
-    await waitFor("document.querySelectorAll('.album-card-book').length === 3");
-    await clickText(".album-card-book", "只收录第一页");
+    await clickText('.gallery-scope button', "相册");
+    await waitFor("document.querySelectorAll('section[aria-label=相册] .directory-card').length === 3");
+    await clickText(".directory-card-open", "只收录第一页");
     await waitFor("Boolean(document.querySelector('.album-fullscreen-theater'))");
-    await clickText('[aria-label="画册模式"] button', "典藏网格");
-    await waitFor("document.querySelectorAll('.collection-detail-grid .art-card').length === 1");
+    await clickText('.detail-header .ui-segmented button', "网格");
+    await waitFor("document.querySelectorAll('.album-fullscreen-theater [data-gallery-page-id]').length === 1");
     const albumScope = await main.evaluate(`__directorySmoke.scopes.findLast(item => item.scope.kind === 'collection' && item.scope.collectionId === ${JSON.stringify(fixture.partialAlbumId)})`);
     assert.equal(albumScope.size, 1, "album scope expanded a partially included work to every page");
-    await click(".collection-detail-grid .art-preview-button");
+    await click(".album-fullscreen-theater .work-tile-image");
     await waitFor("document.querySelectorAll('.filmstrip-thumb-btn').length === 3");
     await waitFor("document.querySelector('.cinema-image-entity')?.complete && document.querySelector('.cinema-image-entity')?.naturalWidth > 0");
     await click(".filmstrip-thumb-btn:nth-child(2)");
@@ -186,10 +186,10 @@ async function runFixture(metadataWorks) {
     await waitFor("!document.querySelector('.cinema-lightbox-theater')");
     assert.equal(await cdp.evaluate("Boolean(document.querySelector('.album-fullscreen-theater'))"), true);
     assert.equal(await cdp.evaluate(`(async () => (await window.sanctuary.listCollectionSummaries()).find(item=>item.id===${JSON.stringify(fixture.partialAlbumId)}).bookPageCount)()`), 1, "viewing an uncollected page changed album membership");
-    await waitFor("document.querySelectorAll('.collection-detail-grid .art-card').length === 1");
+    await waitFor("document.querySelectorAll('.album-fullscreen-theater [data-gallery-page-id]').length === 1");
     checks.push("partial-album-retains-one-page-and-lightbox-loads-all-work-pages");
 
-    await clickText(".theater-action-pill", "添加画作");
+    await clickText(".detail-actions button", "添加作品");
     await waitFor("document.querySelectorAll('.paged-picker-artwork').length === 60");
     await fill('[aria-label="搜索未入册画作"]', "待挑选");
     await waitFor("document.querySelector('.paged-picker-status')?.textContent.includes('共 65 张') && document.querySelectorAll('.paged-picker-artwork').length === 60");
@@ -227,7 +227,7 @@ async function runFixture(metadataWorks) {
     assert.equal(await cdp.evaluate("document.querySelector('.paged-picker-footer strong').textContent"), "已选择 65 张");
     await clickText(".paged-picker-actions button", "确认加入");
     await waitFor("!document.querySelector('.paged-artwork-picker')");
-    await waitFor("document.querySelectorAll('.collection-detail-grid .art-card').length === 66");
+    await waitFor("document.querySelectorAll('.album-fullscreen-theater [data-gallery-page-id]').length === 66");
     checks.push("bounded-picker-cross-page-selection-read-and-bulk-retries-and-scope-refresh");
 
     const updated = await cdp.evaluate(`(async () => { const summaries=await window.sanctuary.listCollectionSummaries(); const album=summaries.find(item=>item.id===${JSON.stringify(fixture.partialAlbumId)}); return {workCount:album.workCount,pageCount:album.pageCount,bookPageCount:album.bookPageCount}; })()`);

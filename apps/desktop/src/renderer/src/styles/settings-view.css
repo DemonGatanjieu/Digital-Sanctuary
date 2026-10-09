@@ -5,7 +5,7 @@
 .settings-header { flex-wrap: wrap; }
 .settings-header .settings-navigation { display: inline-flex; flex-wrap: wrap; grid-template-columns: none; gap: 2px; margin: 0; }
 .settings-header .settings-navigation button {
-  min-height: 28px;
+  min-height: 32px;
   padding: 0 12px;
   border: 0;
   border-radius: 6px;
