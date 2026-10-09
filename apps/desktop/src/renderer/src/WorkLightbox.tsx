@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import type { GenerationProvenance, VisionEvaluationResult, WorkRecord } from "@sanctuary/domain";
+import type { GenerationProvenance, WorkRecord } from "@sanctuary/domain";
 import { ElementInspectorDrawer } from "./ElementInspectorDrawer";
 import { Icon } from "./Icon";
 import { MenuItem, Popover } from "./Popover";
-import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 import { WorkInformationDrawer } from "./WorkInformationDrawer";
 import { localImageUrl as workImageUrl } from "./image-url";
 import { useCinemaViewer } from "./useCinemaViewer";
@@ -15,31 +14,25 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
   const [displayTitle, setDisplayTitle] = useState(work.title);
   useEffect(() => setDisplayTitle(work.title), [work.id, work.title]);
   const [pageIndex, setPageIndex] = useState(() => initialWorkPageIndex(work, initialAssetId));
-  const [showRadar, setShowRadar] = useState(false);
-  const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
   const [provenance, setProvenance] = useState<GenerationProvenance | null>(null);
   const [showProvenance, setShowProvenance] = useState(false);
   const [showInspector, setShowInspector] = useState(false);
   const [showInformation, setShowInformation] = useState(false);
   const [toolsAnchor, setToolsAnchor] = useState<HTMLElement | null>(null);
   const page = work.assets[pageIndex];
-  const interactionSuspended = showInspector || showRadar || showProvenance || showInformation;
+  const interactionSuspended = showInspector || showProvenance || showInformation;
   const viewerPages = useMemo(() => work.assets.map((asset) => ({ url: workImageUrl(asset.path), width: asset.width, height: asset.height, byteLength: asset.byteLength })), [work.assets]);
   const viewer = useCinemaViewer({
     imageKey: page?.id ?? work.id, pages: viewerPages, pageIndex, onPageChange: setPageIndex, onClose,
     interactionSuspended,
-    onDismissOverlay: showInspector ? undefined : showInformation ? () => setShowInformation(false) : showRadar ? () => setShowRadar(false) : showProvenance ? () => setShowProvenance(false) : undefined
+    onDismissOverlay: showInspector ? undefined : showInformation ? () => setShowInformation(false) : showProvenance ? () => setShowProvenance(false) : undefined
   });
   const { zoom, nativeMode, isPanning, hudVisible, imageLoaded, imageFailed, resetHudTimer } = viewer;
   useWorkReading({ workId: work.id, assetId: page && isReadableWorkAsset(page) ? page.id : null, imageLoaded, onSaved: onGenerated, onError });
 
   useEffect(() => {
     let active = true;
-    setEvaluations([]);
     setProvenance(null);
-    if (window.sanctuary?.listVisionEvaluationsForWork) {
-      window.sanctuary.listVisionEvaluationsForWork(work.id).then((values) => { if (active) setEvaluations(values); }).catch(() => {});
-    }
     void window.sanctuary.getGenerationProvenance(work.id).then((value) => { if (active) setProvenance(value); }).catch(() => {});
     return () => { active = false; };
   }, [work.id]);
@@ -74,7 +67,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
           </button>
           <span className="viewer-divider" />
           <button type="button" className="viewer-icon" aria-label="作品信息" aria-pressed={showInformation} title="作品信息（相册、来源、取用）"
-            onClick={() => { setShowInformation((value) => !value); setShowRadar(false); setShowInspector(false); setShowProvenance(false); }}><Icon name="info" /></button>
+            onClick={() => { setShowInformation((value) => !value); setShowInspector(false); setShowProvenance(false); }}><Icon name="info" /></button>
           <button type="button" className="viewer-icon" aria-label="更多工具" aria-haspopup="menu" aria-expanded={Boolean(toolsAnchor)} title="更多工具"
             onClick={(event) => setToolsAnchor(toolsAnchor ? null : event.currentTarget)}><Icon name="more" /></button>
           <button type="button" className="viewer-icon cinema-btn-close" aria-label="关闭大图" title="关闭（Esc）" onClick={onClose}><Icon name="close" /></button>
@@ -83,34 +76,20 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
       {toolsAnchor && (
         <Popover anchor={toolsAnchor} label="更多工具" align="end" onClose={() => setToolsAnchor(null)} className="viewer-menu">
           <MenuItem icon="create" label="带着这张图去创作" onSelect={() => { setToolsAnchor(null); onClose(); onOpenInspiration(work.id, pageIndex); }} />
-          <MenuItem icon="search" label="元素与提示词" onSelect={() => { setToolsAnchor(null); setShowInspector(true); setShowInformation(false); setShowRadar(false); setShowProvenance(false); }} />
-          <MenuItem icon="filter" label="画像与画评" onSelect={() => { setToolsAnchor(null); setShowRadar(true); setShowInformation(false); setShowInspector(false); setShowProvenance(false); }} />
-          {provenance && <MenuItem icon="info" label="生成来源" onSelect={() => { setToolsAnchor(null); setShowProvenance(true); setShowRadar(false); setShowInspector(false); setShowInformation(false); }} />}
+          <MenuItem icon="search" label="读图" hint="元素 · 提示词 · 画评" onSelect={() => { setToolsAnchor(null); setShowInspector(true); setShowInformation(false); setShowProvenance(false); }} />
+          {provenance && <MenuItem icon="info" label="生成来源" onSelect={() => { setToolsAnchor(null); setShowProvenance(true); setShowInspector(false); setShowInformation(false); }} />}
         </Popover>
       )}
 
-      {showRadar && (
-        <aside className="cinema-radar-drawer" role="complementary" aria-label="画作多维视觉雷达图">
-          <div className="radar-drawer-header">
-            <h3>多维视觉画像</h3>
-            <button type="button" className="radar-drawer-close" onClick={() => setShowRadar(false)} aria-label="关闭雷达图">✕</button>
-          </div>
-          <RadarEvaluationPanel
-            workId={work.id}
-            evaluations={evaluations}
-            onEvaluationsChange={setEvaluations}
-          />
-        </aside>
-      )}
       {showInformation && <WorkInformationDrawer workId={work.id} pageIndex={page.pageIndex} onClose={() => setShowInformation(false)}
-        onInspector={() => { setShowInformation(false); setShowInspector(true); }} onRadar={() => { setShowInformation(false); setShowRadar(true); }}
+        onInspector={() => { setShowInformation(false); setShowInspector(true); }}
         onInspiration={() => { onClose(); onOpenInspiration(work.id, pageIndex); }} onChanged={onGenerated} onRenamed={(renamed) => setDisplayTitle(renamed.title)} />}
 
       {showProvenance && provenance && (
         <aside className="cinema-radar-drawer generation-provenance-drawer" role="complementary" aria-label="生成来源与工作流摘要">
           <div className="radar-drawer-header">
             <h3>ComfyUI 生成来源</h3>
-            <button type="button" className="radar-drawer-close" onClick={() => setShowProvenance(false)} aria-label="关闭来源信息">✕</button>
+            <button type="button" className="radar-drawer-close" onClick={() => setShowProvenance(false)} aria-label="关闭来源信息"><Icon name="close" size={16} /></button>
           </div>
           <div className="generation-provenance-content">
             <p><strong>工作流</strong><span>{provenance.templateName}</span></p>

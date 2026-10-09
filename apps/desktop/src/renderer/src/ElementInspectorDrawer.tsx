@@ -5,6 +5,9 @@ import { Button } from "./Button";
 import { AppNotice } from "./AppNotice";
 import { PromptWorkbenchPanel } from "./PromptWorkbenchPanel";
 import { InspectorRequestController, type InspectorRequest } from "./inspector-request-controller";
+import type { VisionEvaluationResult } from "@sanctuary/domain";
+import { Icon } from "./Icon";
+import { RadarEvaluationPanel } from "./RadarEvaluationPanel";
 
 export interface ElementInspectorTarget {
   workId?: string;
@@ -40,7 +43,7 @@ export function ElementInspectorDrawer({
   const [notice, setNotice] = useState("");
   const [minConfidenceFilter, setMinConfidenceFilter] = useState<number>(0.2);
   const [runtimeStatus, setRuntimeStatus] = useState<ApplicationStatus | null>(null);
-  const [activeSection, setActiveSection] = useState<"features" | "prompt" | "filter">("features");
+  const [activeSection, setActiveSection] = useState<"features" | "prompt" | "filter" | "critique">("features");
 
   const requests = useMemo(() => new InspectorRequestController(
     (params) => window.sanctuary.inspectArtwork(params),
@@ -247,7 +250,7 @@ export function ElementInspectorDrawer({
 
       <div className="inspector-controls-bar">
         <div className="inspector-search-wrapper">
-          <span className="inspector-search-icon" aria-hidden="true">🔍</span>
+          <span className="inspector-search-icon" aria-hidden="true"><Icon name="search" size={14} /></span>
           <input
             type="search"
             className="inspector-search-input"
@@ -264,7 +267,7 @@ export function ElementInspectorDrawer({
               title="清空搜索"
               onClick={() => setSearchFilter("")}
             >
-              ✕
+              <Icon name="close" size={12} />
             </button>
           )}
         </div>
@@ -290,7 +293,6 @@ export function ElementInspectorDrawer({
       <div className={`inspector-tags-grid ${selectable ? "is-selectable" : "is-readable"}`} role={selectable ? "group" : undefined} aria-label="特征标签列表">
         {sortedTags.length === 0 ? (
           <div className="inspector-no-tags">
-            <span className="inspector-no-tags-icon">🍃</span>
             <p>{searchFilter ? `未找到与 “${searchFilter}” 匹配的标签` : "当前把握区间没有识别到标签"}</p>
             {searchFilter ? (
               <button type="button" className="inspector-reset-search-btn" onClick={() => setSearchFilter("")}>
@@ -317,7 +319,7 @@ export function ElementInspectorDrawer({
                 <span className="inspector-tag-conf" title={`WD Tagger 把握: ${pct}%`}>{pct}%</span>
                 {selectable && (
                   <span className="inspector-tag-check" aria-hidden="true">
-                    {isSelected ? "✓" : "+"}
+                    <Icon name={isSelected ? "check" : "plus"} size={12} />
                   </span>
                 )}
               </>
@@ -347,7 +349,7 @@ export function ElementInspectorDrawer({
   if (!target) return null;
 
   return (
-    <aside className="element-inspector-overlay" role="dialog" aria-modal="true" aria-label="AI 元素透视与提示词整理">
+    <aside className="element-inspector-overlay" role="dialog" aria-modal="true" aria-label="读图">
       <div className="element-inspector-drawer">
         {loading && <div className="inspector-scan-bar" aria-hidden="true" />}
         <header className="inspector-header">
@@ -363,8 +365,7 @@ export function ElementInspectorDrawer({
               />
             )}
             <div className="inspector-target-text">
-              <p className="eyebrow">AI 画面视觉特征透视</p>
-              <h3>AI 画面特征拆解</h3>
+              <h3>读图</h3>
               <span className="inspector-target-name" title={displayTargetName}>
                 {displayTargetName}
               </span>
@@ -379,11 +380,11 @@ export function ElementInspectorDrawer({
               disabled={loading}
               aria-label={loading ? "正在解析中" : "重新解析当前页"}
             >
-              <span className={`inspector-refresh-icon ${loading ? "spinning" : ""}`} aria-hidden="true">🔄</span>
+              <span className={`inspector-refresh-icon ${loading ? "spinning" : ""}`} aria-hidden="true"><Icon name="refresh" size={14} /></span>
               <span>{loading ? "解析中" : "重新解析"}</span>
             </button>
             <button type="button" className="inspector-close-btn" aria-label="关闭透视抽屉 (Esc)" title="关闭 (Esc)" onClick={onClose}>
-              ✕
+              <Icon name="close" size={16} />
             </button>
           </div>
         </header>
@@ -412,7 +413,6 @@ export function ElementInspectorDrawer({
         {pageCount > 1 && pages.length > 1 && (
           <div className="inspector-multi-page-section">
             <div className="inspector-focus-notice">
-              <span className="inspector-focus-icon" aria-hidden="true">💡</span>
               <span className="inspector-focus-text">
                 已自动匹配视口焦点单页 <strong>(P{activePageIndex + 1})</strong> · 多图作品可在下方自由切换单页
               </span>
@@ -440,7 +440,6 @@ export function ElementInspectorDrawer({
             <div className="inspector-radar-container">
               <div className="inspector-radar-sweep" />
               <div className="inspector-radar-pulse" />
-              <span className="inspector-radar-icon" aria-hidden="true">⚡</span>
             </div>
             <div className="inspector-loading-text">
               <strong>正在深度解析 P{activePageIndex + 1} 单页特征...</strong>
@@ -458,10 +457,9 @@ export function ElementInspectorDrawer({
           </div>
         ) : error && !assessment ? (
           <div className="inspector-empty">
-            <span className="inspector-empty-icon" aria-hidden="true">⚠️</span>
             <p>{error}</p>
             <Button variant="primary" onClick={() => loadAnalysis(activePageIndex)}>
-              🔄 重新尝试解析
+              重新解析
             </Button>
           </div>
         ) : assessment ? (
@@ -497,6 +495,16 @@ export function ElementInspectorDrawer({
                 <span>设置探索拦截</span>
                 <small>{selectedTags.length > 0 ? `已选 ${selectedTags.length} 项` : "可选规则"}</small>
               </button>
+              {target.workId && <button
+                type="button"
+                role="tab"
+                aria-selected={activeSection === "critique"}
+                className={activeSection === "critique" ? "active" : ""}
+                onClick={() => setActiveSection("critique")}
+              >
+                <span>画评</span>
+                <small>技术画像与六维评价</small>
+              </button>}
             </nav>
 
             {activeSection === "features" && (
@@ -526,6 +534,12 @@ export function ElementInspectorDrawer({
               </section>
             )}
 
+            {activeSection === "critique" && target.workId && (
+              <section className="inspector-section-panel" aria-label="画评">
+                <WorkCritique workId={target.workId} />
+              </section>
+            )}
+
             {activeSection === "filter" && (
               <section className="inspector-section-panel" aria-label="探索拦截规则">
                 <div className="inspector-section-intro">
@@ -534,7 +548,7 @@ export function ElementInspectorDrawer({
                     <span>先勾选需要拦截的标签，再选择隐藏方式与触发把握。</span>
                   </div>
                   <div className="inspector-intro-badge">
-                    <span className="badge-shield" aria-hidden="true">🛡️</span>
+                    <span className="badge-shield" aria-hidden="true"><Icon name="shield" size={14} /></span>
                     <p>只影响<strong>远程探索</strong>；已下载到画廊的图片始终正常清晰展示。</p>
                   </div>
                 </div>
@@ -542,7 +556,7 @@ export function ElementInspectorDrawer({
                 <div className="inspector-action-footer">
                   <div className="inspector-action-header">
                     <strong>
-                      <span aria-hidden="true">⚙️</span> 自定义探索拦截规则
+                      自定义探索拦截规则
                     </strong>
                     <span className="inspector-selected-count-badge">
                       {selectedTags.length > 0 ? `已选择 ${selectedTags.length} 个标签` : "未选择标签"}
@@ -596,4 +610,15 @@ export function ElementInspectorDrawer({
       </div>
     </aside>
   );
+}
+
+/** The critique tab keeps its own results, so the viewer does not need to hold them. */
+function WorkCritique({ workId }: { workId: string }) {
+  const [evaluations, setEvaluations] = useState<VisionEvaluationResult[]>([]);
+  useEffect(() => {
+    let active = true;
+    void window.sanctuary.listVisionEvaluationsForWork(workId).then((values) => { if (active) setEvaluations(values); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [workId]);
+  return <RadarEvaluationPanel workId={workId} evaluations={evaluations} onEvaluationsChange={setEvaluations} />;
 }

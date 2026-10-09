@@ -36,3 +36,4 @@
 @import "./styles/detail.css" layer(views);
 @import "./styles/explore-view.css" layer(views);
 @import "./styles/settings-view.css" layer(views);
+@import "./styles/read-picture.css" layer(views);

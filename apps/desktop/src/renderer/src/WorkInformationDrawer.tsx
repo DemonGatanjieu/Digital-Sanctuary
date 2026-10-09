@@ -5,9 +5,9 @@ import { DialogOverlay } from "./DialogOverlay";
 import { Icon } from "./Icon";
 import { ExportImagesButton, SingleImageActions } from "./ImageOutputActions";
 
-export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector, onRadar, onInspiration, onChanged, onRenamed }: {
+export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector, onInspiration, onChanged, onRenamed }: {
   workId: string; pageIndex: number; onClose: () => void;
-  onInspector: () => void; onRadar: () => void; onInspiration: () => void;
+  onInspector: () => void; onInspiration: () => void;
   onChanged: () => Promise<void> | void;
   onRenamed?: (work: WorkRecord) => void;
 }) {
@@ -117,12 +117,12 @@ export function WorkInformationDrawer({ workId, pageIndex, onClose, onInspector,
             <option value="">选择相册</option>{information?.collections.filter((item) => !work.collectionIds.includes(item.id)).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select><Button size="small" disabled={!album} busy={busy} onClick={() => void membership(album)}>加入相册</Button></div>
                   </section>
-        <section><h3>识别与画评</h3>
+        <section><h3>读图</h3>
           <p className="muted">{information?.assessment?.status === "complete" ? "本页已有标签识别记录" : information?.assessment ? "上次标签识别未成功，可重新识别" : "这页还没有保存的标签识别"}</p>
           {information?.assessment && <details><summary>查看已存标签与识别模型</summary><p>{information.assessment.engine} · 版本 {information.assessment.engineVersion}（保存时的模型）</p>
             <p className="work-information-tags">{tags.map(([name, confidence]) => <span key={name}>{name} {Math.round(confidence * 100)}%</span>)}</p></details>}
           <p className="muted">已有 {information?.evaluations.length ?? 0} 项画像 / 画评</p>
-          <div className="work-information-actions"><Button size="small" onClick={onInspector}>元素与提示词</Button><Button size="small" onClick={onRadar}>查看画像与画评</Button><Button size="small" onClick={onInspiration}>携图创作</Button></div>
+          <div className="work-information-actions"><Button size="small" onClick={onInspector}>读图</Button><Button size="small" onClick={onInspiration}>携图创作</Button></div>
         </section>
         {information?.provenance && <details><summary>生成来源与提示词</summary><p>工作流：{information.provenance.templateName}</p><p>来源作品：{information.provenance.sourceWorkId}</p><p>正向：{information.provenance.positivePrompt || "（空）"}</p><p>负向：{information.provenance.negativePrompt || "（空）"}</p></details>}
         <details><summary>文件与记录详情</summary><p>{asset?.path ?? "没有文件路径"}</p><p>格式：{asset?.extension ?? "未知"}</p><p>作品 ID：{work.id}</p></details>

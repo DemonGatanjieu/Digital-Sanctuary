@@ -84,6 +84,11 @@ try {
             await waitFor("Boolean(document.querySelector('.work-information-drawer dl'))", 8000).catch(() => {}); await settle(300); await shot(`viewer-info-${suffix}`);
             await key("Escape"); await settle(150);
           }
+          // 读图 drawer (元素 / 提示词 / 画评); the tagger may still be starting, so the shot shows whichever state it is in.
+          await cdp.evaluate("document.querySelector('[aria-label=\"更多工具\"]')?.click()"); await settle(150);
+          if (await cdp.evaluate("(()=>{const m=[...document.querySelectorAll('.ui-popover [role^=menuitem]')].find(e=>e.textContent.includes('读图'));m?.click();return Boolean(m)})()")) {
+            await settle(600); await shot(`viewer-read-${suffix}`); await key("Escape"); await settle(150);
+          }
           await key("Escape"); await settle();
         }
         if (await openFirstWork("[data-work-tile]:has(.work-tile-pages) .work-tile-image")) { await settle(500); await shot(`viewer-pages-${suffix}`); await key("Escape"); await settle(); }

@@ -49,7 +49,7 @@ describe("ElementInspectorDrawer & PromptWorkbench visual components", () => {
       />
     );
     expect(markup).toContain('role="dialog"');
-    expect(markup).toContain("AI 画面特征拆解");
+    expect(markup).toContain("<h3>读图</h3>");
     expect(markup).toContain("测试画作");
     expect(markup).toContain("重新解析");
   });

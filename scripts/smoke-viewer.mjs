@@ -110,6 +110,8 @@ try {
     const TILE = "[data-work-tile]", OPEN = "[data-work-tile] .work-tile-image", SEARCH = ".gallery-search-field input";
     const ALBUM_CARD = "section[aria-label=相册] .directory-card-open", ALBUM_TILE = ".album-fullscreen-theater .work-tile-image";
     async function menu(trigger, label) {
+      // A popover that is still closing would swallow the next trigger click.
+      await waitFor("!document.querySelector('.ui-popover')");
       await click(trigger);
       await waitFor("Boolean(document.querySelector('.ui-popover'))");
       await clickText('.ui-popover [role^="menuitem"]', label);
@@ -259,17 +261,7 @@ try {
       await key('Escape');
       await waitFor("!document.querySelector('.ui-popover')");
       assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"),true);
-      await menu('[aria-label="更多工具"]', "画像与画评");
-      await waitFor("Boolean(document.querySelector('.cinema-radar-drawer'))");
-      assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.cinema-nav-arrow, .filmstrip-thumb-btn')).every(button => button.disabled)"), true, "background page controls remained enabled under radar");
-      await click(".cinema-nav-arrow.next");
-      await click(".filmstrip-thumb-btn:last-child");
-      await key("ArrowRight");
-      assert.equal(await cdp.evaluate("document.querySelector('.cinema-heading-group small').textContent.includes('第 1/3 页')"), true);
-      await key("Escape");
-      await waitFor("!document.querySelector('.cinema-radar-drawer')");
-      assert.equal(await cdp.evaluate("Boolean(document.querySelector('.cinema-lightbox-theater'))"), true);
-      await menu('[aria-label="更多工具"]', "元素与提示词");
+      await menu('[aria-label="更多工具"]', "读图");
       await waitFor("Boolean(document.querySelector('.element-inspector-drawer'))");
       assert.equal(await cdp.evaluate("Array.from(document.querySelectorAll('.cinema-nav-arrow, .filmstrip-thumb-btn')).every(button => button.disabled)"), true, "background page controls remained enabled under inspector");
       // Keep this test independent of installed vision models. An editor in the actual topmost drawer has the same keyboard ownership as its prompt/search inputs.
@@ -369,7 +361,7 @@ try {
     await waitFor("document.querySelectorAll('[data-work-tile]').length === 1");
     await click(OPEN);
     await imageReady();
-    await menu('[aria-label="更多工具"]', "元素与提示词");
+    await menu('[aria-label="更多工具"]', "读图");
     await waitFor("document.querySelector('.inspector-tag-name')?.textContent === 'fixture_page_0'");
     await main.evaluate("globalThis.__viewerInspect.controlled = true");
     await click('.inspector-page-pill:nth-child(2)');
@@ -403,7 +395,7 @@ try {
     await key("Escape");
     await waitFor("!document.querySelector('.element-inspector-drawer')");
     await main.evaluate("globalThis.__viewerInspect.controlled = false");
-    await menu('[aria-label="更多工具"]', "元素与提示词");
+    await menu('[aria-label="更多工具"]', "读图");
     await waitFor("document.querySelector('.inspector-tag-name')?.textContent === 'fixture_page_0'");
     await main.evaluate("globalThis.__viewerInspect.pending[6].resolve(globalThis.__viewerInspect.response(2))");
     await cdp.evaluate("new Promise(done => setTimeout(done, 100))");
