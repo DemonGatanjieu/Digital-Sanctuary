@@ -69,8 +69,8 @@ export function GallerySearchStatus({ search, query }: { search: GalleryPictureS
   return (
     <div className="gallery-search-status" aria-live="polite">
       <span role="status">{phase}{p?.failed ? ` · ${p.failed} 张读取失败` : ""}</span>
-      {search.running && p && <button type="button" disabled={search.pending || p.cancelRequested} onClick={() => void search.cancel()}>{p.cancelRequested ? "正在停止…" : "停止"}</button>}
-      {relevance && <button type="button" disabled={search.pending} onClick={() => void search.setRelevance(search.relevance === "all" ? "relevant" : "all")}>
+      {search.running && p && <button type="button" aria-label="停止找图" disabled={search.pending || p.cancelRequested} onClick={() => void search.cancel()}>{p.cancelRequested ? "正在停止…" : "停止"}</button>}
+      {relevance && <button type="button" aria-label={search.relevance === "all" ? "只看较相关结果" : "显示更多搜索结果"} disabled={search.pending} onClick={() => void search.setRelevance(search.relevance === "all" ? "relevant" : "all")}>
         {search.relevance === "all" ? "只看较相关" : `显示另外 ${search.snapshot!.relevance.hiddenWorks} 个弱相关结果`}
       </button>}
       {p?.query && search.draft.trim() !== p.query.text && <span>结果来自“{p.query.text}”，回车搜索新描述</span>}

@@ -34,7 +34,7 @@ try{
   await main.evaluate(`(()=>{const electron=process.getBuiltinModule('module').createRequire(process.cwd()+'/package.json')('electron');
     globalThis.__workbenchSmoke={picks:[]};electron.dialog.showOpenDialog=async(...args)=>{const options=args.at(-1);__workbenchSmoke.picks.push(options.title);return {canceled:false,filePaths:[options.title.includes('复制原图')?${JSON.stringify(destination)}:${JSON.stringify(folder)}]};};return true;})()`);
   await cdp.send("Emulation.setDeviceMetricsOverride",{width:1280,height:720,deviceScaleFactor:1,mobile:false});
-  await click('[data-home-task="organize"]');await clickText('[aria-label="图片来源"] button',"本地文件夹");
+  await click('[data-nav="organize"]');await clickText('[aria-label="图片来源"] button',"本地文件夹");
   await clickText('.image-workbench-controls button',"选择图片文件夹");
   await waitFor("(async()=>{const s=await window.sanctuary.currentWorkbench('folder');return s?.phase==='ready'&&s.total===4})()");
   let session=await cdp.evaluate("window.sanctuary.currentWorkbench('folder')");
@@ -79,11 +79,12 @@ try{
   assert.equal(await cdp.evaluate("document.querySelector('.import-images-dialog').textContent.includes('已选择 1 张图片')"),true);await click('.import-images-dialog [data-import-action="start"]');
   await waitFor("document.querySelector('.import-images-dialog h2')?.textContent==='导入结果'");assert.equal(await countWorks(),2);
   await key("Escape");checks.push("selected-only-import-reuses-existing-confirmation-and-keeps-source-files");
-  await click('[data-nav="settings"]');await click('[data-nav="home"]');await click('[data-home-task="organize"]');await clickText('[aria-label="图片来源"] button',"本地文件夹");
+  await click('[data-nav="settings"]');await click('[data-nav="organize"]');await clickText('[aria-label="图片来源"] button',"本地文件夹");
   await waitFor("document.querySelector('[aria-label=\"画面描述\"]')?.value==='白色背景上的红色正方形'");assert.equal((await cdp.evaluate("window.sanctuary.currentWorkbench('folder')")).id,session.id);
   checks.push("return-to-folder-restores-session-and-query-without-running-model");
-  await click('[aria-label="任务与进度"]');await waitFor("Boolean(document.querySelector('[data-task-kind=workbench]'))");
-  assert.equal(await cdp.evaluate("Boolean(document.querySelector('[data-task-kind=copy]'))"),true);
+  await click('[aria-label="任务与进度"]');
+  // Workbench and copy tasks can arrive in different refreshes of the task list.
+  await waitFor("Boolean(document.querySelector('[data-task-kind=workbench]'))&&Boolean(document.querySelector('[data-task-kind=copy]'))");
   await clickText('[data-task-kind=copy] button',"返回找图与取用");
   await waitFor("Boolean(document.querySelector('.workbench-result-actions .image-output-progress'))");
   assert.equal((await cdp.evaluate("window.sanctuary.currentWorkbench('folder')")).id,session.id);
