@@ -1,6 +1,6 @@
 import { describe,expect,it,vi } from "vitest";
 import type { GallerySearchSnapshot,GallerySearchRelevance,WorkListItem } from "@sanctuary/domain";
-import { GalleryPictureSearchController,pictureSearchScopeKey } from "./gallery-picture-search";
+import { GalleryPictureSearchController,pictureSearchScopeKey,type PictureSearchState } from "./gallery-picture-search";
 function snapshot(id="search",phase="completed",ids=["a"]): GallerySearchSnapshot {return {
   progress:{id,source:"library",name:"中文",recursive:false,phase:phase as "completed",galleryQuery:{},total:1,processed:1,failed:0,matched:1,unanalysed:0,visited:0,limitReached:false,warnings:[],items:[],hasMore:false,cancelRequested:false},
   result:{items:ids.map(id=>({id} as WorkListItem)),total:100,totalPages:100,offset:0,limit:60,hasMore:true},
@@ -64,4 +64,19 @@ describe("gallery picture search concurrency",()=>{
     expect(controller.state.relevance).toBe("all");expect(controller.state.pending).toBe(false);
     await controller.refresh();expect(host.get).toHaveBeenLastCalledWith("search",0,"all");
   });
+  it("starts a likeness search from one page, replacing a running description search",async()=>{
+    const host={start:vi.fn(async()=>snapshot("described","analyzing")),startSimilar:vi.fn(async()=>snapshot("similar")),get:vi.fn(),cancel:vi.fn(async()=>undefined)};
+    const states:PictureSearchState[]=[];const c=new GalleryPictureSearchController(host,state=>states.push(state));
+    c.draft("夜晚");await c.search({favorite:true});
+    await c.similar({workId:"local:1",assetId:"a1",title:"雨夜"},{favorite:true,search:"标题",sortBy:"title"});
+    expect(host.cancel).toHaveBeenCalledWith("described");
+    expect(host.startSimilar).toHaveBeenCalledWith("local:1","a1",{favorite:true});
+    expect(c.state).toMatchObject({mode:"picture",draft:"相似：雨夜",pending:false});
+    expect(c.state.snapshot?.progress.id).toBe("similar");
+  });
+  it("does nothing for likeness when the host cannot do it",async()=>{
+    const host={start:vi.fn(),get:vi.fn(),cancel:vi.fn()};const c=new GalleryPictureSearchController(host,()=>{});
+    await c.similar({workId:"w",assetId:"a",title:"t"},{});expect(c.state.draft).toBe("");
+  });
 });
+

@@ -151,6 +151,8 @@ export interface WorkMenuActions {
   copy: () => void;
   reveal: () => void;
   rename: () => void;
+  /** Present only when the offline picture model is installed. */
+  findSimilar?: (() => void) | undefined;
   select: () => void;
   remove: () => void;
 }
@@ -171,6 +173,7 @@ export function WorkContextMenu({ work, anchor, collections, activeCollectionNam
     <Popover anchor={anchor} label={`${work.title} 的操作`} onClose={onClose}>
       {view === "main" ? <>
         <MenuItem icon="open" label="打开" onSelect={run(actions.open)} />
+        {actions.findSimilar && <MenuItem icon="search" label="找相似图" disabled={!image} onSelect={run(actions.findSimilar)} />}
         <MenuItem icon="heart" label={work.favorite ? "取消喜欢" : "喜欢"} onSelect={run(actions.favorite)} />
         <MenuItem icon="album" label="加入相册" hint="›" disabled={collections.length === 0} onSelect={() => setView("albums")} />
         {actions.removeFromAlbum && <MenuItem icon="close" label={`移出“${activeCollectionName ?? "当前相册"}”`} onSelect={run(actions.removeFromAlbum)} />}

@@ -89,6 +89,17 @@ try {
   await shot('gallery-picture-search-900');
   await cdp.evaluate("(async()=>{const a=await window.sanctuary.getAppearancePreferences();await window.sanctuary.updateAppearancePreferences({...a,colorScheme:'dark'});})()");await waitFor("matchMedia('(prefers-color-scheme: dark)').matches");await shot('gallery-picture-search-dark-900');
   checks.push('Chinese-search-and-progress-stay-visible-in-small-window-and-dark-theme');
+  // Find similar: the two-page work (sky + night) is the query; it is left out, and the identical external sky ranks first.
+  await click('[aria-label="清除搜索"]');await waitFor("document.querySelectorAll('[data-work-tile]').length===4");
+  await cdp.evaluate("(()=>{const tile=[...document.querySelectorAll('[data-work-tile]')].find(t=>t.querySelector('.work-tile-caption strong')?.textContent==='双页测试作品');tile.querySelector('.work-tile-image').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,clientX:10,clientY:10}));})()");
+  await waitFor("[...document.querySelectorAll('.ui-popover [role^=menuitem]')].some(e=>e.textContent.includes('找相似图'))");
+  await cdp.evaluate("[...document.querySelectorAll('.ui-popover [role^=menuitem]')].find(e=>e.textContent.includes('找相似图')).click()");
+  const similar=await finished();
+  assert.equal(similar.progress.name,'相似：双页测试作品');assert.equal(await cdp.evaluate("document.querySelector('.gallery-search-field input').value"),'相似：双页测试作品');
+  const similarAll=await cdp.evaluate(`window.sanctuary.galleryPictureResults(${JSON.stringify(similar.progress.id)},0,'all')`);
+  assert.ok(similarAll.result.items.every(work=>work.id!=='pixiv:456'),'the source work was not left out');
+  assert.equal(similarAll.result.items[0].id,'local:seed-3');
+  checks.push('find-similar-ranks-the-library-by-one-picture-and-leaves-its-own-work-out');
   const report={status:'passed',checks,coldMs,warmMs,indexedUniqueContents:cached,screenshots:shots,limits:'Synthetic image fixtures with real offline EmbeddingGemma CPU inference; not a benchmark of arbitrary large personal libraries.'};await writeFile(join(shots,'result.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));
 } catch(error) {console.error(error.stack||error);if(cdp){console.error(await cdp.evaluate("(async()=>JSON.stringify({feedback:document.querySelector('.gallery-search-status')?.textContent,visibility:document.visibilityState,progress:(await window.sanctuary.currentGalleryPictureSearch())?.progress.phase}))()").catch(()=>''));await shot('failure').catch(()=>{});}console.error(stderr.slice(-4000));process.exitCode=1;}
 finally {cdp?.close();main?.close();child.kill();await new Promise(done=>{if(child.exitCode!==null)done();else{child.once('exit',done);setTimeout(done,2000);}});const absolute=resolve(root);if(!absolute.startsWith(`${resolve(tmpdir())}${sep}sanctuary-gallery-search-`))throw new Error('Unexpected temporary directory');await rm(absolute,{recursive:true,force:true,maxRetries:8,retryDelay:150});}

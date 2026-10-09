@@ -7,6 +7,7 @@ export function useGalleryPictureSearch(query: WorkQuery, visible: boolean) {
   const controllerRef=useRef<GalleryPictureSearchController|null>(null);
   if(!controllerRef.current)controllerRef.current=new GalleryPictureSearchController({
     start:(text,filters)=>window.sanctuary.searchGalleryPictures(text,filters),
+    startSimilar:(workId,assetId,filters)=>window.sanctuary.searchSimilarPictures(workId,assetId,filters),
     get:(id,offset,relevance)=>window.sanctuary.galleryPictureResults(id,offset,relevance),
     cancel:id=>window.sanctuary.cancelWorkbench(id)
   },setState);
@@ -33,7 +34,7 @@ export function useGalleryPictureSearch(query: WorkQuery, visible: boolean) {
     return()=>window.clearInterval(timer);
   },[visible,state.snapshot?.progress.id,running,controller]);
   return { ...state, running, available, setDraft:(value:string)=>controller.draft(value),setMode:(mode:PictureSearchState["mode"])=>controller.mode(mode),
-    search:()=>controller.search(query),cancel:()=>controller.cancel(),clear:()=>controller.clear(),loadMore:()=>controller.refresh(true),refresh:()=>controller.refresh(),
+    search:()=>controller.search(query),similar:(target:{workId:string;assetId:string;title:string})=>controller.similar(target,query),cancel:()=>controller.cancel(),clear:()=>controller.clear(),loadMore:()=>controller.refresh(true),refresh:()=>controller.refresh(),
     setRelevance:(relevance:PictureSearchState["relevance"])=>controller.setRelevance(relevance) };
 }
 export type GalleryPictureSearch = ReturnType<typeof useGalleryPictureSearch>;

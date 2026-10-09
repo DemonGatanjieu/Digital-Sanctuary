@@ -10,7 +10,7 @@ import { useCinemaViewer } from "./useCinemaViewer";
 import { useWorkReading } from "./useWorkReading";
 import { initialWorkPageIndex, isReadableWorkAsset } from "./work-reading";
 
-export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpenInspiration, onError }: { work: WorkRecord; initialAssetId?: string; onClose: () => void; onGenerated: () => Promise<void> | void; onOpenInspiration: (workId: string, pageIndex: number) => void; onError: (error: unknown) => void }) {
+export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpenInspiration, onFindSimilar, onError }: { work: WorkRecord; initialAssetId?: string; onClose: () => void; onGenerated: () => Promise<void> | void; onOpenInspiration: (workId: string, pageIndex: number) => void; onFindSimilar?: (workId: string, assetId: string, title: string) => void; onError: (error: unknown) => void }) {
   const [displayTitle, setDisplayTitle] = useState(work.title);
   useEffect(() => setDisplayTitle(work.title), [work.id, work.title]);
   const [pageIndex, setPageIndex] = useState(() => initialWorkPageIndex(work, initialAssetId));
@@ -75,6 +75,7 @@ export function WorkLightbox({ work, initialAssetId, onClose, onGenerated, onOpe
       </header>
       {toolsAnchor && (
         <Popover anchor={toolsAnchor} label="更多工具" align="end" onClose={() => setToolsAnchor(null)} className="viewer-menu">
+          {onFindSimilar && page && <MenuItem icon="search" label="找相似图" onSelect={() => { setToolsAnchor(null); onClose(); onFindSimilar(work.id, page.id, displayTitle); }} />}
           <MenuItem icon="create" label="带着这张图去创作" onSelect={() => { setToolsAnchor(null); onClose(); onOpenInspiration(work.id, pageIndex); }} />
           <MenuItem icon="search" label="读图" hint="元素 · 提示词 · 画评" onSelect={() => { setToolsAnchor(null); setShowInspector(true); setShowInformation(false); setShowProvenance(false); }} />
           {provenance && <MenuItem icon="info" label="生成来源" onSelect={() => { setToolsAnchor(null); setShowProvenance(true); setShowInspector(false); setShowInformation(false); }} />}

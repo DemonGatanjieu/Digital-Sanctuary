@@ -16,6 +16,7 @@ export interface PictureSearchState {
 }
 export interface PictureSearchHost {
   start(text: string,query: WorkQuery): Promise<GallerySearchSnapshot>;
+  startSimilar?(workId: string,assetId: string,query: WorkQuery): Promise<GallerySearchSnapshot>;
   get(id: string,offset?: number,relevance?: GallerySearchRelevance): Promise<GallerySearchSnapshot>;
   cancel(id: string): Promise<unknown>;
 }
@@ -38,11 +39,23 @@ export class GalleryPictureSearchController {
   }
   async search(query: WorkQuery) {
     const text=this.state.draft.trim();
-    if(!text||this.#command||pictureSearchRunning(this.state.snapshot))return;
+    if(!text||pictureSearchRunning(this.state.snapshot))return;
+    await this.#start(()=>this.host.start(text,pictureSearchFilters(query)));
+  }
+  /** Ranks the library by likeness to one page; replaces whatever search was showing. */
+  async similar(target: {workId:string;assetId:string;title:string},query: WorkQuery) {
+    const startSimilar=this.host.startSimilar;
+    if(!startSimilar||this.#command)return;
+    this.clear();
+    this.#publish({mode:"picture",draft:`相似：${target.title}`});
+    await this.#start(()=>startSimilar(target.workId,target.assetId,pictureSearchFilters(query)));
+  }
+  async #start(begin: ()=>Promise<GallerySearchSnapshot>) {
+    if(this.#command)return;
     this.#command=true;const generation=++this.#generation;
     this.#publish({pending:true,error:"",snapshot:null,relevance:"relevant"});
     try {
-      const snapshot=await this.host.start(text,pictureSearchFilters(query));
+      const snapshot=await begin();
       if(generation===this.#generation)this.#publish({snapshot});
       else if(pictureSearchRunning(snapshot))await this.host.cancel(snapshot.progress.id).catch(()=>{});
     }catch(error){if(generation===this.#generation)this.#publish({error:message(error)});}

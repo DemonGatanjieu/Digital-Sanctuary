@@ -213,6 +213,9 @@ export function WorkLibrary({
   }), []);
 
   const selectedList = [...selectedIds];
+  const findSimilar = pictureSearch?.available
+    ? (workId: string, assetId: string, title: string) => { void pictureSearch.similar({ workId, assetId, title }); }
+    : undefined;
   const allLoadedSelected = result.items.length > 0 && result.items.every((work) => selectedIds.has(work.id));
   const empty = result.items.length === 0 && !loading;
   const emptyMessage = workEmptyMessage(query);
@@ -280,6 +283,7 @@ export function WorkLibrary({
             copy: () => void useCover(menu.work, "copy"),
             reveal: () => void useCover(menu.work, "reveal"),
             rename: () => setRenamingWork({ id: menu.work.id, title: menu.work.title }),
+            findSimilar: findSimilar && menu.work.coverAsset ? () => findSimilar(menu.work.id, menu.work.coverAsset!.id, menu.work.title) : undefined,
             select: () => toggleSelection(menu.work.id),
             remove: () => void previewDeletion([menu.work.id])
           }} />
@@ -346,7 +350,8 @@ export function WorkLibrary({
 
       {selectedWork && (
         <WorkLightbox work={selectedWork.work} {...(selectedWork.assetId ? { initialAssetId: selectedWork.assetId } : {})}
-          onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} onOpenInspiration={onOpenInspiration} onError={onError} />
+          onClose={() => setSelectedWork(null)} onGenerated={onLibraryChanged} onOpenInspiration={onOpenInspiration} onError={onError}
+          {...(findSimilar ? { onFindSimilar: findSimilar } : {})} />
       )}
 
       {deletionPreview && <WorkDeleteDialog preview={deletionPreview} deleting={deleting} onCancel={() => setDeletionPreview(null)} onConfirm={() => void confirmDeletion()} />}
