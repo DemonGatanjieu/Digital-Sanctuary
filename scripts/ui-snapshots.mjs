@@ -59,6 +59,7 @@ const taken = [];
 try {
   main = await connectElectronMainInspector(mainPort); await showElectronTestWindow(main); cdp = await renderer();
   await cdp.send("Page.enable");
+  await waitFor("Boolean(document.querySelector('[data-nav]'))", 20000);
   for (const scheme of ["light", "dark"]) {
     await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: scheme }, { name: "prefers-reduced-motion", value: "reduce" }] });
     for (const [width, height] of [[1280, 800], [900, 620]]) {

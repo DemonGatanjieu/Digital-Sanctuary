@@ -6,8 +6,8 @@
 .rename-work-dialog p { color: var(--ds-text-secondary); line-height: 1.7; }
 .rename-work-dialog [role="alert"] { color: var(--ds-danger-text); }
 .rename-work-dialog footer { display: flex; justify-content: end; gap: 8px; margin-top: 20px; }
-.gallery-banner-buttons, .gallery-banner-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.gallery-banner-buttons { margin-top: 6px; }
+.gallery-banner-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
 .gallery-banner-error { color: var(--ds-danger-text); }
 .background-source-dialog { display: grid; gap: 14px; width: min(460px, calc(100vw - 40px)); }
 .background-source-dialog h2, .background-source-dialog p { margin: 0; }
@@ -24,16 +24,3 @@
 .library-image-picker-grid button:disabled { opacity: .6; cursor: wait; }
 .library-image-picker-grid img { width: 100%; height: 124px; object-fit: contain; border-radius: 6px; }
 .library-image-picker-grid strong { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; font-size: 13px; }
-.work-library-controls { display: flex; flex-wrap: wrap; }
-.work-library-controls, .work-library-card { background: var(--ds-bg-card); }
-.work-library-controls select, .work-library-controls input, .work-sort-direction, .work-select-toggle { background: var(--ds-bg-card); color: var(--ds-text-heading); }
-.work-library-controls input::placeholder { color: var(--ds-text-secondary); opacity: 1; }
-.work-preset-row .ui-segmented, .gallery-heading .ui-segmented { background: var(--ds-bg-card-subtle); }
-.work-preset-row .ui-segmented button.active, .work-preset-row .ui-segmented button:hover, .gallery-heading .ui-segmented button.active, .gallery-heading .ui-segmented button:hover { background: var(--ds-bg-card); }
-.work-card-foot time { color: var(--ds-text-secondary); }
-.work-library-controls .work-search { flex: 1 1 250px; }
-.work-library-controls select { min-width: 0; max-width: 100%; }
-@media (max-width: 1150px) {
-  .work-library-controls .work-search { flex-basis: 100%; }
-  .work-library-controls select { flex: 1 1 100px; }
-}

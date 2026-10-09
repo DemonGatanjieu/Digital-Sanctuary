@@ -9,8 +9,7 @@
 .explore-site-shortcuts > span { display: inline-flex; flex: 0 0 auto; max-width: 220px; }
 .explore-site-shortcuts > span > button:first-child { overflow: hidden; text-overflow: ellipsis; }
 .explore-site-shortcuts small { white-space: nowrap; color: var(--ds-text-muted); }
-.address-bar.explore-address-form { display: flex; gap: 8px; }
-.address-bar.explore-address-form button { flex: 0 0 auto; width: auto; min-height: 28px; padding: 2px 10px; }
+
 .shield-status.protection-web { color: var(--ds-text-secondary); background: var(--ds-bg-card-subtle); border-color: var(--ds-border-light); }
 .shield-status.protection-web .status-dot { background: var(--ds-text-muted); box-shadow: none; }
 
@@ -67,7 +66,7 @@
 }
 @media (max-width: 1000px) {
   .browser-toolbar { display: grid; grid-template-columns: repeat(4, 36px) minmax(0, 1fr) 96px; gap: 6px; padding: 8px 12px; }
-  .browser-toolbar .address-bar { grid-column: 5; grid-row: 1; min-width: 0; width: 100%; padding-inline: 8px; }
+  
   .browser-toolbar > .maximize-button { grid-column: 6; grid-row: 1; justify-self: end; }
   .browser-toolbar > .explore-account-trigger { grid-column: 1 / span 2; grid-row: 2; }
   .browser-toolbar .shield-status { grid-column: 3 / span 3; grid-row: 2; justify-self: end; max-width: none; }
@@ -145,47 +144,6 @@
   background: var(--ds-primary-subtle);
 }
 
-.address-bar {
-  display: grid;
-  min-width: 0;
-  flex: 1;
-  grid-template-columns: auto minmax(100px, auto) 1fr;
-  align-items: center;
-  gap: 10px;
-  height: 36px;
-  padding: 0 14px;
-  border: 1px solid var(--ds-border-light);
-  border-radius: var(--ds-radius-md);
-  background: #ffffff;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
-}
-
-.address-bar span {
-  color: var(--ds-success-text);
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.address-bar strong,
-.address-bar small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.address-bar strong {
-  max-width: 260px;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--ds-text-heading);
-}
-
-.address-bar small {
-  color: var(--ds-text-muted);
-  font-size: 10.5px;
-}
-
 /* Shield Radar HUD */
 .shield-status {
   display: flex;
@@ -244,16 +202,6 @@
   flex: 1;
   overflow: hidden;
   background: transparent;
-}
-
-.explore-surface.with-drawer {
-  margin-right: clamp(680px, 62vw, 980px);
-}
-
-@media (max-width: 1100px) {
-  .explore-surface.with-drawer {
-    margin-right: 0;
-  }
 }
 
 .explore-placeholder {

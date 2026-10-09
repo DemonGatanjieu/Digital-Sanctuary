@@ -37,18 +37,6 @@
   letter-spacing: 0.02em;
 }
 
-.vision-radar-badge.badge-local {
-  background: rgba(16, 185, 129, 0.15);
-  color: #10b981;
-  border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.vision-radar-badge.badge-ai {
-  background: rgba(139, 92, 246, 0.15);
-  color: #a78bfa;
-  border: 1px solid rgba(139, 92, 246, 0.3);
-}
-
 .vision-radar-provider {
   color: var(--ds-text-muted, #94a3b8);
   font-family: var(--ds-font-mono);
@@ -450,12 +438,6 @@
   background: rgba(16, 185, 129, 0.12);
   border: 1px solid rgba(16, 185, 129, 0.3);
   color: #10b981;
-}
-
-.connection-test-result.failure {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: #ef4444;
 }
 
 .vision-privacy-notice {

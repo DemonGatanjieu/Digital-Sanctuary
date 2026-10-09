@@ -1,5 +1,5 @@
-.sidebar-task-entry { display: flex; justify-content: space-between; gap: 8px; padding: 8px 12px; margin: -6px 0 12px; border: 1px solid var(--ds-border-light); border-radius: 10px; background: var(--ds-bg-card-subtle); color: var(--ds-text-body); font-size: 12px; cursor: pointer; flex-shrink: 0; }
-.sidebar-task-entry span:last-child { color: var(--ds-primary); }
+
+
 .task-center-dialog { width: min(650px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); overflow-y: auto; background: var(--ds-bg-card); display: grid; gap: 16px; }
 .task-center-dialog > header, .task-center-list article > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .task-center-dialog h2, .task-center-dialog p { margin: 0; }

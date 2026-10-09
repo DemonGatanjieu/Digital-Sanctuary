@@ -2,12 +2,6 @@
    Legacy Flat Cards & Preview Badges
    ========================================================================== */
 
-.gallery-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 22px;
-}
-
 .art-card {
   min-width: 0;
   overflow: hidden;
@@ -58,11 +52,6 @@
   background: linear-gradient(135deg, #eef2f5, #f8fafb 48%, #edf2f5);
 }
 
-.art-preview img.blurred {
-  filter: blur(32px) saturate(0.6);
-  transform: scale(1.15);
-}
-
 .shield {
   display: grid;
   place-items: center;
@@ -83,23 +72,6 @@
   letter-spacing: 0.08em;
   font-weight: 700;
 }
-
-.decision-badge {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 4px 9px;
-  border-radius: var(--ds-radius-full);
-  font-size: 9.5px;
-  font-weight: 750;
-  letter-spacing: 0.04em;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.decision-badge.allow { color: var(--ds-success-text); background: rgba(236, 253, 245, 0.92); border: 1px solid var(--ds-success-border); }
-.decision-badge.blur { color: var(--ds-warning-text); background: rgba(255, 251, 235, 0.92); border: 1px solid var(--ds-warning-border); }
-.decision-badge.hide { color: var(--ds-danger-text); background: rgba(255, 241, 242, 0.92); border: 1px solid var(--ds-danger-border); }
 
 .art-meta {
   display: grid;

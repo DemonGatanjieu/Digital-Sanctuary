@@ -156,22 +156,6 @@ button:disabled {
   box-shadow: var(--ds-shadow-sm);
 }
 
-.ui-segmented--compact {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  padding: 3px;
-  border: 0;
-  border-radius: var(--ds-radius-sm);
-  background: #e2e8f0;
-}
-
-.ui-segmented--compact button {
-  min-height: 25px;
-  padding: 0;
-  border-radius: 6px;
-  font-size: 9.5px;
-}
-
 /* App Notices / Toasts */
 .app-notice {
   display: grid;

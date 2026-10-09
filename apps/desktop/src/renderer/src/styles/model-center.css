@@ -10,15 +10,6 @@
   line-height: var(--ds-leading-body);
 }
 
-.model-center-embedded-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
 .model-center-overview {
   position: relative;
   display: grid;

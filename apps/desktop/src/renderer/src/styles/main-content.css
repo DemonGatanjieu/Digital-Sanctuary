@@ -12,19 +12,6 @@ main {
 .page-loading { padding: 36px 0; color: var(--ds-text-muted); font-size: 14px; }
 .library-loading { min-height: 220px; display: grid; place-items: center; color: var(--ds-text-muted); }
 
-.app-shell.exploring main {
-  overflow: hidden;
-  padding: 0;
-}
-
-.topbar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 28px;
-}
-
 .eyebrow {
   margin: 0 0 6px;
   color: var(--ds-primary);
@@ -40,14 +27,6 @@ h1 {
   font-weight: 800;
   letter-spacing: -0.03em;
   color: var(--ds-text-heading);
-}
-
-.header-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
 }
 
 .workspace-navigation,
@@ -88,31 +67,4 @@ h1 {
 .settings-navigation button:focus-visible {
   outline: 2px solid var(--ds-primary);
   outline-offset: 3px;
-}
-
-.library-start-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 12px;
-}
-
-@media (max-width: 1250px) {
-  .gallery-heading { align-items: flex-start; flex-direction: column; }
-  .gallery-heading .header-actions { justify-content: flex-start; }
-}
-
-.avatar-repair-control {
-  display: grid;
-  justify-items: end;
-  gap: 4px;
-}
-
-.avatar-repair-control small {
-  max-width: 220px;
-  overflow: hidden;
-  color: var(--ds-text-secondary);
-  font-size: 9.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

@@ -184,17 +184,6 @@
   border-color: var(--ds-border-strong);
 }
 
-.typography-action-btn.btn-danger-outline {
-  background: transparent;
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-.typography-action-btn.btn-danger-outline:hover {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: #ef4444;
-}
-
 /* Multi-Lingual Preview Box */
 .typography-preview-box {
   margin-top: 20px;
