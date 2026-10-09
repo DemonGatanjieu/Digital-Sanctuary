@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { LibraryDatabase } from "@sanctuary/database";
-import { GALLERY_SEARCH_MIN_SIMILARITY, ImageWorkbenchService, parseDescription } from "./image-workbench-service";
+import { GALLERY_SEARCH_MIN_SIMILARITY, ImageWorkbenchService, SIMILAR_PICTURE_MIN_SIMILARITY, parseDescription } from "./image-workbench-service";
 import { SemanticVectorStore } from "./semantic-client";
 import { ImageOutputService } from "./image-output-service";
 const PNG=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=","base64");
@@ -111,5 +111,21 @@ describe("one-step gallery picture search",()=>{
     const expanded=f.service.galleryResults(1,filtered.progress.id,0,"all");expect(expanded.result.items[0]?.id).toBe(`local:${weak.id}`);
     f.database.updateWorkFavorite([`local:${weak.id}`],false);
     expect(f.service.galleryResults(1,filtered.progress.id).relevance.hiddenWorks).toBe(0);
+  });
+  it("finds pictures that look like a library page, leaving out that work and reusing its cached vector",async()=>{
+    const f=fixture();
+    const source=f.database.importArtwork(f.image("night-source.png")),twin=f.database.importArtwork(f.image("night-twin.png")),day=f.database.importArtwork(f.image("day.png"));
+    const work=f.database.getWork(`local:${source.id}`)!;
+    const started=f.service.searchSimilar(1,work.id,work.assets[0]!.id,{});
+    expect(started.progress.name).toContain("相似");
+    const result=await gallerySettled(f,started.progress.id);
+    expect(result.result.items.map(item=>item.id)).toEqual([`local:${twin.id}`]);
+    expect(result.relevance).toMatchObject({minimumScore:SIMILAR_PICTURE_MIN_SIMILARITY,hiddenWorks:1});
+    expect(f.service.galleryResults(1,result.progress.id,0,"all").result.items.map(item=>item.id)).toEqual([`local:${twin.id}`,`local:${day.id}`]);
+    // Every picture was encoded once; the source vector came from the same content cache.
+    expect(f.encode.mock.calls.filter(([kind])=>kind==="image")).toHaveLength(3);
+    expect(f.encode.mock.calls.some(([kind])=>kind==="query")).toBe(false);
+    expect(()=>f.service.searchSimilar(1,"local:missing","x",{})).toThrow("不在图库");
+    expect(()=>f.service.searchSimilar(1,42,"x",{})).toThrow("选择");
   });
 });

@@ -10,8 +10,12 @@ const MAX_GALLERY_IMAGES=10000;
 // EmbeddingGemma 2 cosine scores, not calibrated probabilities. Keep this model-specific
 // display heuristic reversible without encoding the images again.
 export const GALLERY_SEARCH_MIN_SIMILARITY=0.65;
+// Picture-to-picture cosine runs much higher than text-to-picture, so "similar" keeps its own default cut-off.
+export const SIMILAR_PICTURE_MIN_SIMILARITY=0.8;
 interface Entry { asset: WorkAssetRecord; item: WorkbenchItem; path: string }
-interface Session { owner: number; state: WorkbenchSnapshot; entries: Entry[]; cancelled: boolean; touched: number }
+interface Session { owner: number; state: WorkbenchSnapshot; entries: Entry[]; cancelled: boolean; touched: number;
+  /** "Find similar": the page whose picture is the query, and its work, which is left out of the results. */
+  source?: WorkAssetRecord; minimumScore: number }
 export function parseDescription(value: unknown): WorkbenchQuery {
   if(typeof value!=="string"||value.length>500)throw new Error("请填写 500 字以内的画面描述");
   const text=value.trim();if(!text)throw new Error("先描述你想找的画面");
@@ -37,17 +41,31 @@ export class ImageWorkbenchService {
     void this.#scanGallery(s,filters,description);
     return this.galleryResults(owner,s.state.id,0);
   }
+  /** Ranks the filtered library by how much each page looks like one library page. */
+  searchSimilar(owner: number, workId: unknown, assetId: unknown, query: WorkQuery): GallerySearchSnapshot {
+    if(typeof workId!=="string"||typeof assetId!=="string"||workId.length>300||assetId.length>300)throw new Error("请选择一张图库里的图片");
+    const source=this.database.gallerySearchAsset(workId,assetId);if(!source)throw new Error("这张图片已不在图库里，请刷新后重试");
+    if(!this.semantic.availability().available)throw new Error(this.semantic.availability().message);
+    this.#assertIdle();
+    const {search:_search,sortBy:_sort,direction:_direction,offset:_offset,limit:_limit,...filters}=query;
+    const title=this.database.queryWorkIds([workId])[0]?.title??basename(source.path);
+    const description:WorkbenchQuery={mode:"description",text:`相似：${title}`,include:[],exclude:[]};
+    const s=this.#create(owner,description.text,filters);
+    s.source=source;s.minimumScore=SIMILAR_PICTURE_MIN_SIMILARITY;s.state.query=description;
+    void this.#scanGallery(s,filters,description);
+    return this.galleryResults(owner,s.state.id,0);
+  }
   galleryResults(owner: number, id: unknown, offset: unknown=0, relevance: unknown="relevant"): GallerySearchSnapshot {
     if(typeof offset!=="number"||!Number.isSafeInteger(offset)||offset<0||offset>MAX_GALLERY_IMAGES)throw new Error("分页请求无效");
     if(relevance!=="relevant"&&relevance!=="all")throw new Error("搜索结果范围无效");
     const s=this.#owned(owner,id);if(!s.state.galleryQuery)throw new Error("这不是图库画面搜索，请重新找图");
-    const ready=s.entries.filter(e=>e.item.status==="ready"&&Number.isFinite(e.item.score)&&e.asset);
+    const ready=s.entries.filter(e=>e.item.status==="ready"&&Number.isFinite(e.item.score)&&e.asset&&e.asset.workId!==s.source?.workId);
     ready.sort((a,b)=>b.item.score!-a.item.score!||a.item.id.localeCompare(b.item.id));
     const best=new Map<string,Entry>();
     for(const entry of ready)if(!best.has(entry.asset!.workId))best.set(entry.asset!.workId,entry);
     const eligible=this.database.matchingWorkIds([...best.keys()],s.state.galleryQuery);
     const available=[...best.values()].filter(entry=>eligible.has(entry.asset!.workId));
-    const accepts=(entry:Entry)=>relevance==="all"||entry.item.score!>=GALLERY_SEARCH_MIN_SIMILARITY;
+    const accepts=(entry:Entry)=>relevance==="all"||entry.item.score!>=s.minimumScore;
     const entries=available.filter(accepts),page=entries.slice(offset,offset+60);
     const eligiblePages=ready.filter(entry=>eligible.has(entry.asset!.workId));
     const matchingPages=eligiblePages.filter(accepts).length;
@@ -59,7 +77,7 @@ export class ImageWorkbenchService {
     });
     return {progress:structuredClone({...s.state,items:[],hasMore:false,matched:matchingPages,unanalysed:s.entries.filter(e=>e.item.status==="pending").length}),
       result:{items,total:entries.length,totalPages:matchingPages,offset,limit:60,hasMore:offset+60<entries.length},
-      relevance:{mode:relevance,minimumScore:GALLERY_SEARCH_MIN_SIMILARITY,hiddenWorks:available.length-entries.length,hiddenPages:eligiblePages.length-matchingPages}};
+      relevance:{mode:relevance,minimumScore:s.minimumScore,hiddenWorks:available.length-entries.length,hiddenPages:eligiblePages.length-matchingPages}};
   }
   currentGallery(owner: number): GallerySearchSnapshot | null {
     this.#prune();const s=[...this.#sessions.values()].reverse().find(s=>s.owner===owner&&s.state.galleryQuery);
@@ -112,7 +130,7 @@ export class ImageWorkbenchService {
   close(){for(const s of this.#sessions.values())s.cancelled=true;this.semantic.close();}
   #create(owner: number,name: string,galleryQuery: WorkQuery): Session {
     this.#prune();for(const [id,s] of this.#sessions)if(s.owner===owner)this.#sessions.delete(id);
-    const s: Session={owner,entries:[],cancelled:false,touched:Date.now(),state:{galleryQuery,id:randomUUID(),source:"library",name,recursive:false,phase:"scanning",cancelRequested:false,total:0,processed:0,failed:0,matched:0,unanalysed:0,visited:0,limitReached:false,warnings:[],items:[],hasMore:false}};
+    const s: Session={owner,entries:[],cancelled:false,touched:Date.now(),minimumScore:GALLERY_SEARCH_MIN_SIMILARITY,state:{galleryQuery,id:randomUUID(),source:"library",name,recursive:false,phase:"scanning",cancelRequested:false,total:0,processed:0,failed:0,matched:0,unanalysed:0,visited:0,limitReached:false,warnings:[],items:[],hasMore:false}};
     this.#sessions.set(s.state.id,s);return s;
   }
   #entry(s: Session,asset: WorkAssetRecord,title: string) {
@@ -122,7 +140,7 @@ export class ImageWorkbenchService {
   }
   async #analyze(s: Session,q: WorkbenchQuery) {
     try {
-      const queryVector=await this.semantic.encode("query",q.text);
+      const queryVector=s.source?await this.#pictureVector(s.source.path):await this.semantic.encode("query",q.text);
       for(const e of s.entries){
         if(s.cancelled)break;
         try {
@@ -142,6 +160,10 @@ export class ImageWorkbenchService {
       }
       s.state.phase=s.cancelled?"cancelled":"completed";
     }catch(error){s.state.phase=s.cancelled?"cancelled":"failed";if(!s.cancelled)s.state.error=this.#message(error);}
+  }
+  async #pictureVector(path: string): Promise<number[]> {
+    const hash=await fingerprintImage(path);const cached=this.vectors.get(hash);if(cached)return cached;
+    const vector=await this.semantic.encode("image",path);this.vectors.put(hash,vector);return vector;
   }
   #owned(owner: number,id: unknown): Session {
     this.#prune();const s=typeof id==="string"?this.#sessions.get(id):undefined;
