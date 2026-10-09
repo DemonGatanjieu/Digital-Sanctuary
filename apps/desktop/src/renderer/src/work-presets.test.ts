@@ -11,6 +11,11 @@ describe("work presets", () => {
     expect(hasWorkFilters({ ownership: "managed" })).toBe(true);
     expect(workEmptyMessage({ ownership: "external" }).title).toBe("没有匹配的作品");
   });
+  it("treats element conditions as filters, so an empty result never looks like an empty library", () => {
+    expect(hasWorkFilters({ elements: { exclude: ["blood"] } })).toBe(true);
+    expect(hasWorkFilters({ elements: { blocked: true } })).toBe(true);
+    expect(workEmptyMessage({ elements: { include: ["cat_ears"] } }).description).toContain("未识别的图片");
+  });
   it("composes each shortcut with the user's search, type and album scope", () => {
     for (const preset of ["favorites", "uncollected", "recent"] as const) {
       const next = applyWorkPreset(query, preset, normalSort);

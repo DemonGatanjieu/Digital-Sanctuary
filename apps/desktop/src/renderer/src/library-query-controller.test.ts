@@ -25,6 +25,13 @@ describe("library query concurrency", () => {
     expect(controller.state.result.items.map(item => item.id)).toEqual(["external"]);
     expect(controller.changeQuery({ ownership: "external", limit: 1 })).toBe(false);
   });
+  it("treats a change of element conditions as a new query", () => {
+    const { controller } = fixture();
+    expect(controller.changeQuery({ elements: { include: ["sky"] } })).toBe(true);
+    expect(controller.changeQuery({ elements: { include: ["sky"] } })).toBe(false);
+    expect(controller.changeQuery({ elements: { exclude: ["sky"] } })).toBe(true);
+    expect(controller.changeQuery({})).toBe(true);
+  });
   it("keeps the newest search when an older reply arrives last", async () => {
     const { controller, pending } = fixture();
     controller.changeQuery({ search: "旧搜索" });

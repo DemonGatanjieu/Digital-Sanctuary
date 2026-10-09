@@ -3,6 +3,8 @@ import type { CollectionRecord, WorkOwnership, WorkQuery, WorkType } from "@sanc
 import { Icon } from "./Icon";
 import { MenuItem, MenuLabel, MenuSeparator, Popover } from "./Popover";
 import { SavedWorkFiltersDialog } from "./SavedWorkFilters";
+import { ElementFilterDialog } from "./ElementFilterDialog";
+import { withElements } from "./element-filters";
 import { OWNERSHIP_LABELS, PRESET_LABELS, SORT_LABELS, WORK_TYPE_LABELS, clearAllWorkFilters, withOwnership, withWorkType, type WorkFilterChip } from "./work-filters";
 import { applyWorkPreset, getWorkPreset, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
 
@@ -15,6 +17,9 @@ export function FilterMenuButton({ query, collections, normalSort, activeCount, 
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [savedOpen, setSavedOpen] = useState(false);
+  const [elementsOpen, setElementsOpen] = useState(false);
+  const elements = query.elements;
+  const elementCount = (elements?.include?.length ?? 0) + (elements?.exclude?.length ?? 0);
   const preset = getWorkPreset(query);
   const apply = (next: WorkQuery) => { onQueryChange(next); setAnchor(null); };
   return <>
@@ -40,9 +45,14 @@ export function FilterMenuButton({ query, collections, normalSort, activeCount, 
         <MenuItem key={value} label={OWNERSHIP_LABELS[value]} checked={query.ownership === value} onSelect={() => apply(withOwnership(query, value))} />
       ))}
       <MenuSeparator />
+      <MenuLabel>元素</MenuLabel>
+      <MenuItem label="含有我屏蔽的元素" checked={Boolean(elements?.blocked)} onSelect={() => apply(withElements(query, { ...elements, blocked: !elements?.blocked }))} />
+      <MenuItem label="选择元素…" hint={elementCount ? `${elementCount} 项` : undefined} onSelect={() => { setAnchor(null); setElementsOpen(true); }} />
+      <MenuSeparator />
       <MenuItem icon="folder" label="常用筛选…" hint="保存 / 恢复" onSelect={() => { setAnchor(null); setSavedOpen(true); }} />
       {activeCount > 0 && <MenuItem icon="close" label="清除全部筛选" onSelect={() => apply(clearAllWorkFilters(query, normalSort))} />}
     </Popover>}
+    {elementsOpen && <ElementFilterDialog value={elements} onApply={(filter) => onQueryChange(withElements(query, filter))} onClose={() => setElementsOpen(false)} />}
     {savedOpen && <SavedWorkFiltersDialog query={query} collections={collections} onApply={onQueryChange} onClose={() => setSavedOpen(false)} />}
   </>;
 }

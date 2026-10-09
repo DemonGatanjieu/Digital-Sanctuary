@@ -272,3 +272,48 @@
 .work-delete-list > div span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .work-delete-list small, .work-delete-list p { color: var(--ds-text-secondary); font-size: var(--ds-font-12); }
 .work-delete-dialog footer { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Element filter dialog */
+.element-filter-dialog { width: min(560px, calc(100vw - 32px)); display: grid; gap: 12px; }
+.element-index-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0;
+  padding: 4px 12px;
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-card-subtle);
+  color: var(--ds-text-secondary);
+  font-size: var(--ds-font-13);
+}
+.element-index-bar > span:first-child { flex: 1; min-width: 200px; }
+.element-index-bar [role="alert"] { flex-basis: 100%; color: var(--ds-danger-text); }
+.element-filter-blocked { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--ds-text-heading); font-size: var(--ds-font-14); }
+.element-filter-blocked input { width: 16px; height: 16px; accent-color: var(--ds-primary); }
+.element-filter-blocked small, .element-filter-hint { color: var(--ds-text-secondary); font-size: var(--ds-font-12); }
+.element-filter-hint { margin: 0; }
+.element-filter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.element-filter-grid button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--ds-border-light);
+  border-radius: var(--ds-radius-md);
+  background: var(--ds-bg-card);
+  color: var(--ds-text-body);
+  font-size: var(--ds-font-13);
+  cursor: pointer;
+}
+.element-filter-grid button:hover { background: var(--ds-bg-hover); }
+.element-filter-grid button small { font-size: var(--ds-font-12); }
+.element-filter-grid button[data-condition="include"] { border-color: var(--ds-primary-border); background: var(--ds-primary-subtle); color: var(--ds-primary); }
+.element-filter-grid button[data-condition="exclude"] { border-color: var(--ds-danger-border); background: var(--ds-danger-light); color: var(--ds-danger-text); }
+.element-filter-more summary { color: var(--ds-text-secondary); font-size: var(--ds-font-13); cursor: pointer; }
+.element-filter-more label { display: grid; gap: 4px; margin-top: 8px; font-size: var(--ds-font-13); }
+.element-filter-dialog footer { display: flex; gap: 8px; justify-content: flex-end; }
+.element-filter-dialog footer > :first-child { margin-right: auto; }

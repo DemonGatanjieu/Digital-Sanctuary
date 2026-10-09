@@ -35,13 +35,18 @@ export function clearWorkCollectionFilters(query: WorkQuery): WorkQuery {
 
 export function hasWorkFilters(query: WorkQuery): boolean {
   return Boolean(query.ownership || query.search || query.workType || query.artistId || query.unattributed || query.collectionId || query.collectionIds?.length ||
-    query.excludedCollectionIds?.length || query.favorite !== undefined || query.uncollected || query.viewedOnly);
+    query.excludedCollectionIds?.length || query.favorite !== undefined || query.uncollected || query.viewedOnly ||
+    query.elements?.include?.length || query.elements?.exclude?.length || query.elements?.blocked);
 }
 
 export function workEmptyMessage(query: WorkQuery): { title: string; description: string } {
   const scoped = Boolean(query.ownership || query.search || query.workType || query.artistId || query.unattributed || query.collectionId ||
     query.collectionIds?.length || query.excludedCollectionIds?.length);
   const preset = getWorkPreset(query);
+  if (query.elements?.include?.length || query.elements?.exclude?.length || query.elements?.blocked) return {
+    title: "没有匹配的作品",
+    description: "已识别的图片里没有符合条件的。未识别的图片不参与元素筛选，可在“筛选 → 选择元素”里识别。"
+  };
   if (scoped) return {
     title: preset === "favorites" ? "当前条件下没有喜欢的作品" : "没有匹配的作品",
     description: "换一个标题、作者或 Pixiv ID，或调整筛选与相册条件。"

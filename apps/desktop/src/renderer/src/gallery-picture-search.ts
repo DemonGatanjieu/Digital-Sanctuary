@@ -1,7 +1,8 @@
 import type { GallerySearchRelevance, GallerySearchSnapshot, WorkQuery } from "@sanctuary/domain";
 
 export function pictureSearchFilters(query: WorkQuery): WorkQuery {
-  const {search:_search,sortBy:_sort,direction:_direction,offset:_offset,limit:_limit,...filters}=query;
+  // elementMatch is the main process's resolution of `elements`, echoed back in progress snapshots.
+  const {search:_search,sortBy:_sort,direction:_direction,offset:_offset,limit:_limit,elementMatch:_resolved,...filters}=query;
   return filters;
 }
 export function pictureSearchScopeKey(query: WorkQuery): string {

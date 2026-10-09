@@ -14,6 +14,10 @@ describe("gallery picture search concurrency",()=>{
     expect(controller.state.mode).toBe("picture");expect(controller.state.snapshot?.result.items[0]?.id).toBe("a");
     expect(pictureSearchScopeKey({ownership:"external",offset:60})).toBe(pictureSearchScopeKey({ownership:"external",offset:0,sortBy:"title"}));
     expect(pictureSearchScopeKey({ownership:"managed"})).not.toBe(pictureSearchScopeKey({ownership:"external"}));
+    // The main process echoes element conditions back with their resolution attached; that is the same scope.
+    const elements={include:["sky"]};
+    expect(pictureSearchScopeKey({elements,elementMatch:{engine:"wd",include:[{tag:"sky",minimum:.4}],exclude:[],anyOf:[]}})).toBe(pictureSearchScopeKey({elements}));
+    expect(pictureSearchScopeKey({elements})).not.toBe(pictureSearchScopeKey({elements:{exclude:["sky"]}}));
   });
   it("cancels a search that starts after the user clears or switches to name search",async()=>{
     const {host,controller}=fixture();let release!:(v:GallerySearchSnapshot)=>void;host.start.mockImplementationOnce(()=>new Promise(done=>{release=done;}));

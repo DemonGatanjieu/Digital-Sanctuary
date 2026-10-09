@@ -1,5 +1,6 @@
 import type { CollectionRecord, WorkOwnership, WorkQuery, WorkType } from "@sanctuary/domain";
 import { applyWorkPreset, getWorkPreset, type WorkPreset, type WorkSortSnapshot } from "./work-presets";
+import { elementLabel, withElements } from "./element-filters";
 
 export const PRESET_LABELS: Record<WorkPreset, string> = { all: "全部作品", favorites: "喜欢", recent: "最近浏览", uncollected: "未分相册" };
 export const WORK_TYPE_LABELS: Record<WorkType, string> = { illustration: "插画", manga: "漫画", ugoira: "动图", local: "本地导入", unknown: "类型待补充" };
@@ -46,6 +47,14 @@ export function workFilterChips(
   if (query.unattributed !== undefined) chips.push({ key: "unattributed", label: query.unattributed ? "未记录画师" : "已记录画师", clear: without("unattributed") });
   if (query.workType) chips.push({ key: "type", label: WORK_TYPE_LABELS[query.workType], clear: without("workType") });
   if (query.ownership) chips.push({ key: "ownership", label: OWNERSHIP_LABELS[query.ownership], clear: without("ownership") });
+  const elements = query.elements;
+  if (elements?.blocked) chips.push({ key: "blocked", label: "含屏蔽元素", clear: (current) => withElements(current, { ...current.elements, blocked: false }) });
+  for (const tag of elements?.include ?? []) {
+    chips.push({ key: `include:${tag}`, label: `需要：${elementLabel(tag)}`, clear: (current) => withElements(current, { ...current.elements, include: current.elements?.include?.filter((item) => item !== tag) ?? [] }) });
+  }
+  for (const tag of elements?.exclude ?? []) {
+    chips.push({ key: `exclude:${tag}`, label: `排除：${elementLabel(tag)}`, clear: (current) => withElements(current, { ...current.elements, exclude: current.elements?.exclude?.filter((item) => item !== tag) ?? [] }) });
+  }
   return chips;
 }
 
