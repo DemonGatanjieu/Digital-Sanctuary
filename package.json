@@ -1,8 +1,9 @@
 {
   "name": "digital-sanctuary",
   "version": "0.2.0",
-  "description": "本地优先的 Pixiv 资源管理、元素拦截与显式模型整理桌面应用",
+  "description": "本地二次元图片库：本地模型帮你把收藏的图找出来、用起来",
   "author": "SilverLoli",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "main": "apps/desktop/out/main/index.js",
