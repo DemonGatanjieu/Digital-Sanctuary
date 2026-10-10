@@ -1182,16 +1182,15 @@ function registerIpc(): void {
     scheduleExploreState();
     return currentExploreState();
   });
-  ipcMain.handle("explore:open-artist", async (_event, artistId: unknown) => {
+  ipcMain.handle("explore:open-artist", (_event, artistId: unknown) => {
     const targetUrl = pixivArtistUrl(artistId);
     if (!targetUrl) throw new Error("无效的 Pixiv 画师 ID");
     if (!vision?.available && !exploreProtectionBypassed) {
       throw new Error("本地保护模型尚未就绪，暂不能打开远程画师主页");
     }
-    exploreBrowserMode = "pixiv"; webExplore?.view.setVisible(false); syncExploreProtectionVisibility();
-    const view = ensureExploreView();
-    await view.webContents.loadURL(targetUrl);
-    scheduleExploreState();
+    // Hand the target to the pane instead of loading it here: when Explore opens for the first time,
+    // the pane would otherwise start its home page and abort this load (ERR_ABORTED).
+    openExploreUrl(targetUrl);
     return currentExploreState();
   });
   ipcMain.handle("explore:state", () => currentExploreState());
