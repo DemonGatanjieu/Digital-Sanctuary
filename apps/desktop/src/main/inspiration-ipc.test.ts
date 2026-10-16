@@ -167,4 +167,26 @@ describe("inspiration stable persistence and export", () => {
     fixture.finish(1, "重试成功"); await retry;
     expect(fixture.stored()[0]?.messages.filter((message) => message.content === "需要重试的问题")).toHaveLength(1);
   });
+
+  it("renames a conversation and uses work-based titles when starting with built-in starter prompts", async () => {
+    const fixture = inspirationFixture([]);
+    const starter = "请认真看看这张图，先说说你看到了什么，再聊聊它可能正在发生什么。";
+    const sendPromise = fixture.invoke("inspiration:send", {
+      requestId: "starter-title",
+      presetId: "image_chat",
+      message: starter
+    });
+    fixture.finish(0, "回答");
+    const created = await sendPromise as InspirationConversation;
+    expect(created.title).toContain("聊图");
+
+    const renamed = await fixture.invoke("inspiration:rename", {
+      conversationId: created.id,
+      title: "  我的自定义标题  "
+    }) as InspirationConversation;
+    expect(renamed.title).toBe("我的自定义标题");
+    expect(fixture.stored()[0]?.title).toBe("我的自定义标题");
+    await expect(fixture.invoke("inspiration:rename", { conversationId: created.id, title: "   " })).rejects.toThrow();
+  });
 });
+

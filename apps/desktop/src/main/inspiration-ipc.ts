@@ -7,11 +7,13 @@ import {
   isInspirationGenerationSettings,
   isInspirationPresetId,
   isSafeModelId,
+  smartConversationTitle,
   type InspirationConversation,
   type InspirationGenerationSettings,
   type InspirationMessage,
   type InspirationPresetId,
   type InspirationRegenerateRequest,
+  type InspirationRenameRequest,
   type InspirationSendRequest,
   type InspirationSourceUpdateRequest,
   type InspirationSourceWork
@@ -45,6 +47,7 @@ export function registerInspirationIpc(
       ? conversations.find((item) => item.id === request.conversationId) ?? null
       : null;
     if (request.conversationId && !conversation) throw new Error("这段对话已经不存在，请新建对话");
+    const isNewConversation = !conversation;
     if (!conversation) {
       conversation = createConversation(database, request);
       conversations = [conversation, ...conversations];
@@ -58,8 +61,9 @@ export function registerInspirationIpc(
     if (request.modelId) conversation.modelId = request.modelId;
     conversation.settings = normalizeSettings(request.settings ?? conversation.settings);
     conversation.updatedAt = userMessage.createdAt;
-    if (conversation.messages.filter((item) => item.role === "user").length === 1) {
-      conversation.title = titleFromMessage(request.message);
+    if (isNewConversation || (conversation.messages.filter((item) => item.role === "user").length === 1 && conversation.title === "新的灵感")) {
+      const activeSources = conversation.sources ?? (conversation.source ? [conversation.source] : []);
+      conversation.title = smartConversationTitle(request.message, conversation.presetId, activeSources);
     }
     const controller = new AbortController();
     activeRequests.set(request.requestId, { controller, conversationId: conversation.id });
@@ -108,6 +112,18 @@ export function registerInspirationIpc(
     conversation.sources = raw.sources !== undefined ? resolveSources(database, raw.sources) : raw.sourceWorkId === null ? [] : [resolveSource(database, requireId(raw.sourceWorkId, "作品 ID"), raw.sourcePageIndex)];
     conversation.source = conversation.sources[0] ?? null;
     conversation.updatedAt = new Date().toISOString();
+    persistConversations(database, conversations);
+    return conversation;
+  });
+  ipc.handle("inspiration:rename", (_event, raw: InspirationRenameRequest) => {
+    if (!raw || typeof raw !== "object") throw new Error("重命名请求格式不正确");
+    const conversationId = requireId(raw.conversationId, "会话 ID");
+    const title = typeof raw.title === "string" ? raw.title.replace(/[\r\n\t]+/g, " ").trim() : "";
+    if (!title || title.length > 80) throw new Error("对话名称需在 1 到 80 个字符之间");
+    const conversations = loadConversations(database);
+    const conversation = conversations.find((item) => item.id === conversationId);
+    if (!conversation) throw new Error("找不到这段对话");
+    conversation.title = title;
     persistConversations(database, conversations);
     return conversation;
   });
@@ -207,7 +223,7 @@ function createConversation(database: LibraryDatabase, request: InspirationSendR
   return {
     sources,
     id: randomUUID(),
-    title: titleFromMessage(request.message),
+    title: smartConversationTitle(request.message, request.presetId, sources),
     presetId: request.presetId,
     source: sources[0] ?? null,
     modelId: request.modelId ?? null,
@@ -345,10 +361,6 @@ function boundedContext(messages: InspirationMessage[], limit = MAX_CONTEXT_CHAR
 
 function makeMessage(role: "user" | "assistant", content: string): InspirationMessage {
   return { id: randomUUID(), role, content, createdAt: new Date().toISOString() };
-}
-
-function titleFromMessage(message: string): string {
-  return message.replace(/\s+/g, " ").slice(0, 26) || "新的灵感";
 }
 
 function requireId(value: unknown, label: string): string {

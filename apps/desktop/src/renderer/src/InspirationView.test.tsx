@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { InspirationMessage } from "@sanctuary/domain";
-import { InspirationMessageTimeline } from "./InspirationParts.js";
+import { extractPromptsFromReply, smartConversationTitle, type InspirationMessage } from "@sanctuary/domain";
+import { buildQuickPromptChips, InspirationMessageTimeline } from "./InspirationParts.js";
 
 const history: InspirationMessage[] = [{
   id: "assistant-1",
@@ -75,4 +75,27 @@ describe("InspirationMessageTimeline", () => {
     const ready = renderToStaticMarkup(<InspirationMessageTimeline messages={history} pendingUserMessage={null} thinking={false} onCopyReply={() => {}} onImageReply={() => {}} />);
     expect(ready).toContain("拿去出图");
   });
+
+  it("extracts positive and negative prompts and builds smart titles and quick chips", () => {
+    const split = extractPromptsFromReply([
+      "正向提示词：1girl, sunset, seaside, soft lighting",
+      "负向约束：lowres, bad anatomy, extra fingers",
+      "变体方向：尝试夜景版本"
+    ].join("\n"));
+    expect(split.extracted).toBe(true);
+    expect(split.positive).toContain("1girl, sunset");
+    expect(split.negative).toBe("lowres, bad anatomy, extra fingers");
+
+    const title = smartConversationTitle(
+      "请认真看看这张图，先说说你看到了什么，再聊聊它可能正在发生什么。",
+      "image_chat",
+      [{ title: "夏日海边" }]
+    );
+    expect(title).toBe("夏日海边 · 聊图");
+
+    expect(buildQuickPromptChips(true, 1, false, "示例").map((chip) => chip.label)).toContain("提取英文 Tag");
+    expect(buildQuickPromptChips(true, 1, true, "示例").map((chip) => chip.label)).toContain("提炼出图提示词");
+  });
 });
+
+

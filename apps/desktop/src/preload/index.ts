@@ -186,6 +186,7 @@ export interface SanctuaryApi {
   sendInspirationMessage(request: InspirationSendRequest): Promise<InspirationConversation>;
   regenerateInspirationMessage(request: InspirationRegenerateRequest): Promise<InspirationConversation>;
   updateInspirationSource(request: InspirationSourceUpdateRequest): Promise<InspirationConversation>;
+  renameInspirationConversation(conversationId: string, title: string): Promise<InspirationConversation>;
   cancelInspirationMessage(requestId: string): Promise<boolean>;
   deleteInspirationConversation(conversationId: string): Promise<boolean>;
   exportInspirationMarkdown(request: InspirationExportRequest): Promise<InspirationExportResult>;
@@ -341,6 +342,8 @@ const api: SanctuaryApi = {
     ipcRenderer.invoke("inspiration:regenerate", request) as Promise<InspirationConversation>,
   updateInspirationSource: (request) =>
     ipcRenderer.invoke("inspiration:update-source", request) as Promise<InspirationConversation>,
+  renameInspirationConversation: (conversationId, title) =>
+    ipcRenderer.invoke("inspiration:rename", { conversationId, title }) as Promise<InspirationConversation>,
   cancelInspirationMessage: (requestId) =>
     ipcRenderer.invoke("inspiration:cancel", requestId) as Promise<boolean>,
   deleteInspirationConversation: (conversationId) =>

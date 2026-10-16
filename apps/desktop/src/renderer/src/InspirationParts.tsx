@@ -1,8 +1,65 @@
 import { useEffect, useState } from "react";
-import type { InspirationMessage, InstalledModelView, WorkListItem, WorkRecord } from "@sanctuary/domain";
+import type { InspirationMessage, InspirationPresetId, InspirationSourceWork, InstalledModelView, WorkListItem, WorkRecord } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { DialogOverlay } from "./DialogOverlay";
 import { Button } from "./Button";
+import { Icon } from "./Icon";
+
+export interface QuickPromptChip {
+  label: string;
+  prompt: string;
+  presetId?: InspirationPresetId;
+}
+
+export function buildQuickPromptChips(hasImages: boolean, imageCount: number, hasAssistantReply: boolean, activeStarter: string): QuickPromptChip[] {
+  if (hasAssistantReply) {
+    return [
+      {
+        label: "提炼出图提示词",
+        presetId: "prompt_notes",
+        prompt: "请结合刚才的讨论和画面，整理出最终可直接用于生图的正向提示词（包含英文 Tag 与自然语言）以及负向约束。"
+      },
+      {
+        label: "精简核心要点",
+        prompt: "请把上面的回答浓缩成最核心、可直接使用的要点，去掉铺垫。"
+      },
+      ...(hasImages ? [{
+        label: "补充画面细节",
+        presetId: "image_chat" as const,
+        prompt: "请再仔细看看画面里的光影、服装材质、背景小物件和人物神态，补充刚才没提到的细节。"
+      }] : [])
+    ];
+  }
+  if (hasImages) {
+    return [
+      {
+        label: "提取英文 Tag",
+        presetId: "prompt_notes",
+        prompt: imageCount > 1
+          ? "请综合这些参考图的核心视觉特征，提取一套可直接用于绘画的英文 Danbooru 标签（按主体、外貌、服饰、构图、光色分类）并附上负向约束。"
+          : "请提取这张图的核心画面元素，整理为可直接用于绘画的英文 Danbooru 标签（按主体、外貌、服饰、环境、构图、光影分类）并附上负向约束。"
+      },
+      {
+        label: "反推自然语言提示词",
+        presetId: "prompt_notes",
+        prompt: "请把画面整理成适合 FLUX / SDXL 的自然语言生图提示词，包含正向画面描述与负向约束。"
+      },
+      {
+        label: "分析构图与配色",
+        presetId: "image_chat",
+        prompt: "请具体分析画面的构图层次、视觉焦点、光影方向与配色方案。"
+      }
+    ];
+  }
+  return [
+    { label: "填入示例提问", prompt: activeStarter },
+    {
+      label: "构思画面提示词",
+      presetId: "prompt_notes",
+      prompt: "我想构思一张二次元插画，请帮我设计主体、环境、构图、光色，并整理成正向提示词与负向约束："
+    }
+  ];
+}
 
 /** Pieces of the creation page that do not hold its conversation state. */
 export function InspirationMessageTimeline({ messages, pendingUserMessage, thinking, models = [], outputBusy = false, onCopyReply, onSaveReply, onImageReply }: {
@@ -73,6 +130,71 @@ export function modelHint(model: InstalledModelView | undefined): string {
   return `${tier} · 建议显存 ${model.recommendedVramGb} GB`;
 }
 
+export function InspirationReferencePreviewDialog({ source, index, total, disabled, onClose, onReplace, onChangePage }: {
+  source: InspirationSourceWork;
+  index: number;
+  total: number;
+  disabled: boolean;
+  onClose: () => void;
+  onReplace: () => void;
+  onChangePage: (work: WorkRecord, nextPageIndex: number) => void;
+}) {
+  const [work, setWork] = useState<WorkRecord | null>(null);
+  useEffect(() => {
+    let active = true;
+    void window.sanctuary.getWork(source.workId).then((loaded) => {
+      if (active) setWork(loaded);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [source.workId]);
+
+  const availablePages = work?.assets.filter((asset) => asset.mediaType === "image" && asset.fileState === "available") ?? [];
+  const currentPos = availablePages.findIndex((asset) => asset.pageIndex === source.pageIndex);
+
+  return (
+    <DialogOverlay onClose={onClose}>
+      <section className="dialog-surface inspiration-reference-preview" role="dialog" aria-modal="true" aria-label="查看参考图">
+        <header>
+          <div>
+            <h2>参考图 {index + 1}{total > 1 ? ` / ${total}` : ""} · {source.title}</h2>
+            <p>{source.artistName ?? "本地作品"} · 第 {source.pageIndex + 1} 页{availablePages.length > 1 ? `（共 ${availablePages.length} 页可用）` : ""}</p>
+          </div>
+          <button type="button" className="dialog-close" onClick={onClose} aria-label="关闭"><Icon name="close" size={16} /></button>
+        </header>
+        <div className="inspiration-reference-preview-stage">
+          <img src={source.imageUrl} alt={source.title} />
+        </div>
+        <footer>
+          {availablePages.length > 1 && work && (
+            <div className="inspiration-reference-preview-pages">
+              <Button
+                size="small"
+                disabled={disabled || currentPos <= 0}
+                onClick={() => {
+                  const prev = availablePages[currentPos - 1];
+                  if (prev) onChangePage(work, prev.pageIndex);
+                }}
+              >上一页</Button>
+              <Button
+                size="small"
+                disabled={disabled || currentPos < 0 || currentPos >= availablePages.length - 1}
+                onClick={() => {
+                  const next = availablePages[currentPos + 1];
+                  if (next) onChangePage(work, next.pageIndex);
+                }}
+              >下一页</Button>
+            </div>
+          )}
+          <div className="inspiration-reference-preview-actions">
+            <Button size="small" disabled={disabled} onClick={onReplace}>更换这张参考图</Button>
+            <Button variant="primary" size="small" onClick={onClose}>完成</Button>
+          </div>
+        </footer>
+      </section>
+    </DialogOverlay>
+  );
+}
+
 export function InspirationGalleryPicker({ onClose, onSelect }: {
   onClose: () => void;
   onSelect: (work: WorkRecord, pageIndex: number) => void;
@@ -134,11 +256,11 @@ export function InspirationGalleryPicker({ onClose, onSelect }: {
             <h2>{expandedWork ? "选择具体一页" : "从图库加入参考图"}</h2>
             <p>{expandedWork ? `《${expandedWork.title}》共有 ${availablePages.length} 张可用图片` : "最近保存的作品会排在前面，也可以按标题或画师搜索。"}</p>
           </div>
-          <button type="button" className="dialog-close" onClick={onClose} aria-label="关闭">✕</button>
+          <button type="button" className="dialog-close" onClick={onClose} aria-label="关闭"><Icon name="close" size={16} /></button>
         </header>
         {expandedWork ? (
           <>
-            <button type="button" className="inspiration-picker-back" onClick={() => setExpandedWork(null)}>← 返回作品列表</button>
+            <button type="button" className="inspiration-picker-back" onClick={() => setExpandedWork(null)}><Icon name="chevronLeft" size={14} /> 返回作品列表</button>
             <div className="inspiration-picker-pages">
               {availablePages.map((asset) => (
                 <button key={asset.id} type="button" onClick={() => onSelect(expandedWork, asset.pageIndex)}>
@@ -151,7 +273,7 @@ export function InspirationGalleryPicker({ onClose, onSelect }: {
         ) : (
           <>
             <label className="inspiration-picker-search">
-              <span>⌕</span>
+              <Icon name="search" size={16} />
               <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索作品标题或画师……" />
             </label>
             {pickerError && <AppNotice tone="error">{pickerError}</AppNotice>}
@@ -161,7 +283,7 @@ export function InspirationGalleryPicker({ onClose, onSelect }: {
                 return (
                   <button key={item.id} type="button" disabled={openingId === item.id} onClick={() => void openWork(item)}>
                     <img src={localImageUrl(cover.thumbnailPath ?? cover.path)} alt="" loading="lazy" />
-                    {item.pageCount > 1 && <span className="inspiration-picker-page-count">▱ {item.pageCount}</span>}
+                    {item.pageCount > 1 && <span className="inspiration-picker-page-count"><Icon name="pages" size={12} /> {item.pageCount}</span>}
                     <div><strong>{item.title}</strong><small>{item.artistName ?? "本地作品"}</small></div>
                   </button>
                 );
@@ -192,3 +314,4 @@ export function formatTime(value: string): string {
 export function messageOf(caught: unknown): string {
   return caught instanceof Error ? caught.message : "本地模型暂时没有成功回应";
 }
+

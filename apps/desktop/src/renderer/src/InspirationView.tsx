@@ -9,12 +9,22 @@ import type {
   InstalledModelView,
   WorkRecord
 } from "@sanctuary/domain";
-import { DEFAULT_INSPIRATION_SETTINGS } from "@sanctuary/domain";
+import { DEFAULT_INSPIRATION_SETTINGS, isBuiltinStarterMessage } from "@sanctuary/domain";
 import { AppNotice } from "./AppNotice";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { SendToComfyDialog } from "./SendToComfyDialog";
-import { InspirationGalleryPicker, InspirationMessageTimeline, ModelSettingControl, formatTime, imageUrlFor, messageOf, modelHint } from "./InspirationParts";
+import {
+  buildQuickPromptChips,
+  InspirationGalleryPicker,
+  InspirationMessageTimeline,
+  InspirationReferencePreviewDialog,
+  ModelSettingControl,
+  formatTime,
+  imageUrlFor,
+  messageOf,
+  modelHint
+} from "./InspirationParts";
 
 const PRESETS: Array<{ id: InspirationPresetId; label: string; hint: string; starter: string; writing?: true }> = [
   { id: "image_chat", label: "聊聊这张图", hint: "读画面、找细节和叙事线索", starter: "请认真看看这张图，先说说你看到了什么，再聊聊它可能藏着的故事。" },
@@ -36,14 +46,16 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   const [sourcePageIndex, setSourcePageIndex] = useState(0);
   const [extraSources, setExtraSources] = useState<InspirationSourceWork[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(false);
-  const [appendReference, setAppendReference] = useState(false);
+  const [pickerTarget, setPickerTarget] = useState<number | "append">("append");
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
   const [presetId, setPresetId] = useState<InspirationPresetId>("chat");
   const [draft, setDraft] = useState("");
   const [requestId, setRequestId] = useState("");
   const [error, setError] = useState("");
   const [galleryPickerOpen, setGalleryPickerOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState("");
   const [models, setModels] = useState<InstalledModelView[]>([]);
-  // ComfyUI readiness mirrors the 读图 prompt panel: enabled and at least one imported workflow.
   const [comfyReady, setComfyReady] = useState(false);
   const [comfyDraft, setComfyDraft] = useState<{ prompt: string; source: InspirationSourceWork } | null>(null);
   useEffect(() => {
@@ -64,6 +76,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   const deleting = useRef(new Set<string>());
   const conversationDrafts = useRef(new Map<string, string>());
   const messagesRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const selected = conversations.find((item) => item.id === selectedId) ?? null;
   const referenceSources: InspirationSourceWork[] = selected ? selected.sources ?? (selected.source ? [selected.source] : []) : sourceWork ? [{workId:sourceWork.id,title:sourceWork.title,artistName:sourceWork.artistName,pageIndex:sourcePageIndex,imageUrl:imageUrlFor(sourceWork,sourcePageIndex)},...extraSources] : [];
   const pendingVisible = Boolean(requestId) && pendingTurn?.conversationId === (selected?.id ?? null) &&
@@ -82,6 +95,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
         setConversations(items);
         if (!launch && items[0] && workspaceVersion.current === initialVersion) {
           setSelectedId(items[0].id);
+          setPresetId(items[0].presetId);
           setModelId(items[0].modelId ?? "");
           setSettings(items[0].settings ?? { ...DEFAULT_INSPIRATION_SETTINGS });
         }
@@ -104,6 +118,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     if (!launch) return;
     const version = ++workspaceVersion.current;
     setSelectedId("");
+    setRenaming(false);
     setSourceWork(null); setExtraSources([]); setSourcesLoading(false);
     setPresetId("image_chat");
     setModelId(defaultModelId);
@@ -118,7 +133,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     })).then(items => {
       if (mounted.current && workspaceVersion.current === version && items[0]) {
         setSourceWork(items[0].work); setSourcePageIndex(items[0].pageIndex);
-        setExtraSources(items.slice(1).map(({work,pageIndex}) => ({workId:work.id,title:work.title,artistName:work.artistName,pageIndex,imageUrl:imageUrlFor(work,pageIndex)})));
+        setExtraSources(items.slice(1).map(({work,pageIndex}) => ({workId:work.id,title:work.id === items[0]!.work.id ? items[0]!.work.title : work.title,artistName:work.artistName,pageIndex,imageUrl:imageUrlFor(work,pageIndex)})));
         if (items.length > 1) setDraft("请逐张看看这些图片，比较它们的主体、画面元素和氛围，再回答我的问题。");
       }
     }).catch(caught => { if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught)); })
@@ -131,28 +146,56 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   }, [selected?.id, selected?.messages.length, requestId]);
 
   const activePreset = useMemo(
-    () => PRESETS.find((item) => item.id === (selected?.presetId ?? presetId)) ?? PRESETS[0]!,
-    [presetId, selected?.presetId]
+    () => PRESETS.find((item) => item.id === presetId) ?? PRESETS[0]!,
+    [presetId]
   );
 
-  function beginNew() {
+  const hasAssistantReply = Boolean(selected?.messages.some((message) => message.role === "assistant"));
+  const quickChips = useMemo(
+    () => buildQuickPromptChips(referenceSources.length > 0, referenceSources.length, hasAssistantReply, activePreset.starter),
+    [referenceSources.length, hasAssistantReply, activePreset.starter]
+  );
+
+  async function beginNew(keepReferences = false) {
     if (selectedId) conversationDrafts.current.set(selectedId, draft);
-    workspaceVersion.current += 1;
+    const carried = keepReferences ? [...referenceSources] : [];
+    const version = ++workspaceVersion.current;
     setSelectedId("");
+    setRenaming(false);
+    setPreviewIndex(null);
     setSourceWork(null); setExtraSources([]); setSourcesLoading(false);
     setSourcePageIndex(0);
-    setPresetId("chat");
+    const nextPreset: InspirationPresetId = carried.length > 0 ? "image_chat" : "chat";
+    setPresetId(nextPreset);
     setModelId(defaultModelId);
     setSettings({ ...DEFAULT_INSPIRATION_SETTINGS });
-    setDraft("");
+    setDraft(carried.length > 0 ? PRESETS.find((item) => item.id === nextPreset)!.starter : "");
     setError("");
     setOutputNotice("");
+    if (carried.length > 0) {
+      setSourcesLoading(true);
+      try {
+        const work = await window.sanctuary.getWork(carried[0]!.workId);
+        if (mounted.current && workspaceVersion.current === version && work) {
+          setSourceWork(work);
+          setSourcePageIndex(carried[0]!.pageIndex);
+          setExtraSources(carried.slice(1));
+        }
+      } catch (caught) {
+        if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught));
+      } finally {
+        if (mounted.current && workspaceVersion.current === version) setSourcesLoading(false);
+      }
+    }
   }
 
   function selectConversation(conversation: InspirationConversation) {
     if (selectedId) conversationDrafts.current.set(selectedId, draft);
     workspaceVersion.current += 1;
     setSelectedId(conversation.id);
+    setPresetId(conversation.presetId);
+    setRenaming(false);
+    setPreviewIndex(null);
     setSourceWork(null); setExtraSources([]); setSourcesLoading(false);
     setModelId(conversation.modelId ?? defaultModelId);
     setSettings(conversation.settings ?? { ...DEFAULT_INSPIRATION_SETTINGS });
@@ -162,9 +205,27 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
   }
 
   function choosePreset(next: typeof PRESETS[number]) {
-    if (selected) beginNew();
     setPresetId(next.id);
-    setDraft(next.starter);
+    if (!selected) {
+      setDraft((current) => (!current.trim() || isBuiltinStarterMessage(current) ? next.starter : current));
+    } else if (!draft.trim()) {
+      setDraft(next.starter);
+    }
+  }
+
+  async function saveRename() {
+    if (!selected || !renameDraft.trim()) { setRenaming(false); return; }
+    const nextTitle = renameDraft.trim();
+    if (nextTitle === selected.title) { setRenaming(false); return; }
+    try {
+      const updated = await window.sanctuary.renameInspirationConversation(selected.id, nextTitle);
+      if (mounted.current) {
+        setConversations((items) => items.map((item) => item.id === updated.id ? updated : item));
+        setRenaming(false);
+      }
+    } catch (caught) {
+      if (mounted.current) setError(messageOf(caught));
+    }
   }
 
   async function send() {
@@ -181,7 +242,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     try {
       const updated = await window.sanctuary.sendInspirationMessage({
         requestId: nextRequestId,
-        presetId: selected?.presetId ?? presetId,
+        presetId,
         message,
         ...(modelId ? { modelId } : {}),
         settings,
@@ -192,6 +253,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
         setConversations((items) => [updated, ...items.filter((item) => item.id !== updated.id)]);
         if (workspaceVersion.current === version) {
           setSelectedId(updated.id);
+          setPresetId(updated.presetId);
           setSourceWork(null); setExtraSources([]); setSourcesLoading(false);
         }
       }
@@ -203,7 +265,10 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
       const latest = await window.sanctuary.listInspirationConversations().catch(() => null);
       if (latest && mounted.current) {
         setConversations(latest);
-        if (workspaceVersion.current === version && !selectedId && latest[0]) setSelectedId(latest[0].id);
+        if (workspaceVersion.current === version && !selectedId && latest[0]) {
+          setSelectedId(latest[0].id);
+          setPresetId(latest[0].presetId);
+        }
       }
     } finally {
       sending.current = false;
@@ -244,7 +309,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
       await window.sanctuary.deleteInspirationConversation(id);
       if (!mounted.current) return;
       setConversations((items) => items.filter((item) => item.id !== id));
-      if (selectedId === id && workspaceVersion.current === version) beginNew();
+      if (selectedId === id && workspaceVersion.current === version) void beginNew();
     } catch (caught) {
       if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught));
     } finally { deleting.current.delete(id); }
@@ -303,10 +368,13 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     }
   }
 
-  async function attachGalleryWork(work: WorkRecord, pageIndex: number) {
+  async function attachGalleryWork(work: WorkRecord, pageIndex: number, targetOverride?: number | "append") {
     const version = workspaceVersion.current;
+    const target = targetOverride ?? pickerTarget;
     const source = {workId:work.id,title:work.title,artistName:work.artistName,pageIndex,imageUrl:imageUrlFor(work,pageIndex)};
-    const next = appendReference ? [...referenceSources,source] : [source,...referenceSources.slice(1)];
+    const next = target === "append"
+      ? [...referenceSources, source]
+      : referenceSources.map((item, idx) => idx === target ? source : item);
     if (next.length > 4) { setError("一次最多讨论 4 张参考图"); return; }
     if (new Set(next.map(item => `${item.workId}:${item.pageIndex}`)).size !== next.length) { setError("这张图已经加入了，请选择另一张"); return; }
     try {
@@ -319,12 +387,15 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     } catch (caught) { if (mounted.current && workspaceVersion.current === version) setError(messageOf(caught)); }
   }
   async function detachGalleryWork(index: number) {
-    try { await updateReferences(referenceSources.filter((_item,i) => i !== index)); }
+    try {
+      if (previewIndex === index) setPreviewIndex(null);
+      await updateReferences(referenceSources.filter((_item,i) => i !== index));
+    }
     catch (caught) { if (mounted.current) setError(messageOf(caught)); }
   }
 
   const presetButton = (preset: typeof PRESETS[number]) => (
-    <button key={preset.id} type="button" className={(selected?.presetId ?? presetId) === preset.id ? "active" : ""} onClick={() => choosePreset(preset)}>
+    <button key={preset.id} type="button" className={presetId === preset.id ? "active" : ""} onClick={() => choosePreset(preset)}>
       <strong>{preset.label}</strong><small>{preset.hint}</small>
     </button>
   );
@@ -333,7 +404,7 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     <section className="inspiration-view">
       <header className="inspiration-header">
         <div><h1>创作</h1><p>从图出发：聊图、整理成提示词，也可以写设定。</p></div>
-        <button type="button" className="inspiration-new" onClick={beginNew}><Icon name="plus" size={16} />新对话</button>
+        <button type="button" className="inspiration-new" onClick={() => void beginNew(false)}><Icon name="plus" size={16} />新对话</button>
       </header>
 
       {!modelsLoading && models.length === 0 && (
@@ -345,23 +416,46 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
 
       <div className="inspiration-layout">
         <aside className="inspiration-sessions">
-          <div className="inspiration-panel-title"><strong>最近对话</strong><small>最多保留 30 段</small></div>
+          <div className="inspiration-panel-title"><strong>最近对话</strong><small>{conversations.length ? `${conversations.length} / 30` : "最多保留 30 段"}</small></div>
           {conversations.length === 0 && <p className="inspiration-muted">还没有对话。选一种方式开始就好。</p>}
-          {conversations.map((item) => (
-            <div key={item.id} className={`inspiration-session ${item.id === selectedId ? "active" : ""}`}>
-              <button type="button" onClick={() => selectConversation(item)}>
-                <strong>{item.title}</strong><small>{PRESETS.find((preset) => preset.id === item.presetId)?.label} · {formatTime(item.updatedAt)}</small>
-              </button>
-              <button type="button" className="inspiration-delete" aria-label={`删除 ${item.title}`} onClick={() => void removeConversation(item.id)}><Icon name="close" size={14} /></button>
-            </div>
-          ))}
+          {conversations.map((item) => {
+            const thumb = (item.sources?.[0] ?? item.source)?.imageUrl;
+            return (
+              <div key={item.id} className={`inspiration-session ${item.id === selectedId ? "active" : ""}`}>
+                <button type="button" onClick={() => selectConversation(item)}>
+                  {thumb && <img className="inspiration-session-thumb" src={thumb} alt="" loading="lazy" />}
+                  <span className="inspiration-session-meta">
+                    <strong>{item.title}</strong>
+                    <small>{PRESETS.find((preset) => preset.id === item.presetId)?.label} · {formatTime(item.updatedAt)}</small>
+                  </span>
+                </button>
+                <button type="button" className="inspiration-delete" aria-label={`删除 ${item.title}`} onClick={() => void removeConversation(item.id)}><Icon name="close" size={14} /></button>
+              </div>
+            );
+          })}
         </aside>
 
         <article className="inspiration-chat">
           {selected && selected.messages.length > 0 && (
             <div className="inspiration-conversation-actions">
-              <strong>{selected.title}</strong>
+              <strong hidden={renaming}>{selected.title}</strong>
+              {renaming && (
+                <form className="inspiration-rename-form" onSubmit={(event) => { event.preventDefault(); void saveRename(); }}>
+                  <input
+                    aria-label="对话名称"
+                    maxLength={80}
+                    autoFocus
+                    value={renameDraft}
+                    onChange={(event) => setRenameDraft(event.target.value)}
+                    onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); setRenaming(false); } }}
+                  />
+                  <Button size="small" variant="primary" type="submit">保存</Button>
+                  <Button size="small" onClick={() => setRenaming(false)}>取消</Button>
+                </form>
+              )}
               <div>
+                {!renaming && <Button size="small" onClick={() => { setRenameDraft(selected.title); setRenaming(true); }}>改名</Button>}
+                {referenceSources.length > 0 && <Button size="small" disabled={Boolean(requestId) || sourcesLoading} onClick={() => void beginNew(true)}>带图新对话</Button>}
                 <Button size="small" disabled={Boolean(outputBusy)} onClick={() => void outputConversation("copy")}>复制对话</Button>
                 <Button size="small" disabled={Boolean(outputBusy)} onClick={() => void outputConversation("save")}>导出 Markdown</Button>
               </div>
@@ -370,21 +464,23 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
           )}
           {sourcesLoading && <p role="status">正在带入所选参考图…</p>}
           <div className="inspiration-reference-strip" aria-label="本轮参考图">{referenceSources.map((source,index) => <div key={`${source.workId}:${source.pageIndex}`} className="inspiration-source">
-            <img src={source.imageUrl} alt={`参考图 ${index + 1}`} />
+            <button type="button" className="inspiration-source-thumb" onClick={() => setPreviewIndex(index)} aria-label={`查看参考图 ${index + 1}：${source.title}`}>
+              <img src={source.imageUrl} alt={`参考图 ${index + 1}`} />
+            </button>
             <div><span>图片 {index + 1} · 第 {source.pageIndex + 1} 页</span><strong>{source.title}</strong><small>{source.artistName ?? "本地作品"}</small></div>
             <div className="inspiration-source-actions">
-              {index === 0 && <button type="button" disabled={Boolean(requestId) || sourcesLoading} onClick={() => { setAppendReference(false); setGalleryPickerOpen(true); }}>更换</button>}
+              <button type="button" disabled={Boolean(requestId) || sourcesLoading} onClick={() => { setPickerTarget(index); setGalleryPickerOpen(true); }}>更换</button>
               <button type="button" aria-label={`移除参考图 ${index + 1}`} disabled={Boolean(requestId) || sourcesLoading} onClick={() => void detachGalleryWork(index)}>移除</button>
             </div>
           </div>)}</div>
-          {referenceSources.length < 4 && <button type="button" className="inspiration-attach-empty" disabled={Boolean(requestId) || sourcesLoading} onClick={() => { setAppendReference(true); setGalleryPickerOpen(true); }}>
+          {referenceSources.length < 4 && <button type="button" className="inspiration-attach-empty" disabled={Boolean(requestId) || sourcesLoading} onClick={() => { setPickerTarget("append"); setGalleryPickerOpen(true); }}>
             <Icon name="plus" size={18} /><strong>{referenceSources.length ? "再加入一张参考图" : "从图库加入参考图"}</strong><small>最多 4 张；可以选择多页作品中的具体一页</small>
           </button>}
           <div ref={messagesRef} className="inspiration-messages" tabIndex={0} aria-label="对话消息">
             {!selected && !requestId && (
               <div className="inspiration-welcome">
                 <h2>{sourceWork ? "参考图已经带进来了" : "从一张图开始"}</h2>
-                <p>{sourceWork ? "选一种方式，或者直接改写下面的话。" : "在图库多选后点“拿去创作”，或在上面加入参考图。不带图也可以直接聊。"}</p>
+                <p>{sourceWork ? "选一种方式，或者点下方快捷指令直接开始。" : "在图库多选后点“拿去创作”，或在上面加入参考图。不带图也可以直接聊。"}</p>
               </div>
             )}
             <InspirationMessageTimeline
@@ -405,8 +501,26 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
           {outputNotice && <AppNotice tone="success">{outputNotice}</AppNotice>}
           {requestId && !pendingVisible && <AppNotice tone="info">另一段对话正在生成。可以先写草稿，完成后回答会保存在原对话。</AppNotice>}
           <div className="inspiration-composer">
-            <div className="inspiration-mode-pill">{activePreset.label}</div>
+            <div className="inspiration-composer-top">
+              <div className="inspiration-mode-pill">{activePreset.label}</div>
+              <div className="inspiration-quick-chips" role="group" aria-label="快捷提问">
+                {quickChips.map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    className="inspiration-quick-chip"
+                    disabled={Boolean(requestId) || sourcesLoading}
+                    onClick={() => {
+                      if (chip.presetId) setPresetId(chip.presetId);
+                      setDraft(chip.prompt);
+                      textareaRef.current?.focus();
+                    }}
+                  >{chip.label}</button>
+                ))}
+              </div>
+            </div>
             <textarea
+              ref={textareaRef}
               maxLength={referenceSources.length ? 2000 : 8000}
               value={draft}
               placeholder="把你的想法告诉本地模型……"
@@ -457,18 +571,33 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
               options={[{ value: "brief", label: "简短" }, { value: "standard", label: "标准" }, { value: "detailed", label: "详细" }]}
               onChange={(responseLength) => setSettings((current) => ({ ...current, responseLength }))}
             />
-            <p className="inspiration-next-answer-note">调整会从下一次回答开始生效。</p>
           </div>
-          <div className="inspiration-panel-title"><strong>创作方式</strong><small>每次新对话选一种</small></div>
+          <div className="inspiration-panel-title"><strong>创作方式</strong><small>可随时切换</small></div>
           {PRESETS.filter((preset) => !preset.writing).map((preset) => presetButton(preset))}
-          <details className="inspiration-writing-presets" open={PRESETS.some((preset) => preset.writing && preset.id === (selected?.presetId ?? presetId))}>
+          <details className="inspiration-writing-presets" open={PRESETS.some((preset) => preset.writing && preset.id === presetId)}>
             <summary>更多写作方式</summary>
             {PRESETS.filter((preset) => preset.writing).map((preset) => presetButton(preset))}
           </details>
         </aside>
       </div>
-      {comfyDraft && <SendToComfyDialog source={comfyDraft.source} prompt={comfyDraft.prompt} onClose={() => setComfyDraft(null)}
+      {comfyDraft && <SendToComfyDialog source={comfyDraft.source} sources={referenceSources} prompt={comfyDraft.prompt} onClose={() => setComfyDraft(null)}
         onQueued={() => setOutputNotice("已交给 ComfyUI；完成后结果会回到图库")} />}
+      {previewIndex !== null && referenceSources[previewIndex] && (
+        <InspirationReferencePreviewDialog
+          source={referenceSources[previewIndex]!}
+          index={previewIndex}
+          total={referenceSources.length}
+          disabled={Boolean(requestId) || sourcesLoading}
+          onClose={() => setPreviewIndex(null)}
+          onReplace={() => {
+            const target = previewIndex;
+            setPreviewIndex(null);
+            setPickerTarget(target);
+            setGalleryPickerOpen(true);
+          }}
+          onChangePage={(work, nextPageIndex) => void attachGalleryWork(work, nextPageIndex, previewIndex)}
+        />
+      )}
       {galleryPickerOpen && (
         <InspirationGalleryPicker
           onClose={() => setGalleryPickerOpen(false)}
@@ -478,3 +607,4 @@ export function InspirationView({ launch, onLaunchConsumed, onOpenModelCenter }:
     </section>
   );
 }
+
