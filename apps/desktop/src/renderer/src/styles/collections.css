@@ -1533,3 +1533,6 @@
 .photobook-display-options { min-width: 0; }
 .photobook-display-options > summary { width: max-content; }
 .photobook-display-options .photobook-toolbar-right { margin-top: 8px; }
+
+/* State rules restored after an over-eager CSS prune (class added conditionally in TSX). */
+.album-toc-row.is-cover { background: var(--ds-bg-card-subtle); }

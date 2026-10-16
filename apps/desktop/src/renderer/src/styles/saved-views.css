@@ -230,3 +230,8 @@
 }
 
 /* Combination context banner in WorkLibrary */
+
+/* State rules restored after an over-eager CSS prune (class added conditionally in TSX). */
+.saved-view-name-input.has-error { border-color: var(--ds-danger); }
+.saved-view-collection-item.is-included { border-color: var(--ds-primary-border); background: var(--ds-primary-subtle); }
+.saved-view-collection-item.is-excluded { border-color: var(--ds-danger-border); background: var(--ds-danger-light); }

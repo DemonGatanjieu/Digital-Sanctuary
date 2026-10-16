@@ -243,3 +243,6 @@
 .model-technical-details { margin: 8px 0 14px; min-width: 0; }
 .model-technical-details summary { min-height: 36px; padding: 8px 0; font-size: 12px; color: var(--ds-text-muted); cursor: pointer; }
 .model-download-size { font-size: 12px; color: var(--ds-text-muted); }
+
+/* State rules restored after an over-eager CSS prune (class added conditionally in TSX). */
+.model-center-embedded-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }

@@ -109,6 +109,7 @@
   overflow-wrap: anywhere;
 }
 
+.quick-action-option.is-active,
 .quick-action-option:hover:not(:disabled) {
   border-color: var(--ds-primary-border);
   color: var(--ds-primary);

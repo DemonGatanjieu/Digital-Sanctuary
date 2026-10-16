@@ -449,3 +449,8 @@
   line-height: 1.5;
   color: var(--ds-text-secondary);
 }
+
+/* State rules restored after an over-eager CSS prune (class added conditionally in TSX). */
+.vision-radar-badge.badge-local { background: var(--ds-success-light); color: var(--ds-success-text); border: 1px solid var(--ds-success-border); }
+.vision-radar-badge.badge-ai { background: var(--ds-primary-subtle); color: var(--ds-primary); border: 1px solid var(--ds-primary-border); }
+.connection-test-result.failure { background: var(--ds-danger-light); border: 1px solid var(--ds-danger-border); color: var(--ds-danger-text); }

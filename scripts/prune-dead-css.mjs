@@ -2,7 +2,8 @@
 // Usage: node scripts/prune-dead-css.mjs            (report only)
 //        node scripts/prune-dead-css.mjs --write    (rewrite the stylesheet modules)
 // A class counts as used when it appears as a token in any string or template literal in
-// renderer .ts/.tsx files (tests excluded), or matches a dynamic prefix such as `status-${x}`.
+// renderer .ts/.tsx files (tests excluded), including quoted strings inside `${...}`, or matches a
+// dynamic prefix such as `status-${x}`.
 import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -112,7 +113,12 @@ function splitSelectors(prelude) {
   return parts.filter((part) => part.trim());
 }
 function* stringLiterals(source) {
-  for (const match of source.matchAll(/"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)) yield match[1] ?? match[2] ?? match[3] ?? "";
+  for (const match of source.matchAll(/"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g)) {
+    const literal = match[1] ?? match[2] ?? match[3] ?? "";
+    yield literal;
+    // Quoted classes inside a template expression, e.g. `explore-surface ${open ? "with-drawer" : ""}`.
+    if (match[3] !== undefined) for (const expression of literal.matchAll(/\$\{([^}]*)\}/g)) yield* stringLiterals(expression[1]);
+  }
 }
 function* walk(directory) {
   for (const entry of readdirSync(directory)) {

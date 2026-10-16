@@ -1466,3 +1466,7 @@
   .inspector-header-actions { gap: 5px; }
   .inspector-refresh-btn > span:last-child { display: none; }
 }
+
+/* State rules restored after an over-eager CSS prune (class added conditionally in TSX). */
+.cinema-stage-viewport.panning .cinema-image-entity { transition: none; will-change: transform; }
+.inspector-refresh-icon.spinning { display: inline-block; animation: spinSlow 1s linear infinite; }

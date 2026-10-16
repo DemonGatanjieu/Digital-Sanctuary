@@ -124,3 +124,7 @@
   .browser-toolbar > .ui-tool-button span, .browser-toolbar .explore-save-button span { display: none; }
   .browser-toolbar .explore-save-button { width: var(--ds-control-sm); padding: 0; justify-content: center; }
 }
+
+/* The Pixiv page is a native view drawn above the app, so the surface must give way to the 读图 drawer
+   (same width as .element-inspector-drawer) or the drawer is hidden behind the page. */
+.explore-surface.with-drawer { margin-right: min(560px, 100vw); }
