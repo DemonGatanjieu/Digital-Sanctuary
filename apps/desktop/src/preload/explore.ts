@@ -1,5 +1,11 @@
 import { ipcRenderer, webFrame } from "electron";
-import { applyProtectionModeAttribute, hasUsableImageContainerBox } from "./explore-dom.js";
+import {
+  applyProtectionModeAttribute,
+  extractArtworkFileKey,
+  findImageCardContainer,
+  measureEffectiveImagePriority,
+  normalizeArtworkUrl
+} from "./explore-dom.js";
 
 type ReviewPriority = "visible" | "near";
 type ReviewState = "allowed" | "blocked" | "unavailable";
@@ -59,7 +65,6 @@ interface DislikeFeedbackResult {
 
 const REVIEW_STATE_ATTRIBUTE = "data-sanctuary-review-state";
 const REVIEW_RELOAD_ATTRIBUTE = "data-sanctuary-review-reloaded";
-const ARTWORK_PATH_PARTS = ["/img-master/", "/img-original/", "/custom-thumb/"];
 const MAX_PAGE_OUTCOMES = 500;
 const outcomes = new Map<string, ReviewResultMessage>();
 const trackedImages = new Map<HTMLImageElement, string>();
@@ -376,22 +381,6 @@ const protectionCss = `
 
 webFrame.insertCSS(protectionCss, { cssOrigin: "user" });
 
-function normalizeArtworkUrl(value: string | null | undefined): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value, document.baseURI);
-    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "i.pximg.net") {
-      return null;
-    }
-    if (!ARTWORK_PATH_PARTS.some((part) => url.pathname.includes(part))) return null;
-    url.search = "";
-    url.hash = "";
-    return url.toString();
-  } catch {
-    return null;
-  }
-}
-
 function artworkUrlForImage(image: HTMLImageElement): string | null {
   return normalizeArtworkUrl(
     image.currentSrc || image.getAttribute("src") || image.getAttribute("srcset")?.split(/[ ,]/)[0]
@@ -422,7 +411,7 @@ function removeImageMembership(image: HTMLImageElement, url: string): void {
 
 function syncCandidate(normalizedUrl: string): void {
   if (!protectionEnabled) return;
-  if (outcomes.has(normalizedUrl)) {
+  if (findOutcomeForUrl(normalizedUrl)) {
     submittedPriorities.delete(normalizedUrl);
     return;
   }
@@ -461,19 +450,6 @@ function reloadFailedImage(image: HTMLImageElement, normalizedUrl: string): void
     if (sourceSet) image.setAttribute("srcset", sourceSet);
     if (source) image.setAttribute("src", source);
   });
-}
-
-function findImageCardContainer(image: HTMLImageElement): HTMLElement {
-  const card = image.closest('figure, [role="presentation"], div[class*="gtm-"], a[href*="/artworks/"]');
-  if (card instanceof HTMLElement && hasUsableImageContainerBox(card)) {
-    return card;
-  }
-  let current: HTMLElement | null = image.parentElement;
-  while (current && current !== document.body) {
-    if (hasUsableImageContainerBox(current)) return current;
-    current = current.parentElement;
-  }
-  return image.parentElement || image;
 }
 
 function removeReviewOverlay(image: HTMLImageElement, url: string): void {
@@ -944,12 +920,6 @@ function applyOutcome(image: HTMLImageElement, outcome: ReviewResultMessage): vo
   }
 }
 
-function extractArtworkFileKey(url: string | null | undefined): string | null {
-  if (!url) return null;
-  const match = url.match(/\/(\d+_p\d+)(?:_[^\/]+|\.[a-zA-Z0-9]+)$/);
-  return match && match[1] ? match[1] : null;
-}
-
 function findOutcomeForUrl(url: string): ReviewResultMessage | null {
   const direct = outcomes.get(url);
   if (direct) return direct;
@@ -959,6 +929,12 @@ function findOutcomeForUrl(url: string): ReviewResultMessage | null {
     if (extractArtworkFileKey(candidateUrl) === key) return outcome;
   }
   return null;
+}
+
+function evaluateImageViewport(image: HTMLImageElement, normalizedUrl: string, intersectingHint = false): void {
+  const priority = measureEffectiveImagePriority(image, window.innerWidth, window.innerHeight);
+  setMembership(nearImages, normalizedUrl, image, priority !== null || intersectingHint);
+  setMembership(visibleImages, normalizedUrl, image, priority === "visible");
 }
 
 function trackImage(image: HTMLImageElement): void {
@@ -991,7 +967,10 @@ function trackImage(image: HTMLImageElement): void {
     return;
   }
   image.setAttribute(REVIEW_STATE_ATTRIBUTE, "pending");
+  intersectionObserver.unobserve(image);
   intersectionObserver.observe(image);
+  evaluateImageViewport(image, nextUrl);
+  syncCandidate(nextUrl);
 }
 
 const intersectionObserver = new IntersectionObserver(
@@ -1001,16 +980,13 @@ const intersectionObserver = new IntersectionObserver(
       if (!(entry.target instanceof HTMLImageElement)) continue;
       const image = entry.target;
       const normalizedUrl = trackedImages.get(image);
-      if (!normalizedUrl || outcomes.has(normalizedUrl)) continue;
-      const rect = entry.boundingClientRect;
-      const visible =
-        entry.isIntersecting &&
-        rect.bottom > 0 &&
-        rect.right > 0 &&
-        rect.top < window.innerHeight &&
-        rect.left < window.innerWidth;
-      setMembership(nearImages, normalizedUrl, image, entry.isIntersecting);
-      setMembership(visibleImages, normalizedUrl, image, visible);
+      if (!normalizedUrl) continue;
+      const existingOutcome = findOutcomeForUrl(normalizedUrl);
+      if (existingOutcome) {
+        applyOutcome(image, existingOutcome);
+        continue;
+      }
+      evaluateImageViewport(image, normalizedUrl, entry.isIntersecting);
       changedUrls.add(normalizedUrl);
     }
     for (const normalizedUrl of changedUrls) syncCandidate(normalizedUrl);
@@ -1048,6 +1024,22 @@ function handleImageLifecycle(event: Event): void {
   if (event.target instanceof HTMLImageElement) trackImage(event.target);
 }
 
+let viewportSweepScheduled = false;
+function schedulePendingViewportSweep(): void {
+  if (viewportSweepScheduled || !protectionEnabled) return;
+  viewportSweepScheduled = true;
+  window.requestAnimationFrame(() => {
+    viewportSweepScheduled = false;
+    const changedUrls = new Set<string>();
+    for (const [image, normalizedUrl] of trackedImages) {
+      if (!image.isConnected || findOutcomeForUrl(normalizedUrl)) continue;
+      evaluateImageViewport(image, normalizedUrl);
+      changedUrls.add(normalizedUrl);
+    }
+    for (const normalizedUrl of changedUrls) syncCandidate(normalizedUrl);
+  });
+}
+
 function startObserver(): void {
   syncProtectionModeAttribute();
   for (const image of document.images) trackImage(image);
@@ -1068,12 +1060,16 @@ function startObserver(): void {
   });
   document.addEventListener("load", handleImageLifecycle, true);
   document.addEventListener("error", handleImageLifecycle, true);
+  window.addEventListener("scroll", schedulePendingViewportSweep, { capture: true, passive: true });
+  window.addEventListener("resize", schedulePendingViewportSweep, { passive: true });
   window.addEventListener("pagehide", () => {
     closeDislikePopover();
     mutationObserver.disconnect();
     intersectionObserver.disconnect();
     document.removeEventListener("load", handleImageLifecycle, true);
     document.removeEventListener("error", handleImageLifecycle, true);
+    window.removeEventListener("scroll", schedulePendingViewportSweep, true);
+    window.removeEventListener("resize", schedulePendingViewportSweep);
   }, { once: true });
 }
 

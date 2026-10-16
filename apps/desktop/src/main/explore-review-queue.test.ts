@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ExploreReviewQueue } from "./explore-review-queue.js";
+import { ExploreReviewQueue, RemoteReviewMemoryCache } from "./explore-review-queue.js";
 
 function candidate(normalizedUrl: string, priority: "visible" | "near") {
   return { normalizedUrl, priority, referrer: "https://www.pixiv.net/" };
@@ -30,4 +30,34 @@ describe("ExploreReviewQueue", () => {
     expect(queue.remove("a")).toBe(true);
     expect(queue.take()).toBeNull();
   });
+
+  it("reuses review outcomes across thumbnail resolution variants of the same artwork page", () => {
+    const cache = new RemoteReviewMemoryCache(20);
+    cache.set(
+      {
+        normalizedUrl: "https://i.pximg.net/c/250x250_80_a2/img-master/img/2026/05/01/00/00/00/123456_p0_square1200.jpg",
+        engine: "wd-swinv2-tagger-v3",
+        engineVersion: "v3",
+        rulesFingerprint: "rules-1"
+      },
+      { state: "allowed", reasons: [], source: "fresh" }
+    );
+
+    const hit = cache.get({
+      normalizedUrl: "https://i.pximg.net/img-master/img/2026/05/01/00/00/00/123456_p0_master1200.jpg",
+      engine: "wd-swinv2-tagger-v3",
+      engineVersion: "v3",
+      rulesFingerprint: "rules-1"
+    });
+    expect(hit).toEqual({ state: "allowed", reasons: [], source: "fresh" });
+
+    const differentPageMiss = cache.get({
+      normalizedUrl: "https://i.pximg.net/img-master/img/2026/05/01/00/00/00/123456_p1_master1200.jpg",
+      engine: "wd-swinv2-tagger-v3",
+      engineVersion: "v3",
+      rulesFingerprint: "rules-1"
+    });
+    expect(differentPageMiss).toBeUndefined();
+  });
 });
+

@@ -66,8 +66,12 @@ import {
   type PersonalTagPreferenceProfile
 } from "./explore-preference-calibration.js";
 import {
+  EXPLORE_REVIEW_CONCURRENCY,
   ExploreReviewQueue,
-  type ExploreReviewPriority
+  RemoteReviewMemoryCache,
+  remoteReviewMemoryKey,
+  type ExploreReviewPriority,
+  type RemoteReviewOutcome
 } from "./explore-review-queue.js";
 import {
   describeInspectorFailure,
@@ -183,24 +187,17 @@ let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
 const analysisJobScheduler = new AnalysisJobScheduler();
 let imageWorkbench: ImageWorkbenchService | undefined;
 let semanticVectors: SemanticVectorStore | undefined;
-interface RemoteReviewOutcome {
-  state: "allowed" | "blocked" | "unavailable";
-  reasons: string[];
-  source: "memory" | "persistent" | "fresh" | "preference" | "error";
-}
-
-const remoteReviewCache = new Map<string, RemoteReviewOutcome>();
+const remoteReviewCache = new RemoteReviewMemoryCache(500);
 const remoteReviewPending = new Map<string, Promise<RemoteReviewOutcome>>();
 const pendingDeletionPreviews = new Map<string, { workIds: string[]; expiresAt: number }>();
 const exploreReviewQueue = new ExploreReviewQueue();
 const pixivRevealToken = randomUUID();
 const remoteOneShotAllows = new Set<string>();
 let remoteVisionQueue: Promise<void> = Promise.resolve();
-let exploreActiveReview: { normalizedUrl: string; generation: number } | undefined;
+const exploreActiveReviews = new Map<string, number>();
 let exploreReviewGeneration = 0;
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 const MAX_ORIGINAL_IMAGE_BYTES = 128 * 1024 * 1024;
-const MAX_MEMORY_REVIEW_CACHE_ENTRIES = 500;
 const PIXIV_DOWNLOAD_CONCURRENCY = 4;
 const ENABLE_VIEWPORT_REVIEW = true;
 const THRESHOLD_OVERRIDES_PREFERENCE_PREFIX = "filters.threshold-overrides.v1";
@@ -1301,7 +1298,7 @@ function registerIpc(): void {
     const contents = exploreView?.webContents;
     if (!contents || contents.isDestroyed() || event.sender.id !== contents.id) return;
     const normalizedUrl = normalizeExploreReviewInactiveMessage(value);
-    if (!normalizedUrl || exploreActiveReview?.normalizedUrl === normalizedUrl) return;
+    if (!normalizedUrl || exploreActiveReviews.has(normalizedUrl)) return;
     if (exploreReviewQueue.remove(normalizedUrl)) scheduleExploreState();
   });
   ipcMain.on("explore:reveal-artwork", (event, value: unknown) => {
@@ -2658,7 +2655,13 @@ function enqueueExploreReview(
   referrer: string,
   priority: ExploreReviewPriority
 ): void {
-  if (exploreActiveReview?.normalizedUrl === normalizedUrl) return;
+  const cached = findCachedRemoteReview(normalizedUrl);
+  if (cached) {
+    exploreReviewQueue.remove(normalizedUrl);
+    void publishRemoteReviewOutcome(contents, normalizedUrl, cached);
+    return;
+  }
+  if (exploreActiveReviews.has(normalizedUrl)) return;
   if (exploreReviewQueue.upsert({ normalizedUrl, referrer, priority })) {
     scheduleExploreState();
   }
@@ -2666,49 +2669,48 @@ function enqueueExploreReview(
 }
 
 function pumpExploreReviewQueue(contents: Electron.WebContents): void {
-  if (exploreActiveReview || contents.isDestroyed()) return;
-  const candidate = exploreReviewQueue.take();
-  if (!candidate) {
-    scheduleExploreState();
-    return;
-  }
-
-  const generation = exploreReviewGeneration;
-  exploreActiveReview = { normalizedUrl: candidate.normalizedUrl, generation };
-  scheduleExploreState();
-  const startedAt = Date.now();
-  const queueWaitMs = Math.max(0, startedAt - candidate.enqueuedAt);
-
-  void reviewRemoteArtwork(candidate.normalizedUrl, candidate.referrer)
-    .then(async (outcome) => {
-      const reviewMs = Date.now() - startedAt;
-      console.info(
-        `[explore-queue] ${outcome.state} ` +
-        `${candidate.normalizedUrl} priority=${candidate.priority} source=${outcome.source} ` +
-        `queueWaitMs=${queueWaitMs} reviewMs=${reviewMs}`
-      );
-      if (
-        generation !== exploreReviewGeneration ||
-        contents.isDestroyed() ||
-        exploreView?.webContents.id !== contents.id
-      ) {
-        return;
-      }
-      await publishRemoteReviewOutcome(contents, candidate.normalizedUrl, outcome);
-    })
-    .catch((error: unknown) => {
-      console.error("[explore-queue] unexpected review failure", error);
-    })
-    .finally(() => {
-      if (
-        exploreActiveReview?.normalizedUrl === candidate.normalizedUrl &&
-        exploreActiveReview.generation === generation
-      ) {
-        exploreActiveReview = undefined;
-      }
+  if (contents.isDestroyed()) return;
+  while (exploreActiveReviews.size < EXPLORE_REVIEW_CONCURRENCY) {
+    const candidate = exploreReviewQueue.take();
+    if (!candidate) {
       scheduleExploreState();
-      queueMicrotask(() => pumpExploreReviewQueue(contents));
-    });
+      return;
+    }
+
+    const generation = exploreReviewGeneration;
+    exploreActiveReviews.set(candidate.normalizedUrl, generation);
+    scheduleExploreState();
+    const startedAt = Date.now();
+    const queueWaitMs = Math.max(0, startedAt - candidate.enqueuedAt);
+
+    void reviewRemoteArtwork(candidate.normalizedUrl, candidate.referrer)
+      .then(async (outcome) => {
+        const reviewMs = Date.now() - startedAt;
+        console.info(
+          `[explore-queue] ${outcome.state} ` +
+          `${candidate.normalizedUrl} priority=${candidate.priority} source=${outcome.source} ` +
+          `queueWaitMs=${queueWaitMs} reviewMs=${reviewMs}`
+        );
+        if (
+          generation !== exploreReviewGeneration ||
+          contents.isDestroyed() ||
+          exploreView?.webContents.id !== contents.id
+        ) {
+          return;
+        }
+        await publishRemoteReviewOutcome(contents, candidate.normalizedUrl, outcome);
+      })
+      .catch((error: unknown) => {
+        console.error("[explore-queue] unexpected review failure", error);
+      })
+      .finally(() => {
+        if (exploreActiveReviews.get(candidate.normalizedUrl) === generation) {
+          exploreActiveReviews.delete(candidate.normalizedUrl);
+        }
+        scheduleExploreState();
+        queueMicrotask(() => pumpExploreReviewQueue(contents));
+      });
+  }
 }
 
 async function publishRemoteReviewOutcome(
@@ -2726,6 +2728,7 @@ async function publishRemoteReviewOutcome(
 
 function resetExploreReviewQueue(): void {
   exploreReviewGeneration += 1;
+  exploreActiveReviews.clear();
   exploreReviewQueue.clear();
   remoteOneShotAllows.clear();
 }
@@ -2763,7 +2766,7 @@ function createRemoteReviewContext(imageUrl: string): RemoteReviewContext | null
     engineVersion: vision.engineVersion,
     rulesFingerprint: activeExploreRulesFingerprint(settings, preferences)
   };
-  return { settings, personalPreferences: preferences, cacheKey, memoryKey: JSON.stringify(cacheKey) };
+  return { settings, personalPreferences: preferences, cacheKey, memoryKey: remoteReviewMemoryKey(cacheKey) };
 }
 
 function findCachedRemoteReview(imageUrl: string): RemoteReviewOutcome | null {
@@ -2780,10 +2783,8 @@ function findCachedRemoteReview(imageUrl: string): RemoteReviewOutcome | null {
 function findCachedRemoteReviewForContext(
   context: RemoteReviewContext
 ): RemoteReviewOutcome | null {
-  const cached = remoteReviewCache.get(context.memoryKey);
+  const cached = remoteReviewCache.get(context.cacheKey);
   if (cached !== undefined) {
-    remoteReviewCache.delete(context.memoryKey);
-    remoteReviewCache.set(context.memoryKey, cached);
     exploreRemoteReviewCacheHits += 1;
     scheduleExploreState();
     return { ...cached, source: "memory" };
@@ -2796,20 +2797,10 @@ function findCachedRemoteReviewForContext(
     reasons: persisted.decision.reasons.map(describeRemoteReviewReason),
     source: "persistent"
   };
-  rememberRemoteReview(context.memoryKey, outcome);
+  remoteReviewCache.set(context.cacheKey, outcome);
   exploreRemoteReviewCacheHits += 1;
   scheduleExploreState();
   return outcome;
-}
-
-function rememberRemoteReview(memoryKey: string, outcome: RemoteReviewOutcome): void {
-  remoteReviewCache.delete(memoryKey);
-  remoteReviewCache.set(memoryKey, outcome);
-  while (remoteReviewCache.size > MAX_MEMORY_REVIEW_CACHE_ENTRIES) {
-    const oldestKey = remoteReviewCache.keys().next().value as string | undefined;
-    if (!oldestKey) break;
-    remoteReviewCache.delete(oldestKey);
-  }
 }
 
 function reviewRemoteArtwork(
@@ -2843,8 +2834,6 @@ function reviewRemoteArtwork(
   if (activeReview) return activeReview;
 
   exploreRemoteReviewCacheMisses += 1;
-  scheduleExploreState();
-
   explorePendingResources += 1;
   scheduleExploreState();
 
@@ -2876,7 +2865,7 @@ function reviewRemoteArtwork(
         reasons: reviewResult.decision.reasons.map(describeRemoteReviewReason),
         source: "fresh"
       };
-      rememberRemoteReview(context.memoryKey, outcome);
+      remoteReviewCache.set(context.cacheKey, outcome);
       database?.saveRemoteImageReview(reviewResult);
       if (outcome.state === "allowed") exploreApprovedResources += 1;
       else exploreBlockedResources += 1;

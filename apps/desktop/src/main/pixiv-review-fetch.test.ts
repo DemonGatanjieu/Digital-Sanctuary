@@ -49,5 +49,24 @@ describe("isolated Pixiv review fetch", () => {
       "fixture-agent",
       largeFetch
     )).rejects.toThrow("size limit");
+    expect(largeFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries once when the first thumbnail fetch fails transiently", async () => {
+    const flakyFetch = vi.fn<typeof fetch>()
+      .mockRejectedValueOnce(new Error("socket hang up"))
+      .mockResolvedValueOnce(new Response(new Uint8Array([7, 8, 9]), {
+        status: 200,
+        headers: { "content-type": "image/webp", "content-length": "3" }
+      }));
+
+    await expect(fetchPixivReviewImage(
+      "https://i.pximg.net/img-master/148777878_p0_master1200.jpg",
+      "https://www.pixiv.net/artworks/148777878",
+      "fixture-agent",
+      flakyFetch
+    )).resolves.toEqual(Buffer.from([7, 8, 9]));
+    expect(flakyFetch).toHaveBeenCalledTimes(2);
   });
 });
+
